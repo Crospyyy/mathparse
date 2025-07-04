@@ -3,36 +3,50 @@ use regex::Regex;
 use std::borrow::Cow;
 
 fn main() {
-    let inputs = ["((x/x-x)*x^x)/(x-x)^-x", "x/x/x/x", "x/x-x"];
+    let inputs = ["((x/x-x)*-x^x)/(x-x)^-x", "(x/x+-x)*x^x", "x/x/x/x", "x/x-x"];
+    println!("Starting formula parsing tests");
     inputs.into_iter().for_each(test_formula_parsing)
 }
 
 fn test_formula_parsing(input: &str) {
     let cow = Element::preprocess_string_minus(&input);
-    println!("{}", cow);
+
+    println!();
+    print_heading("Starting formula parsing");
+    println!();
+
+    println!("Input: {}", cow);
     let chars = cow.chars().collect::<Vec<_>>();
 
-    println!("{}", "### Bracketize and process operations ###".yellow());
+    print_heading("0. Bracketize and process operations");
 
     let mut start = 0;
     let mut brackets = Element::bracketize(&chars, &mut start);
 
-    println!("{:?}", brackets);
+    // println!("{:?}", brackets);
     brackets.debug_print(0, true);
     println!();
+    // println!();
 
-    debug_print_step("Processing '+'", &mut brackets, Element::process_plus);
-    debug_print_step("Processing '-'", &mut brackets, Element::process_minus);
-    debug_print_step("Processing '*'", &mut brackets, Element::process_multiply);
-    debug_print_step("Processing '/'", &mut brackets, Element::process_divide);
+    debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
+    debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
+    debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply);
+    debug_print_step("4. Processing '/'", &mut brackets, Element::process_divide);
+    debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
+    debug_print_step("6. Processing '^'", &mut brackets, Element::process_pow);
+    debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
 }
 
 fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
-    println!("{}", format!("### {} ###", step).yellow());
+    print_heading(step);
     operation(element);
-    println!("{:?}", element);
     element.debug_print(0, true);
     println!();
+}
+
+fn print_heading(step: &str) {
+    println!("##### {}", step);
+    // println!("{}", format!("### {} ###", step));
 }
 
 #[derive(Debug, Clone)]
@@ -117,11 +131,18 @@ impl Element {
                         elements[0].process_minus();
                     }
                 }
+                if let Element::Brackets(groups) = self {
+                    groups.iter_mut().for_each(|e| match e {
+                        Element::String(_) => {},
+                        _ => e.process_minus(),
+                    })
+                }
             },
             Element::Plus(elements) => {
-                for element in elements {
-                    element.process_minus();
-                }
+                elements.iter_mut().for_each(Element::process_minus);
+            },
+            Element::Multiply(elements) => {
+                elements.iter_mut().for_each(Element::process_minus);
             },
             Element::String(s) => {
                 if s.starts_with('-') {
@@ -131,7 +152,10 @@ impl Element {
             Element::Negate(element) => {
                 element.process_minus();
             },
-            _ => {},
+            Element::Pow(b, e) => {
+                b.process_minus();
+                e.process_minus();
+            }
         }
     }
 
@@ -142,7 +166,7 @@ impl Element {
                 if let Some(groups) = split_list_by_char(elements, '*') {
                     *self = Element::Multiply(groups);
                 }
-                if let Element::Multiply(elements) = self {
+                if let Element::Brackets(elements) | Element::Multiply(elements) = self {
                     elements.iter_mut().for_each(Element::process_multiply);
                 }
             },
@@ -166,17 +190,22 @@ impl Element {
 
     /// Step 4 in between
     fn process_divide(&mut self) {
+        let create_divisions = |element: &mut Element, mut new_elements: Vec<Element>| {
+            new_elements[1..].iter_mut().for_each(Element::invert);
+            *element = Element::Multiply(new_elements);
+        };
         match self {
             Element::String(str) => {
-                if let Some(mut elements) = split_string_by_char(str, '/') {
-                    elements[1..].iter_mut().for_each(Element::invert);
-                    *self = Element::Multiply(elements);
+                if let Some(new_elements) = split_string_by_char(str, '/') {
+                    create_divisions(self, new_elements);
                 }
             },
             Element::Brackets(elements) => {
-                if let Some(mut new_elements) = split_list_by_char(elements, '/') {
-                    new_elements[1..].iter_mut().for_each(Element::invert);
-                    *self = Element::Multiply(new_elements);
+                if let Some(new_elements) = split_list_by_char(elements, '/') {
+                    create_divisions(self, new_elements);
+                }
+                if let Element::Brackets(elements) | Element::Multiply(elements) = self {
+                    elements.iter_mut().for_each(Element::process_divide);
                 }
             },
             Element::Plus(elements) => {
@@ -189,50 +218,92 @@ impl Element {
         }
     }
 
+    fn process_pow(&mut self) {
+        let create_recursive_pow = |element: &mut Element, mut new_elements: Vec<Element>| {
+            let mut working_element = new_elements.pop().unwrap();
+            for e in new_elements.into_iter().rev() {
+                working_element = Element::Pow(Box::new(e), Box::new(working_element));
+            }
+            *element = working_element;
+        };
+        match self {
+            Element::Brackets(elements) => {
+                if let Some(new_elements) = split_list_by_char(elements, '^') {
+                    create_recursive_pow(self, new_elements);
+                }
+                match self {
+                    Element::Brackets(elements) => {
+                        elements.iter_mut().for_each(Element::process_pow)
+                    },
+                    Element::Pow(b, e) => {
+                        b.process_pow();
+                        e.process_pow();
+                    },
+                    _ => {},
+                }
+            },
+            Element::Plus(elements) | Element::Multiply(elements) => {
+                elements.iter_mut().for_each(Element::process_pow);
+            },
+            Element::Negate(e) => e.process_pow(),
+            Element::String(s) => {
+                if let Some(new_elements) = split_string_by_char(s, '^') {
+                    create_recursive_pow(self, new_elements);
+                }
+            },
+            Element::Pow(b, p) => {
+                b.process_pow();
+                p.process_pow();
+            },
+        }
+    }
+
     fn debug_print(&self, indent: usize, one_line: bool) {
         match self {
             Element::Brackets(elements) => {
-                Self::print_indented(indent, "(", one_line, true);
+                Self::print_indented(indent, "(", one_line, false);
                 for element in elements {
                     element.debug_print(indent + 1, one_line);
                 }
-                Self::print_indented(indent, ")", one_line, true);
+                Self::print_indented(indent, ")", one_line, false);
             },
             Element::Plus(elements) => {
-                Self::print_indented(indent, "(", one_line, true);
+                Self::print_indented(indent, "(", one_line, false);
                 for (i, element) in elements.iter().enumerate() {
                     element.debug_print(indent + 1, one_line);
                     if i + 1 < elements.len() {
-                        Self::print_indented(indent + 1, "+", one_line, true);
+                        Self::print_indented(indent + 1, "+", one_line, false);
                     }
                 }
-                Self::print_indented(indent, ")", one_line, true);
+                Self::print_indented(indent, ")", one_line, false);
             },
             Element::Multiply(elements) => {
-                Self::print_indented(indent, "(", one_line, true);
+                Self::print_indented(indent, "(", one_line, false);
                 for (i, element) in elements.iter().enumerate() {
                     element.debug_print(indent + 1, one_line);
                     if i + 1 < elements.len() {
-                        Self::print_indented(indent + 1, "*", one_line, true);
+                        Self::print_indented(indent + 1, "*", one_line, false);
                     }
                 }
-                Self::print_indented(indent, ")", one_line, true);
+                Self::print_indented(indent, ")", one_line, false);
             },
             Element::Negate(element) => {
-                Self::print_indented(indent, "-", one_line, true);
+                Self::print_indented(indent, "-", one_line, false);
                 element.debug_print(indent + 1, one_line);
             },
-            Element::String(s) => Self::print_indented(indent, s, one_line, false),
+            Element::String(s) => Self::print_indented(indent, s, one_line, true),
             Element::Pow(base, exponent) => {
+                Self::print_indented(indent, "(", one_line, false);
                 base.debug_print(indent + 1, one_line);
-                Self::print_indented(indent + 1, "^", one_line, true);
+                Self::print_indented(indent + 1, "^", one_line, false);
                 exponent.debug_print(indent + 1, one_line);
+                Self::print_indented(indent, ")", one_line, false);
             },
         }
     }
 
     fn print_indented(indent: usize, str: &str, same_line: bool, color: bool) {
-        let str = if color { str.green() } else { str.normal() };
+        let str = if color { str.red() } else { str.normal() };
         if same_line {
             print!("{}", str);
         } else {
@@ -287,8 +358,10 @@ fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>
                             current_group.push(Element::String(part.to_string()));
                         }
                     } else if i > 0 {
-                        groups.push(Element::Brackets(current_group));
-                        current_group = Vec::new();
+                        if !current_group.is_empty() {
+                            groups.push(Element::Brackets(current_group));
+                            current_group = Vec::new();
+                        }
                         if !part.is_empty() {
                             current_group.push(Element::String(part.to_string()));
                         }
