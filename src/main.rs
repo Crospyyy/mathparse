@@ -35,6 +35,7 @@ fn test_formula_parsing(input: &str) {
     debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
     debug_print_step("6. Processing '^'", &mut brackets, Element::process_pow);
     debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
+    debug_print_step("8. Convert to numbers and variables", &mut brackets, Element::process_numbers_and_variables);
 }
 
 fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
@@ -117,7 +118,7 @@ impl Element {
         }
     }
 
-    /// Step 3
+    /// Steps 3, 5 and 7
     fn process_minus(&mut self) {
         match self {
             Element::Brackets(elements) => {
@@ -181,6 +182,7 @@ impl Element {
         }
     }
 
+    /// Used in process_divide (Step 4)
     fn invert(&mut self) {
         *self = Element::Pow(
             Box::new(self.clone()),
@@ -188,7 +190,7 @@ impl Element {
         );
     }
 
-    /// Step 4 in between
+    /// Step 4
     fn process_divide(&mut self) {
         let create_divisions = |element: &mut Element, mut new_elements: Vec<Element>| {
             new_elements[1..].iter_mut().for_each(Element::invert);
@@ -218,6 +220,7 @@ impl Element {
         }
     }
 
+    /// Step 6
     fn process_pow(&mut self) {
         let create_recursive_pow = |element: &mut Element, mut new_elements: Vec<Element>| {
             let mut working_element = new_elements.pop().unwrap();
@@ -256,6 +259,11 @@ impl Element {
                 p.process_pow();
             },
         }
+    }
+
+    /// Step 8
+    fn process_numbers_and_variables(&mut self) {
+
     }
 
     fn debug_print(&self, indent: usize, one_line: bool) {
