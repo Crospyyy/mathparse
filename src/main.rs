@@ -1,9 +1,14 @@
 use colored::Colorize;
 use regex::Regex;
+use std::borrow::Cow;
 
 fn main() {
-    let mut input = "((x/x-x)*x^x)/(x-x)^-x".to_owned();
-    let cow = Regex::new(r"([x)])-([x(])").unwrap().replace_all(&mut input, "$1+-$2");
+    let inputs = ["((x/x-x)*x^x)/(x-x)^-x", "x/x/x/x", "x/x-x"];
+    inputs.into_iter().for_each(test_formula_parsing)
+}
+
+fn test_formula_parsing(input: &str) {
+    let cow = Element::preprocess_string_minus(&input);
     println!("{}", cow);
     let chars = cow.chars().collect::<Vec<_>>();
 
@@ -16,28 +21,17 @@ fn main() {
     brackets.debug_print(0, true);
     println!();
 
-    println!("{}", "### Process '+' ###".yellow());
+    debug_print_step("Processing '+'", &mut brackets, Element::process_plus);
+    debug_print_step("Processing '-'", &mut brackets, Element::process_minus);
+    debug_print_step("Processing '*'", &mut brackets, Element::process_multiply);
+    debug_print_step("Processing '/'", &mut brackets, Element::process_divide);
+}
 
-    brackets.process_plus();
-
-    println!("{:?}", brackets);
-    brackets.debug_print(0, true);
-    println!();
-
-    println!("{}", "### Process '-' ###".yellow());
-
-    brackets.process_minus();
-
-    println!("{:?}", brackets);
-    brackets.debug_print(0, true);
-    println!();
-
-    println!("{}", "### Process '*' ###".yellow());
-
-    brackets.process_multiply();
-
-    println!("{:?}", brackets);
-    brackets.debug_print(0, true);
+fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
+    println!("{}", format!("### {} ###", step).yellow());
+    operation(element);
+    println!("{:?}", element);
+    element.debug_print(0, true);
     println!();
 }
 
@@ -52,6 +46,9 @@ enum Element {
 }
 
 impl Element {
+    fn preprocess_string_minus(input: &str) -> Cow<str> {
+        Regex::new(r"([x)])-([x(])").unwrap().replace_all(input, "$1+-$2")
+    }
     /// Step 1
     fn bracketize(input: &[char], start: &mut usize) -> Element {
         let mut elements = Vec::new();
@@ -90,73 +87,16 @@ impl Element {
     fn process_plus(&mut self) {
         match self {
             Element::Brackets(elements) => {
-                println!("Processing brackets: {:?}", elements);
-                let any_plus = elements
-                    .iter()
-                    .any(|e| if let Element::String(s) = e { s.contains('+') } else { false });
-                if any_plus {
-                    println!("Found '+' in brackets, processing...");
-                    let mut groups = Vec::new();
-                    let mut current_group = Vec::new();
-                    for element in elements {
-                        if let Element::String(str) = element {
-                            println!("Processing string element: {:?}", str);
-                            if !str.contains('+') {
-                                println!("String does not contain '+', adding to current group.");
-                                current_group.push(element.clone());
-                            } else {
-                                let parts: Vec<&str> = str.split('+').collect();
-                                println!("String contains '+', splitting into parts: {:?}", parts);
-                                for (i, part) in parts.iter().enumerate() {
-                                    if i == 0 {
-                                        if part.is_empty() {
-                                            if !current_group.is_empty() {
-                                                groups.push(Element::Brackets(current_group));
-                                                current_group = Vec::new();
-                                            }
-                                        } else {
-                                            current_group.push(Element::String(part.to_string()));
-                                        }
-                                    } else if i > 0 {
-                                        groups.push(Element::Brackets(current_group));
-                                        current_group = Vec::new();
-                                        if !part.is_empty() {
-                                            current_group.push(Element::String(part.to_string()));
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            println!("Processing non-string element: {:?}", element);
-                            current_group.push(element.clone());
-                        }
-                    }
-
-                    if !current_group.is_empty() {
-                        groups.push(Element::Brackets(current_group));
-                    }
-
-                    *self = Element::Plus(groups);
-                } else {
-                    println!("No '+' found in brackets, processing elements directly.");
+                if let Some(elements) = split_list_by_char(elements, '+') {
+                    *self = Element::Plus(elements);
                 }
-                match self {
-                    Element::Brackets(elements) | Element::Plus(elements) => {
-                        elements.iter_mut().for_each(Element::process_plus);
-                    },
-                    _ => {},
+                if let Element::Brackets(elements) | Element::Plus(elements) = self {
+                    elements.iter_mut().for_each(Element::process_plus);
                 }
             },
             Element::String(s) => {
-                if s.contains('+') {
-                    let parts: Vec<&str> = s.split('+').collect();
-                    let mut new_elements = Vec::new();
-                    for part in parts {
-                        if !part.is_empty() {
-                            new_elements.push(Element::String(part.to_string()));
-                        }
-                    }
-                    *self = Element::Plus(new_elements);
+                if let Some(elements) = split_string_by_char(s, '+') {
+                    *self = Element::Plus(elements);
                 }
             },
             _ => {},
@@ -199,111 +139,51 @@ impl Element {
     fn process_multiply(&mut self) {
         match self {
             Element::Brackets(elements) => {
-                println!("Processing brackets: {:?}", elements);
-                let any_multiply = elements
-                    .iter()
-                    .any(|e| if let Element::String(s) = e { s.contains('*') } else { false });
-                if any_multiply {
-                    println!("Found '*' in brackets, processing...");
-                    let mut groups = Vec::new();
-                    let mut current_group = Vec::new();
-                    for element in elements {
-                        if let Element::String(str) = element {
-                            println!("Processing string element: {:?}", str);
-                            if !str.contains('*') {
-                                println!("String does not contain '*', adding to current group.");
-                                current_group.push(element.clone());
-                            } else {
-                                let parts: Vec<&str> = str.split('*').collect();
-                                println!("String contains '*', splitting into parts: {:?}", parts);
-                                for (i, part) in parts.iter().enumerate() {
-                                    if i == 0 {
-                                        if part.is_empty() {
-                                            if !current_group.is_empty() {
-                                                groups.push(Element::Brackets(current_group));
-                                                current_group = Vec::new();
-                                            }
-                                        } else {
-                                            current_group.push(Element::String(part.to_string()));
-                                        }
-                                    } else if i > 0 {
-                                        groups.push(Element::Brackets(current_group));
-                                        current_group = Vec::new();
-                                        if !part.is_empty() {
-                                            current_group.push(Element::String(part.to_string()));
-                                        }
-                                    }
-                                }
-                            }
-                        } else {
-                            println!("Processing non-string element: {:?}", element);
-                            current_group.push(element.clone());
-                        }
-                    }
-
-                    if !current_group.is_empty() {
-                        groups.push(Element::Brackets(current_group));
-                    }
-
+                if let Some(groups) = split_list_by_char(elements, '*') {
                     *self = Element::Multiply(groups);
-                } else {
-                    println!("No '*' found in brackets, processing elements directly.");
                 }
-                match self {
-                    Element::Multiply(elements) => {
-                        elements.iter_mut().for_each(Element::process_multiply);
-                    },
-                    _ => {},
+                if let Element::Multiply(elements) = self {
+                    elements.iter_mut().for_each(Element::process_multiply);
                 }
             },
-            Element::Plus(elements) => {
-                for element in elements {
-                    element.process_multiply();
-                }
-            },
-            Element::Negate(element) => {
-                element.process_multiply();
-            },
+            Element::Plus(elements) => elements.iter_mut().for_each(Element::process_multiply),
+            Element::Negate(element) => element.process_multiply(),
             Element::String(s) => {
-                if s.contains('*') {
-                    let parts: Vec<&str> = s.split('*').collect();
-                    let mut new_elements = Vec::new();
-                    for part in parts {
-                        if !part.is_empty() {
-                            new_elements.push(Element::String(part.to_string()));
-                        }
-                    }
-                    *self = Element::Multiply(new_elements);
-                    self.process_multiply();
+                if let Some(elements) = split_string_by_char(s, '*') {
+                    *self = Element::Multiply(elements);
                 }
             },
             _ => {},
         }
     }
 
+    fn invert(&mut self) {
+        *self = Element::Pow(
+            Box::new(self.clone()),
+            Box::new(Element::Negate(Box::new(Element::String("1".to_string())))),
+        );
+    }
+
     /// Step 4 in between
-    fn process_divide_non_rec(&mut self) {
+    fn process_divide(&mut self) {
         match self {
             Element::String(str) => {
-                if str.contains('/') {
-                    let parts: Vec<&str> = str.split('/').collect();
-                    let mut new_elements = Vec::new();
-                    for part in parts {
-                        if !part.is_empty() {
-                            new_elements.push(Element::String(part.to_string()));
-                        }
-                    }
-                    for e in &mut new_elements[1..] {
-                        *e = Element::Pow(
-                            Box::new(e.clone()),
-                            Box::new(Element::String("-1".to_string())),
-                        );
-                    }
-                    *self = Element::Multiply(new_elements);
+                if let Some(mut elements) = split_string_by_char(str, '/') {
+                    elements[1..].iter_mut().for_each(Element::invert);
+                    *self = Element::Multiply(elements);
                 }
             },
             Element::Brackets(elements) => {
-                todo!("Implement divide processing for brackets");
+                if let Some(mut new_elements) = split_list_by_char(elements, '/') {
+                    new_elements[1..].iter_mut().for_each(Element::invert);
+                    *self = Element::Multiply(new_elements);
+                }
+            },
+            Element::Plus(elements) => {
+                elements.iter_mut().for_each(Element::process_divide);
+            },
+            Element::Multiply(elements) => {
+                elements.iter_mut().for_each(Element::process_divide);
             },
             _ => {},
         }
@@ -330,16 +210,17 @@ impl Element {
             },
             Element::Multiply(elements) => {
                 Self::print_indented(indent, "(", one_line, true);
-                for element in elements {
+                for (i, element) in elements.iter().enumerate() {
                     element.debug_print(indent + 1, one_line);
-                    Self::print_indented(indent + 1, "*", one_line, true);
+                    if i + 1 < elements.len() {
+                        Self::print_indented(indent + 1, "*", one_line, true);
+                    }
                 }
                 Self::print_indented(indent, ")", one_line, true);
             },
             Element::Negate(element) => {
-                Self::print_indented(indent, "-(", one_line, true);
+                Self::print_indented(indent, "-", one_line, true);
                 element.debug_print(indent + 1, one_line);
-                Self::print_indented(indent, ")", one_line, true);
             },
             Element::String(s) => Self::print_indented(indent, s, one_line, false),
             Element::Pow(base, exponent) => {
@@ -360,27 +241,41 @@ impl Element {
     }
 }
 
-fn split_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
-    println!("Processing list of elements: {:?}", input);
-    let any_delimiter =
-        input.iter().any(|e| if let Element::String(s) = e { s.contains(delimiter) } else { false });
+fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
+    const DEBUG: bool = false;
+    if DEBUG {
+        println!("Processing list of elements: {:?}", input);
+    }
+    let any_delimiter = input
+        .iter()
+        .any(|e| if let Element::String(s) = e { s.contains(delimiter) } else { false });
     if !any_delimiter {
-        println!("No '{delimiter}' found in brackets, processing elements directly.");
+        if DEBUG {
+            println!("No '{delimiter}' found in brackets.");
+        }
         return None;
     }
 
-    println!("Found '{delimiter}' in list, processing...");
+    if DEBUG {
+        println!("Found '{delimiter}' in list, processing...");
+    }
     let mut groups = Vec::new();
     let mut current_group = Vec::new();
     for element in input {
         if let Element::String(str) = element {
-            println!("Processing string element: {:?}", str);
+            if DEBUG {
+                println!("Processing string element: {:?}", str);
+            }
             if !str.contains(delimiter) {
-                println!("String does not contain '{delimiter}', adding to current group.");
+                if DEBUG {
+                    println!("String does not contain '{delimiter}', adding to current group.");
+                }
                 current_group.push(element.clone());
             } else {
                 let parts: Vec<&str> = str.split(delimiter).collect();
-                println!("String contains '{delimiter}', splitting into parts: {:?}", parts);
+                if DEBUG {
+                    println!("String contains '{delimiter}', splitting into parts: {:?}", parts);
+                }
                 for (i, part) in parts.iter().enumerate() {
                     if i == 0 {
                         if part.is_empty() {
@@ -401,7 +296,9 @@ fn split_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
                 }
             }
         } else {
-            println!("Processing non-string element: {:?}", element);
+            if DEBUG {
+                println!("Processing non-string element: {:?}", element);
+            }
             current_group.push(element.clone());
         }
     }
@@ -411,4 +308,16 @@ fn split_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
     }
 
     Some(groups)
+}
+
+fn split_string_by_char(input: &str, delimiter: char) -> Option<Vec<Element>> {
+    if !input.contains(delimiter) {
+        return None;
+    }
+    input
+        .split(delimiter)
+        .filter(|s| !s.is_empty())
+        .map(|s| Element::String(s.to_string()))
+        .collect::<Vec<_>>()
+        .into()
 }
