@@ -13,6 +13,7 @@ mod parsing {
         #[derive(Debug, Clone)]
         pub enum Element {
             Brackets(Vec<Element>),
+            Function { name: String, arguments: Vec<Element> },
             Plus(Vec<Element>),
             Multiply(Vec<Element>),
             Negate(Box<Element>),
@@ -27,7 +28,7 @@ mod parsing {
                 let cow = Element::preprocess_string_minus(&input);
                 let chars = cow.chars().collect::<Vec<_>>();
                 let mut start = 0;
-                let mut brackets = Element::bracketize(&chars, &mut start);
+                let mut brackets = Element::resolve_brackets(&chars, &mut start);
                 brackets.process_plus();
                 brackets.process_minus();
                 brackets.process_multiply();
@@ -48,8 +49,31 @@ mod parsing {
                     .to_string()
             }
 
+            fn get_name_of_function(input: &[char], start: usize) -> Option<String> {
+                fn is_valid_char(c: char) -> bool {
+                    matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
+                }
+                if start < 2 {
+                    return None;
+                }
+                let end_exclusive = start - 1;
+                let mut start = end_exclusive;
+                while start > 0 && is_valid_char(input[start - 1]) {
+                    start -= 1;
+                }
+                if start == end_exclusive {
+                    return None;
+                }
+                let name = input[start..end_exclusive].iter().collect::<String>();
+                if matches!(name.chars().nth(0), Some('0'..='9')) {
+                    return None; // Function names cannot start with a digit
+                }
+                Some(name)
+            }
+
             /// Step 1
-            pub(super) fn bracketize(input: &[char], start: &mut usize) -> Element {
+            pub(super) fn resolve_brackets(input: &[char], start: &mut usize) -> Element {
+                let possible_function_name = Self::get_name_of_function(input, *start);
                 let mut elements = Vec::new();
                 let mut i = *start;
                 while i < input.len() {
@@ -66,7 +90,7 @@ mod parsing {
                             elements.push(Element::String(input[*start..i].iter().collect()));
                         }
                         i += 1; // ensure the pointer is behind the opening brackets
-                        elements.push(Self::bracketize(&input, &mut i));
+                        elements.push(Self::resolve_brackets(&input, &mut i));
                         *start = i;
                     }
                     if char == ')' {
@@ -79,6 +103,11 @@ mod parsing {
                     }
                 }
                 *start = i;
+                if let Some(function_name) = possible_function_name {
+                    if let Some(sub) = split_list_by_char(&elements, ',') {
+                        return Element::Function { name: function_name, arguments: sub };
+                    }
+                }
                 Element::Brackets(elements)
             }
 
@@ -281,42 +310,66 @@ mod parsing {
             fn debug_print(&self, indent: usize, one_line: bool, inner_layer_call: bool) {
                 fn print_in_brackets<F: FnOnce()>(
                     indent: usize, one_line: bool, inner_layer_call: bool, inner_print: F,
+                    string_before_brackets: Option<&str>,
                 ) {
-                    if inner_layer_call {
-                        Element::print_indented(indent, "(", one_line, false);
-                    }
-                    inner_print();
-                    if inner_layer_call {
+                    if !inner_layer_call {
+                        inner_print();
+                    } else {
+                        Element::print_indented(
+                            indent,
+                            &format!("{}(", string_before_brackets.unwrap_or("")),
+                            one_line,
+                            false,
+                        );
+                        inner_print();
                         Element::print_indented(indent, ")", one_line, false);
                     }
                 }
                 match self {
                     Element::Brackets(elements) => {
-                        print_in_brackets(indent, one_line, inner_layer_call, || {
-                            for element in elements {
-                                element.debug_print(indent + 1, one_line, true);
-                            }
-                        });
+                        print_in_brackets(
+                            indent,
+                            one_line,
+                            inner_layer_call,
+                            || {
+                                for element in elements {
+                                    element.debug_print(indent + 1, one_line, true);
+                                }
+                            },
+                            None,
+                        );
                     },
                     Element::Plus(elements) => {
-                        print_in_brackets(indent, one_line, inner_layer_call, || {
-                            for (i, element) in elements.iter().enumerate() {
-                                element.debug_print(indent + 1, one_line, true);
-                                if i + 1 < elements.len() {
-                                    Self::print_indented(indent + 1, "+", one_line, false);
+                        print_in_brackets(
+                            indent,
+                            one_line,
+                            inner_layer_call,
+                            || {
+                                for (i, element) in elements.iter().enumerate() {
+                                    element.debug_print(indent + 1, one_line, true);
+                                    if i + 1 < elements.len() {
+                                        Self::print_indented(indent + 1, "+", one_line, false);
+                                    }
                                 }
-                            }
-                        });
+                            },
+                            None,
+                        );
                     },
                     Element::Multiply(elements) => {
-                        print_in_brackets(indent, one_line, inner_layer_call, || {
-                            for (i, element) in elements.iter().enumerate() {
-                                element.debug_print(indent + 1, one_line, true);
-                                if i + 1 < elements.len() {
-                                    Self::print_indented(indent + 1, "*", one_line, false);
+                        print_in_brackets(
+                            indent,
+                            one_line,
+                            inner_layer_call,
+                            || {
+                                for (i, element) in elements.iter().enumerate() {
+                                    element.debug_print(indent + 1, one_line, true);
+                                    if i + 1 < elements.len() {
+                                        Self::print_indented(indent + 1, "*", one_line, false);
+                                    }
                                 }
-                            }
-                        });
+                            },
+                            None,
+                        );
                     },
                     Element::Negate(element) => {
                         Self::print_indented(indent, "-", one_line, false);
@@ -324,15 +377,37 @@ mod parsing {
                     },
                     Element::String(s) => Self::print_indented(indent, s, one_line, true),
                     Element::Pow(base, exponent) => {
-                        print_in_brackets(indent, one_line, inner_layer_call, || {
-                            base.debug_print(indent + 1, one_line, true);
-                            Self::print_indented(indent + 1, "^", one_line, false);
-                            exponent.debug_print(indent + 1, one_line, true);
-                        });
+                        print_in_brackets(
+                            indent,
+                            one_line,
+                            inner_layer_call,
+                            || {
+                                base.debug_print(indent + 1, one_line, true);
+                                Self::print_indented(indent + 1, "^", one_line, false);
+                                exponent.debug_print(indent + 1, one_line, true);
+                            },
+                            None,
+                        );
                     },
                     Element::Variable(name) => Self::print_indented(indent, name, one_line, false),
                     Element::Number(num) => {
                         Self::print_indented(indent, &num.to_string(), one_line, false)
+                    },
+                    Element::Function { name, arguments } => {
+                        print_in_brackets(
+                            indent,
+                            one_line,
+                            inner_layer_call,
+                            || {
+                                for (i, element) in arguments.iter().enumerate() {
+                                    element.debug_print(indent + 1, one_line, true);
+                                    if i + 1 < arguments.len() {
+                                        Self::print_indented(indent + 1, ",", one_line, false);
+                                    }
+                                }
+                            },
+                            name.as_str().into(),
+                        );
                     },
                 }
             }
@@ -486,7 +561,7 @@ mod parsing {
             print_heading("0. Bracketize and process operations");
 
             let mut start = 0;
-            let mut brackets = Element::bracketize(&chars, &mut start);
+            let mut brackets = Element::resolve_brackets(&chars, &mut start);
 
             brackets.print();
 
@@ -540,6 +615,7 @@ mod evaluation {
                 Element::Negate(e) => e.eval().map(|n| -n),
                 Element::Number(n) => Some(*n),
                 Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
+                Element::Function { .. } => None,
             }
         }
     }
