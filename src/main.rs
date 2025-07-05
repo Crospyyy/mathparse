@@ -5,8 +5,7 @@ fn main() {
 }
 
 mod parsing {
-
-    mod implementation {
+    pub mod implementation {
         use colored::Colorize;
         use regex::Regex;
         use std::borrow::Cow;
@@ -273,6 +272,7 @@ mod parsing {
 
             pub fn print(&self) {
                 self.debug_print(0, true, false);
+                println!();
             }
 
             fn debug_print(&self, indent: usize, one_line: bool, inner_layer_call: bool) {
@@ -455,6 +455,11 @@ mod parsing {
                 let element = Element::parse(input);
                 print!("parsed formula: ");
                 element.print();
+                if let Some(num) = element.eval() {
+                    println!("Result: {}", num);
+                } else {
+                    println!("Result: Could not evaluate the formula.");
+                }
                 println!();
             }
         }
@@ -481,7 +486,6 @@ mod parsing {
             let mut brackets = Element::bracketize(&chars, &mut start);
 
             brackets.print();
-            println!();
 
             debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
             debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
@@ -501,11 +505,39 @@ mod parsing {
             print_heading(step);
             operation(element);
             element.print();
-            println!();
         }
 
         fn print_heading(step: &str) {
             println!("##### {}", step);
+        }
+    }
+}
+
+mod evaluation {
+    use crate::parsing::implementation::Element;
+
+    impl Element {
+        pub fn eval(&self) -> Option<f64> {
+            match self {
+                Element::Brackets(_) | Element::String(_) | Element::Variable(_) => None,
+                Element::Plus(elements) => {
+                    let mut sum = 0.0;
+                    for n in elements {
+                        sum += n.eval()?;
+                    }
+                    Some(sum)
+                },
+                Element::Multiply(elements) => {
+                    let mut product = 1.0;
+                    for n in elements {
+                        product *= n.eval()?;
+                    }
+                    Some(product)
+                },
+                Element::Negate(e) => e.eval().map(|n| -n),
+                Element::Number(n) => Some(*n),
+                Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
+            }
         }
     }
 }
