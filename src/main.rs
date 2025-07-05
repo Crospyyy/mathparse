@@ -42,7 +42,8 @@ mod parsing {
 
             /// Step 0
             pub(super) fn preprocess_string_minus(input: &str) -> Cow<str> {
-                Regex::new(r"([\w)])-([\w(])").unwrap().replace_all(input, "$1+-$2")
+                let without_whitespace = input.replace(" ", "");
+                Regex::new(r"([\w)])-([\w(])").unwrap().replace_all(&without_whitespace, "$1+-$2")
             }
 
             /// Step 1
