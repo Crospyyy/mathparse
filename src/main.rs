@@ -6,7 +6,6 @@ fn main() {
 
 mod parsing {
     pub mod implementation {
-        use colored::Colorize;
         use regex::Regex;
         use std::mem;
 
@@ -301,125 +300,6 @@ mod parsing {
                     _ => {},
                 }
             }
-
-            pub fn print(&self) {
-                self.debug_print(0, true, false);
-                println!();
-            }
-
-            fn debug_print(&self, indent: usize, one_line: bool, inner_layer_call: bool) {
-                fn print_in_brackets<F: FnOnce()>(
-                    indent: usize, one_line: bool, inner_layer_call: bool, inner_print: F,
-                    string_before_brackets: Option<&str>,
-                ) {
-                    if !inner_layer_call {
-                        inner_print();
-                    } else {
-                        Element::print_indented(
-                            indent,
-                            &format!("{}(", string_before_brackets.unwrap_or("")),
-                            one_line,
-                            false,
-                        );
-                        inner_print();
-                        Element::print_indented(indent, ")", one_line, false);
-                    }
-                }
-                match self {
-                    Element::Brackets(elements) => {
-                        print_in_brackets(
-                            indent,
-                            one_line,
-                            inner_layer_call,
-                            || {
-                                for element in elements {
-                                    element.debug_print(indent + 1, one_line, true);
-                                }
-                            },
-                            None,
-                        );
-                    },
-                    Element::Plus(elements) => {
-                        print_in_brackets(
-                            indent,
-                            one_line,
-                            inner_layer_call,
-                            || {
-                                for (i, element) in elements.iter().enumerate() {
-                                    element.debug_print(indent + 1, one_line, true);
-                                    if i + 1 < elements.len() {
-                                        Self::print_indented(indent + 1, "+", one_line, false);
-                                    }
-                                }
-                            },
-                            None,
-                        );
-                    },
-                    Element::Multiply(elements) => {
-                        print_in_brackets(
-                            indent,
-                            one_line,
-                            inner_layer_call,
-                            || {
-                                for (i, element) in elements.iter().enumerate() {
-                                    element.debug_print(indent + 1, one_line, true);
-                                    if i + 1 < elements.len() {
-                                        Self::print_indented(indent + 1, "*", one_line, false);
-                                    }
-                                }
-                            },
-                            None,
-                        );
-                    },
-                    Element::Negate(element) => {
-                        Self::print_indented(indent, "-", one_line, false);
-                        element.debug_print(indent + 1, one_line, true);
-                    },
-                    Element::String(s) => Self::print_indented(indent, s, one_line, true),
-                    Element::Pow(base, exponent) => {
-                        print_in_brackets(
-                            indent,
-                            one_line,
-                            inner_layer_call,
-                            || {
-                                base.debug_print(indent + 1, one_line, true);
-                                Self::print_indented(indent + 1, "^", one_line, false);
-                                exponent.debug_print(indent + 1, one_line, true);
-                            },
-                            None,
-                        );
-                    },
-                    Element::Variable(name) => Self::print_indented(indent, name, one_line, false),
-                    Element::Number(num) => {
-                        Self::print_indented(indent, &num.to_string(), one_line, false)
-                    },
-                    Element::Function { name, arguments } => {
-                        print_in_brackets(
-                            indent,
-                            one_line,
-                            inner_layer_call,
-                            || {
-                                for (i, element) in arguments.iter().enumerate() {
-                                    element.debug_print(indent + 1, one_line, true);
-                                    if i + 1 < arguments.len() {
-                                        Self::print_indented(indent + 1, ",", one_line, false);
-                                    }
-                                }
-                            },
-                            name.as_str().into(),
-                        );
-                    },
-                }
-            }
-
-            fn print_indented(indent: usize, str: &str, same_line: bool, color: bool) {
-                let str = if color { str.red() } else { str.normal() };
-                if same_line {
-                    print!("{}", str);
-                } else {
-                    println!("{}{}", " ".repeat(indent * 4), str);
-                }
-            }
         }
 
         fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
@@ -587,6 +467,113 @@ mod parsing {
 
         fn print_heading(step: &str) {
             println!("##### {}", step);
+        }
+    }
+}
+
+mod printing {
+    use crate::parsing::implementation::Element;
+    use colored::Colorize;
+
+    enum Inner<'a, T: 'a>
+    where
+        T: IntoIterator<Item = &'a Element>,
+    {
+        Single(&'a Element),
+        Multiple { delimiter: &'a str, elements: T },
+    }
+
+    impl<'a, T> Inner<'a, T>
+    where
+        T: IntoIterator<Item = &'a Element>,
+    {
+        fn print(self, output: &mut String) {
+            match self {
+                Inner::Single(element) => element.create_debug_string(true, output),
+                Inner::Multiple { delimiter: separator, elements } => {
+                    for (i, element) in elements.into_iter().enumerate() {
+                        if i != 0 {
+                            output.push_str(&Element::get_highlighted_string(separator, false));
+                        }
+                        element.create_debug_string(true, output);
+                    }
+                },
+            }
+        }
+    }
+
+    fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
+        string_before_brackets: Option<&str>, show_brackets: bool, output: &mut String,
+        inner: Inner<'a, T>,
+    ) {
+        if !show_brackets {
+            inner.print(output);
+        } else {
+            output.push_str(&Element::get_highlighted_string(
+                &(string_before_brackets.unwrap_or("").to_owned() + "("),
+                false,
+            ));
+            inner.print(output);
+            output.push_str(&Element::get_highlighted_string(")", false));
+        }
+    }
+
+    impl Element {
+        pub fn print(&self) {
+            let mut string = String::new();
+            self.create_debug_string(false, &mut string);
+            println!("{}", string);
+        }
+
+        fn create_debug_string(&self, show_brackets: bool, output: &mut String) {
+            match self {
+                Element::Brackets(elements) => print_in_brackets(
+                    None,
+                    show_brackets,
+                    output,
+                    Inner::Multiple { delimiter: "", elements },
+                ),
+                Element::Plus(elements) => print_in_brackets(
+                    None,
+                    show_brackets,
+                    output,
+                    Inner::Multiple { delimiter: "+", elements },
+                ),
+                Element::Multiply(elements) => print_in_brackets(
+                    None,
+                    show_brackets,
+                    output,
+                    Inner::Multiple { delimiter: "*", elements },
+                ),
+                Element::Function { name, arguments } => print_in_brackets(
+                    Some(name),
+                    show_brackets,
+                    output,
+                    Inner::Multiple { delimiter: ",", elements: arguments },
+                ),
+                Element::Pow(base, exponent) => {
+                    let elements = [base.as_ref(), exponent];
+                    print_in_brackets(
+                        None,
+                        show_brackets,
+                        output,
+                        Inner::Multiple { delimiter: "^", elements },
+                    );
+                },
+                Element::Negate(element) => {
+                    output.push_str(&Self::get_highlighted_string("-", false));
+                    element.create_debug_string(true, output);
+                },
+                Element::Number(num) => output.push_str(&Self::get_highlighted_string(num, false)),
+                Element::Variable(name) => {
+                    output.push_str(&Self::get_highlighted_string(name, false))
+                },
+                Element::String(s) => output.push_str(&Self::get_highlighted_string(s, true)),
+            }
+        }
+
+        fn get_highlighted_string(str: impl ToString, color: bool) -> String {
+            if color { str.to_string().red().to_string() } else { str.to_string() }
         }
     }
 }
