@@ -1,6 +1,7 @@
 use colored::Colorize;
 use regex::Regex;
 use std::borrow::Cow;
+use std::mem;
 
 fn main() {
     let inputs = ["((x/x-x)*-x^x)/(x-x)^-x", "(x/x+-x)*x^x", "x/x/x/x", "x/x-x"];
@@ -35,7 +36,11 @@ fn test_formula_parsing(input: &str) {
     debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
     debug_print_step("6. Processing '^'", &mut brackets, Element::process_pow);
     debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
-    debug_print_step("8. Convert to numbers and variables", &mut brackets, Element::process_numbers_and_variables);
+    debug_print_step(
+        "8. Convert to numbers and variables",
+        &mut brackets,
+        Element::process_numbers_and_variables,
+    );
 }
 
 fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
@@ -57,6 +62,8 @@ enum Element {
     Multiply(Vec<Element>),
     Negate(Box<Element>),
     String(String),
+    Variable(String),
+    Number(f64),
     Pow(Box<Element>, Box<Element>),
 }
 
@@ -156,7 +163,8 @@ impl Element {
             Element::Pow(b, e) => {
                 b.process_minus();
                 e.process_minus();
-            }
+            },
+            _ => {},
         }
     }
 
@@ -258,12 +266,31 @@ impl Element {
                 b.process_pow();
                 p.process_pow();
             },
+            _ => {},
         }
     }
 
     /// Step 8
     fn process_numbers_and_variables(&mut self) {
-
+        match self {
+            Element::String(s) => {
+                if let Ok(num) = s.parse::<f64>() {
+                    *self = Element::Number(num);
+                } else {
+                    // If parsing fails, we assume it's a variable
+                    *self = Element::Variable(s.clone());
+                }
+            },
+            Element::Brackets(e) | Element::Multiply(e) | Element::Plus(e) => {
+                e.iter_mut().for_each(Element::process_numbers_and_variables);
+            },
+            Element::Negate(e) => e.process_numbers_and_variables(),
+            Element::Pow(base, exponent) => {
+                base.process_numbers_and_variables();
+                exponent.process_numbers_and_variables();
+            },
+            _ => {},
+        }
     }
 
     fn debug_print(&self, indent: usize, one_line: bool) {
@@ -307,6 +334,8 @@ impl Element {
                 exponent.debug_print(indent + 1, one_line);
                 Self::print_indented(indent, ")", one_line, false);
             },
+            Element::Variable(name) => Self::print_indented(indent, name, one_line, false),
+            Element::Number(num) => Self::print_indented(indent, &num.to_string(), one_line, false),
         }
     }
 
@@ -340,6 +369,17 @@ fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>
     }
     let mut groups = Vec::new();
     let mut current_group = Vec::new();
+
+    fn add_current_group(groups: &mut Vec<Element>, current_group: &mut Vec<Element>) {
+        if !current_group.is_empty() {
+            let mut group_to_add = mem::replace(current_group, Vec::new());
+            if group_to_add.len() == 1 {
+                groups.push(group_to_add.pop().unwrap());
+            } else {
+                groups.push(Element::Brackets(group_to_add));
+            }
+        }
+    };
     for element in input {
         if let Element::String(str) = element {
             if DEBUG {
@@ -358,18 +398,12 @@ fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>
                 for (i, part) in parts.iter().enumerate() {
                     if i == 0 {
                         if part.is_empty() {
-                            if !current_group.is_empty() {
-                                groups.push(Element::Brackets(current_group));
-                                current_group = Vec::new();
-                            }
+                            add_current_group(&mut groups, &mut current_group);
                         } else {
                             current_group.push(Element::String(part.to_string()));
                         }
                     } else if i > 0 {
-                        if !current_group.is_empty() {
-                            groups.push(Element::Brackets(current_group));
-                            current_group = Vec::new();
-                        }
+                        add_current_group(&mut groups, &mut current_group);
                         if !part.is_empty() {
                             current_group.push(Element::String(part.to_string()));
                         }
@@ -384,9 +418,7 @@ fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>
         }
     }
 
-    if !current_group.is_empty() {
-        groups.push(Element::Brackets(current_group));
-    }
+    add_current_group(&mut groups, &mut current_group);
 
     Some(groups)
 }
