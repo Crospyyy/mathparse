@@ -8,7 +8,6 @@ mod parsing {
     pub mod implementation {
         use colored::Colorize;
         use regex::Regex;
-        use std::borrow::Cow;
         use std::mem;
 
         #[derive(Debug, Clone)]
@@ -41,9 +40,12 @@ mod parsing {
             }
 
             /// Step 0
-            pub(super) fn preprocess_string_minus(input: &str) -> Cow<str> {
+            pub(super) fn preprocess_string_minus(input: &str) -> String {
                 let without_whitespace = input.replace(" ", "");
-                Regex::new(r"([\w)])-([\w(])").unwrap().replace_all(&without_whitespace, "$1+-$2")
+                Regex::new(r"([\w)])-([\w(])")
+                    .unwrap()
+                    .replace_all(&without_whitespace, "$1+-$2")
+                    .to_string()
             }
 
             /// Step 1
