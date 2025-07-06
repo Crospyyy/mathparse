@@ -1,7 +1,7 @@
-use crate::parsing::testing::run_tests;
+use crate::parsing::testing::test_with_user_input;
 
 fn main() {
-    run_tests();
+    test_with_user_input();
 }
 
 mod parsing {
@@ -549,6 +549,8 @@ mod parsing {
                 };
                 print!("parsed formula: ");
                 element.print();
+                print!("= ");
+                element.print_debug();
                 if let Some(num) = element.eval() {
                     println!("Result: {}", num);
                 } else {
@@ -591,7 +593,7 @@ mod parsing {
             let mut start = 0;
             let mut brackets = Element::resolve_brackets(&chars, &mut start);
 
-            brackets.print();
+            brackets.print_debug();
 
             debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
             debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
@@ -616,7 +618,7 @@ mod parsing {
         fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
             print_heading(step);
             operation(element);
-            element.print();
+            element.print_debug();
         }
 
         fn print_heading(step: &str) {
@@ -674,9 +676,14 @@ mod printing {
     }
 
     impl Element {
-        pub fn print(&self) {
+        pub fn print_debug(&self) {
             let mut string = String::new();
             self.add_to_string(true, true, &mut string);
+            println!("{}", string);
+        }
+        pub fn print(&self) {
+            let mut string = String::new();
+            self.add_to_string(false, false, &mut string);
             println!("{}", string);
         }
 
