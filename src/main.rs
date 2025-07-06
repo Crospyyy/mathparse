@@ -1,7 +1,7 @@
-use crate::parsing::testing::test_with_user_input;
+use crate::parsing::testing::run_tests;
 
 fn main() {
-    test_with_user_input()
+    run_tests();
 }
 
 mod parsing {
@@ -21,22 +21,58 @@ mod parsing {
             Number(f64),
             Pow(Box<Element>, Box<Element>),
         }
+        fn is_valid_char_for_function_name(c: char) -> bool {
+            matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
+        }
+        fn get_name_of_function(input: &[char], start: usize) -> Option<String> {
+            if start < 2 {
+                return None;
+            }
+            let end_exclusive = start - 1;
+            let mut start = end_exclusive;
+            while start > 0 && is_valid_char_for_function_name(input[start - 1]) {
+                start -= 1;
+            }
+            if start == end_exclusive {
+                return None;
+            }
+            let name = input[start..end_exclusive].iter().collect::<String>();
+            if matches!(name.chars().nth(0), Some('0'..='9')) {
+                return None; // Function names cannot start with a digit
+            }
+            Some(name)
+        }
+
+        fn get_largest_fun_name(name: &str) -> String {
+            let mut valid_chars_count = 0;
+            name.chars()
+                .rev()
+                .take_while(|&c| is_valid_char_for_function_name(c))
+                .for_each(|_| valid_chars_count += 1);
+            if valid_chars_count == 0 {
+                "".to_owned()
+            } else {
+                name[name.len() - valid_chars_count..].to_owned()
+            }
+        }
 
         impl Element {
-            pub fn parse(input: &str) -> Self {
+            pub fn parse(input: &str) -> Option<Self> {
                 let cow = Element::preprocess_string_minus(&input);
                 let chars = cow.chars().collect::<Vec<_>>();
                 let mut start = 0;
-                let mut brackets = Element::resolve_brackets(&chars, &mut start);
-                brackets.process_plus();
-                brackets.process_minus();
-                brackets.process_multiply();
-                brackets.process_divide();
-                brackets.process_minus();
-                brackets.process_pow();
-                brackets.process_minus();
-                brackets.process_numbers_and_variables();
-                brackets
+                let mut formula = Element::resolve_brackets(&chars, &mut start);
+                formula.resolve_functions();
+                formula.process_plus();
+                formula.process_minus();
+                formula.process_multiply();
+                formula.process_divide();
+                formula.process_minus();
+                formula.process_pow();
+                formula.process_minus();
+                formula.process_numbers_and_variables();
+                formula.remove_unneeded_outer_brackets();
+                if formula.anything_unparsed() { None } else { Some(formula) }
             }
 
             /// Step 0
@@ -48,31 +84,8 @@ mod parsing {
                     .to_string()
             }
 
-            fn get_name_of_function(input: &[char], start: usize) -> Option<String> {
-                fn is_valid_char(c: char) -> bool {
-                    matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
-                }
-                if start < 2 {
-                    return None;
-                }
-                let end_exclusive = start - 1;
-                let mut start = end_exclusive;
-                while start > 0 && is_valid_char(input[start - 1]) {
-                    start -= 1;
-                }
-                if start == end_exclusive {
-                    return None;
-                }
-                let name = input[start..end_exclusive].iter().collect::<String>();
-                if matches!(name.chars().nth(0), Some('0'..='9')) {
-                    return None; // Function names cannot start with a digit
-                }
-                Some(name)
-            }
-
             /// Step 1
             pub(super) fn resolve_brackets(input: &[char], start: &mut usize) -> Element {
-                let possible_function_name = Self::get_name_of_function(input, *start);
                 let mut elements = Vec::new();
                 let mut i = *start;
                 while i < input.len() {
@@ -102,12 +115,60 @@ mod parsing {
                     }
                 }
                 *start = i;
-                if let Some(function_name) = possible_function_name {
-                    if let Some(sub) = split_list_by_char(&elements, ',') {
-                        return Element::Function { name: function_name, arguments: sub };
-                    }
-                }
                 Element::Brackets(elements)
+            }
+
+            /// Step 0,5
+            pub(super) fn resolve_functions(&mut self) {
+                match self {
+                    Element::Brackets(elements) => {
+                        for i in (0..elements.len() - 1).rev() {
+                            let j = i + 1;
+                            if let (Element::String(name), Element::Brackets(br_elements)) =
+                                (&elements[i], &elements[j])
+                            {
+                                let name = name.to_string();
+                                let function_name = get_largest_fun_name(&name);
+                                if function_name
+                                    .chars()
+                                    .nth(0)
+                                    .is_none_or(|c| matches!(c, '0'..='9'))
+                                {
+                                    continue; // Function names cannot be empty or start with a digit
+                                }
+
+                                // create the new function element
+                                let arguments = split_list_by_char(br_elements, ',')
+                                    .unwrap_or_else(|| {
+                                        vec![Element::Brackets(br_elements.clone())]
+                                    });
+
+                                elements[j] =
+                                    Element::Function { name: function_name.clone(), arguments };
+
+                                // update or remove the string element
+                                let new_str_len = name.len() - function_name.len();
+                                if new_str_len == 0 {
+                                    elements.remove(i);
+                                } else {
+                                    elements[i] = Element::String(name[..new_str_len].to_owned());
+                                }
+                            }
+                        }
+                    },
+                    Element::Plus(elements) => {
+                        elements.iter_mut().for_each(Element::resolve_functions);
+                    },
+                    Element::Multiply(elements) => {
+                        elements.iter_mut().for_each(Element::resolve_functions);
+                    },
+                    Element::Negate(element) => element.resolve_functions(),
+                    Element::Pow(base, exponent) => {
+                        base.resolve_functions();
+                        exponent.resolve_functions();
+                    },
+                    _ => {},
+                }
             }
 
             /// Step 2
@@ -121,12 +182,20 @@ mod parsing {
                             elements.iter_mut().for_each(Element::process_plus);
                         }
                     },
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_plus);
+                    },
                     Element::String(s) => {
                         if let Some(elements) = split_string_by_char(s, '+') {
                             *self = Element::Plus(elements);
                         }
                     },
-                    _ => {},
+                    Element::Plus(_)
+                    | Element::Multiply(_)
+                    | Element::Negate(_)
+                    | Element::Variable(_)
+                    | Element::Number(_)
+                    | Element::Pow(_, _) => {},
                 }
             }
 
@@ -169,11 +238,14 @@ mod parsing {
                         b.process_minus();
                         e.process_minus();
                     },
-                    _ => {},
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_minus)
+                    },
+                    Element::Variable(_) | Element::Number(_) => {},
                 }
             }
 
-            /// Step 4
+            /// Step 3
             pub(super) fn process_multiply(&mut self) {
                 match self {
                     Element::Brackets(elements) => {
@@ -193,7 +265,13 @@ mod parsing {
                             *self = Element::Multiply(elements);
                         }
                     },
-                    _ => {},
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_multiply)
+                    },
+                    Element::Multiply(_)
+                    | Element::Variable(_)
+                    | Element::Number(_)
+                    | Element::Pow(_, _) => {},
                 }
             }
 
@@ -231,7 +309,13 @@ mod parsing {
                     Element::Multiply(elements) => {
                         elements.iter_mut().for_each(Element::process_divide);
                     },
-                    _ => {},
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_divide);
+                    },
+                    Element::Negate(_)
+                    | Element::Variable(_)
+                    | Element::Number(_)
+                    | Element::Pow(_, _) => {},
                 }
             }
 
@@ -274,7 +358,10 @@ mod parsing {
                         b.process_pow();
                         p.process_pow();
                     },
-                    _ => {},
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_pow);
+                    },
+                    Element::Variable(_) | Element::Number(_) => {},
                 }
             }
 
@@ -297,9 +384,57 @@ mod parsing {
                         base.process_numbers_and_variables();
                         exponent.process_numbers_and_variables();
                     },
-                    _ => {},
+                    Element::Function { arguments, .. } => {
+                        arguments.iter_mut().for_each(Element::process_numbers_and_variables);
+                    },
+                    Element::Variable(_) | Element::Number(_) => {},
                 }
             }
+
+            /// Step 9
+            pub(super) fn remove_unneeded_outer_brackets(&mut self) {
+                match self {
+                    Element::Brackets(elements) => {
+                        elements.iter_mut().for_each(Element::remove_unneeded_outer_brackets);
+                        if elements.len() == 1 {
+                            *self = elements.remove(0);
+                        }
+                    },
+                    Element::Plus(elements)
+                    | Element::Multiply(elements)
+                    | Element::Function { arguments: elements, .. } => {
+                        elements.iter_mut().for_each(Element::remove_unneeded_outer_brackets)
+                    },
+                    Element::Pow(base, exponent) => {
+                        base.remove_unneeded_outer_brackets();
+                        exponent.remove_unneeded_outer_brackets();
+                    },
+                    Element::Negate(element) => element.remove_unneeded_outer_brackets(),
+                    Element::Variable(_) | Element::Number(_) | Element::String(_) => {},
+                }
+            }
+
+            fn anything_unparsed(&self) -> bool {
+                match self {
+                    Element::Brackets(_) | Element::String(_) => true,
+                    Element::Plus(elements)
+                    | Element::Multiply(elements)
+                    | Element::Function { arguments: elements, .. } => {
+                        elements.iter().any(Element::anything_unparsed)
+                    },
+                    Element::Pow(base, exponent) => {
+                        base.anything_unparsed() || exponent.anything_unparsed()
+                    },
+                    Element::Negate(element) => element.anything_unparsed(),
+                    Element::Variable(_) | Element::Number(_) => false,
+                }
+            }
+        }
+
+        fn list_contains_char(input: &[Element], delimiter: char) -> bool {
+            input
+                .iter()
+                .any(|e| if let Element::String(s) = e { s.contains(delimiter) } else { false })
         }
 
         fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
@@ -307,10 +442,7 @@ mod parsing {
             if DEBUG {
                 println!("Processing list of elements: {:?}", input);
             }
-            let any_delimiter = input
-                .iter()
-                .any(|e| if let Element::String(s) = e { s.contains(delimiter) } else { false });
-            if !any_delimiter {
+            if !list_contains_char(input, delimiter) {
                 if DEBUG {
                     println!("No '{delimiter}' found in brackets.");
                 }
@@ -410,7 +542,11 @@ mod parsing {
                     return;
                 }
 
-                let element = Element::parse(input);
+                let Some(element) = Element::parse(input) else {
+                    println!("Could not parse the formula: {}", input);
+                    println!();
+                    continue;
+                };
                 print!("parsed formula: ");
                 element.print();
                 if let Some(num) = element.eval() {
@@ -423,7 +559,19 @@ mod parsing {
         }
 
         pub fn run_tests() {
-            let inputs = ["((x/x-x)*-x^x)/(x-x)^-x", "(x/x+-x)*x^x", "x/x/x/x", "x/x-x"];
+            let inputs = [
+                "((x/x-x)*-x^x)/(x-x)^-x",
+                "(x/x+-x)*x^x",
+                "x/x/x/x",
+                "x/x-x",
+                "123",
+                "x",
+                "1+((2))",
+                "a,b,c",
+                "a(a,c)",
+                "a(a+c)",
+                "m+a(a,b+c)",
+            ];
             println!("Starting formula parsing tests");
             inputs.into_iter().for_each(test_formula_parsing);
         }
@@ -445,6 +593,7 @@ mod parsing {
 
             brackets.print();
 
+            debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
             debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
             debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
             debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply);
@@ -456,6 +605,11 @@ mod parsing {
                 "8. Convert to numbers and variables",
                 &mut brackets,
                 Element::process_numbers_and_variables,
+            );
+            debug_print_step(
+                "9. Removing unneeded outer brackets",
+                &mut brackets,
+                Element::remove_unneeded_outer_brackets,
             );
         }
 
@@ -487,15 +641,15 @@ mod printing {
     where
         T: IntoIterator<Item = &'a Element>,
     {
-        fn print(self, output: &mut String) {
+        fn print(self, output: &mut String, show_type: bool) {
             match self {
-                Inner::Single(element) => element.create_debug_string(true, output),
+                Inner::Single(element) => element.add_to_string(true, show_type, output),
                 Inner::Multiple { delimiter: separator, elements } => {
                     for (i, element) in elements.into_iter().enumerate() {
                         if i != 0 {
-                            output.push_str(&Element::get_highlighted_string(separator, false));
+                            output.push_str(separator);
                         }
-                        element.create_debug_string(true, output);
+                        element.add_to_string(true, show_type, output);
                     }
                 },
             }
@@ -503,77 +657,87 @@ mod printing {
     }
 
     fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
-        string_before_brackets: Option<&str>, show_brackets: bool, output: &mut String,
-        inner: Inner<'a, T>,
+        inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>,
+        output: &mut String, show_types: bool,
     ) {
         if !show_brackets {
-            inner.print(output);
+            inner.print(output, show_types);
         } else {
-            output.push_str(&Element::get_highlighted_string(
-                &(string_before_brackets.unwrap_or("").to_owned() + "("),
-                false,
-            ));
-            inner.print(output);
-            output.push_str(&Element::get_highlighted_string(")", false));
+            output.push_str(&format!("{}(", string_before_brackets.unwrap_or("")));
+            inner.print(output, show_types);
+            output.push_str(")");
         }
+    }
+
+    fn mark_string_red(str: impl ToString, apply_color: bool) -> String {
+        if apply_color { str.to_string().red().to_string() } else { str.to_string() }
     }
 
     impl Element {
         pub fn print(&self) {
             let mut string = String::new();
-            self.create_debug_string(false, &mut string);
+            self.add_to_string(true, true, &mut string);
             println!("{}", string);
         }
 
-        fn create_debug_string(&self, show_brackets: bool, output: &mut String) {
+        fn add_to_string(&self, show_brackets: bool, show_types: bool, output: &mut String) {
             match self {
                 Element::Brackets(elements) => print_in_brackets(
-                    None,
-                    show_brackets,
-                    output,
                     Inner::Multiple { delimiter: "", elements },
+                    show_brackets,
+                    show_types.then_some("br:"),
+                    output,
+                    show_types,
                 ),
                 Element::Plus(elements) => print_in_brackets(
-                    None,
-                    show_brackets,
-                    output,
                     Inner::Multiple { delimiter: "+", elements },
+                    show_brackets,
+                    show_types.then_some("plus:"),
+                    output,
+                    show_types,
                 ),
                 Element::Multiply(elements) => print_in_brackets(
-                    None,
-                    show_brackets,
-                    output,
                     Inner::Multiple { delimiter: "*", elements },
+                    show_brackets,
+                    show_types.then_some("mul:"),
+                    output,
+                    show_types,
                 ),
                 Element::Function { name, arguments } => print_in_brackets(
-                    Some(name),
-                    show_brackets,
-                    output,
                     Inner::Multiple { delimiter: ",", elements: arguments },
+                    show_brackets,
+                    Some(&format!("{}{}", show_types.then_some("fun:").unwrap_or(""), name)),
+                    output,
+                    show_types,
                 ),
                 Element::Pow(base, exponent) => {
-                    let elements = [base.as_ref(), exponent];
                     print_in_brackets(
-                        None,
+                        Inner::Multiple { delimiter: "^", elements: [base.as_ref(), exponent] },
                         show_brackets,
+                        show_types.then_some("pow:"),
                         output,
-                        Inner::Multiple { delimiter: "^", elements },
+                        show_types,
                     );
                 },
                 Element::Negate(element) => {
-                    output.push_str(&Self::get_highlighted_string("-", false));
-                    element.create_debug_string(true, output);
+                    output.push_str(&format!("{}-", show_types.then_some("neg:").unwrap_or("")));
+                    element.add_to_string(true, show_types, output);
                 },
-                Element::Number(num) => output.push_str(&Self::get_highlighted_string(num, false)),
-                Element::Variable(name) => {
-                    output.push_str(&Self::get_highlighted_string(name, false))
-                },
-                Element::String(s) => output.push_str(&Self::get_highlighted_string(s, true)),
+                Element::Number(num) => output.push_str(
+                    format!("{}{}", show_types.then_some("num:").unwrap_or(""), num).as_str(),
+                ),
+                Element::Variable(name) => output.push_str(
+                    format!("{}{}", show_types.then_some("var:").unwrap_or(""), name).as_str(),
+                ),
+                Element::String(s) => output.push_str(
+                    format!(
+                        "{}{}",
+                        show_types.then_some("str:").unwrap_or(""),
+                        mark_string_red(s, true)
+                    )
+                    .as_str(),
+                ),
             }
-        }
-
-        fn get_highlighted_string(str: impl ToString, color: bool) -> String {
-            if color { str.to_string().red().to_string() } else { str.to_string() }
         }
     }
 }
