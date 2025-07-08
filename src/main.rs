@@ -4,23 +4,25 @@ fn main() {
     test_with_user_input();
 }
 
+#[derive(Debug, Clone)]
+pub enum Element {
+    Brackets(Vec<Element>),
+    Function { name: String, arguments: Vec<Element> },
+    Plus(Vec<Element>),
+    Multiply(Vec<Element>),
+    Negate(Box<Element>),
+    String(String),
+    Variable(String),
+    Number(f64),
+    Pow(Box<Element>, Box<Element>),
+}
+
 mod parsing {
     pub mod implementation {
         use regex::Regex;
         use std::mem;
+        use crate::Element;
 
-        #[derive(Debug, Clone)]
-        pub enum Element {
-            Brackets(Vec<Element>),
-            Function { name: String, arguments: Vec<Element> },
-            Plus(Vec<Element>),
-            Multiply(Vec<Element>),
-            Negate(Box<Element>),
-            String(String),
-            Variable(String),
-            Number(f64),
-            Pow(Box<Element>, Box<Element>),
-        }
         fn is_valid_char_for_function_name(c: char) -> bool {
             matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
         }
@@ -527,7 +529,7 @@ mod parsing {
     }
 
     pub mod testing {
-        use crate::parsing::implementation::Element;
+        use crate::Element;
 
         pub fn test_with_user_input() {
             use std::io::stdin;
@@ -628,8 +630,8 @@ mod parsing {
 }
 
 mod printing {
-    use crate::parsing::implementation::Element;
     use colored::Colorize;
+    use crate::Element;
 
     enum Inner<'a, T: 'a>
     where
@@ -750,7 +752,7 @@ mod printing {
 }
 
 mod evaluation {
-    use crate::parsing::implementation::Element;
+    use crate::Element;
 
     impl Element {
         pub fn eval(&self) -> Option<f64> {
