@@ -587,7 +587,8 @@ mod parsing {
                     continue;
                 };
                 println!();
-                println!("Parsed formula:");
+                println!("Parsed formula");
+                print!("= ");
                 element.print();
                 print!("= ");
                 element.print_debug();
