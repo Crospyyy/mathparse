@@ -2,12 +2,7 @@ mod evaluation;
 mod parsing;
 mod printing;
 
-use crate::parsing::testing::test_with_user_input;
-
-fn main() {
-    test_with_user_input();
-    // run_all_tests();
-}
+fn main() {}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
