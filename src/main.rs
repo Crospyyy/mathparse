@@ -2,9 +2,10 @@ use crate::parsing::testing::test_with_user_input;
 
 fn main() {
     test_with_user_input();
+    // run_all_tests();
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Element {
     /// Unparsed group of elements
     Brackets(Vec<Element>),
@@ -600,7 +601,7 @@ mod parsing {
             }
         }
 
-        pub fn run_tests() {
+        pub fn run_all_tests() {
             let inputs = [
                 "((x/x-x)*-x^x)/(x-x)^-x",
                 "(x/x+-x)*x^x",
@@ -653,6 +654,7 @@ mod parsing {
                 &mut brackets,
                 Element::remove_unneeded_outer_brackets,
             );
+            assert_eq!(brackets, Element::parse(input).unwrap());
         }
 
         fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
@@ -790,7 +792,9 @@ mod printing {
                 Element::VariableOrFunction(name) => {
                     add_element_string(show_types, "var or fun", name, output)
                 },
-                Element::String(s) => add_element_string(show_types, "str", s, output),
+                Element::String(s) => {
+                    add_element_string(show_types, "str", mark_string_red(s, true), output)
+                },
             }
         }
     }
