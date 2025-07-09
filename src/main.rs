@@ -1,8 +1,12 @@
+use crate::parsing::testing::test_with_user_input;
+
 mod evaluation;
 mod parsing;
 mod printing;
 
-fn main() {}
+fn main() {
+    test_with_user_input();
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

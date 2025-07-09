@@ -6,24 +6,6 @@ pub mod implementation {
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
     }
-    fn get_name_of_function(input: &[char], start: usize) -> Option<String> {
-        if start < 2 {
-            return None;
-        }
-        let end_exclusive = start - 1;
-        let mut start = end_exclusive;
-        while start > 0 && is_valid_char_for_function_name(input[start - 1]) {
-            start -= 1;
-        }
-        if start == end_exclusive {
-            return None;
-        }
-        let name = input[start..end_exclusive].iter().collect::<String>();
-        if matches!(name.chars().nth(0), Some('0'..='9')) {
-            return None; // Function names cannot start with a digit
-        }
-        Some(name)
-    }
 
     fn get_largest_fun_name(name: &str) -> String {
         let mut valid_chars_count = 0;
