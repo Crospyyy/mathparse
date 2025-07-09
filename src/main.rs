@@ -26,13 +26,15 @@ pub enum Element {
     Function { name: String, arguments: Vec<Element> },
     /// A variable with a name
     Variable(String),
+    /// A variable, which could either be a number or a function
+    VariableOrFunction(String),
 }
 
 mod parsing {
     pub mod implementation {
+        use crate::Element;
         use regex::Regex;
         use std::mem;
-        use crate::Element;
 
         fn is_valid_char_for_function_name(c: char) -> bool {
             matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -207,6 +209,7 @@ mod parsing {
                     | Element::Multiply(_)
                     | Element::Negate(_)
                     | Element::Variable(_)
+                    | Element::VariableOrFunction(_)
                     | Element::Number(_)
                     | Element::Pow(_, _) => {},
                 }
@@ -254,7 +257,8 @@ mod parsing {
                     Element::Function { arguments, .. } => {
                         arguments.iter_mut().for_each(Element::process_minus)
                     },
-                    Element::Variable(_) | Element::Number(_) => {},
+                    Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {
+                    },
                 }
             }
 
@@ -284,6 +288,7 @@ mod parsing {
                     Element::Multiply(_)
                     | Element::Variable(_)
                     | Element::Number(_)
+                    | Element::VariableOrFunction(_)
                     | Element::Pow(_, _) => {},
                 }
             }
@@ -328,6 +333,7 @@ mod parsing {
                     Element::Negate(_)
                     | Element::Variable(_)
                     | Element::Number(_)
+                    | Element::VariableOrFunction(_)
                     | Element::Pow(_, _) => {},
                 }
             }
@@ -374,7 +380,8 @@ mod parsing {
                     Element::Function { arguments, .. } => {
                         arguments.iter_mut().for_each(Element::process_pow);
                     },
-                    Element::Variable(_) | Element::Number(_) => {},
+                    Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {
+                    },
                 }
             }
 
@@ -398,9 +405,20 @@ mod parsing {
                         exponent.process_numbers_and_variables();
                     },
                     Element::Function { arguments, .. } => {
-                        arguments.iter_mut().for_each(Element::process_numbers_and_variables);
+                        arguments.iter_mut().for_each(|e| {
+                            if let Element::String(s) = e {
+                                if let Ok(num) = s.parse::<f64>() {
+                                    *e = Element::Number(num);
+                                } else {
+                                    *e = Element::VariableOrFunction(s.clone());
+                                }
+                            } else {
+                                e.process_numbers_and_variables();
+                            }
+                        });
                     },
-                    Element::Variable(_) | Element::Number(_) => {},
+                    Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {
+                    },
                 }
             }
 
@@ -423,7 +441,10 @@ mod parsing {
                         exponent.remove_unneeded_outer_brackets();
                     },
                     Element::Negate(element) => element.remove_unneeded_outer_brackets(),
-                    Element::Variable(_) | Element::Number(_) | Element::String(_) => {},
+                    Element::Variable(_)
+                    | Element::Number(_)
+                    | Element::String(_)
+                    | Element::VariableOrFunction(_) => {},
                 }
             }
 
@@ -439,7 +460,9 @@ mod parsing {
                         base.anything_unparsed() || exponent.anything_unparsed()
                     },
                     Element::Negate(element) => element.anything_unparsed(),
-                    Element::Variable(_) | Element::Number(_) => false,
+                    Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {
+                        false
+                    },
                 }
             }
         }
@@ -541,12 +564,14 @@ mod parsing {
 
     pub mod testing {
         use crate::Element;
+        use std::io::Write;
 
         pub fn test_with_user_input() {
             use std::io::stdin;
 
             loop {
-                println!("Enter a formula to parse (or '' to quit):");
+                print!("Enter a formula to parse (or '' to quit):\n> ");
+                std::io::stdout().flush().unwrap();
                 let mut input = String::new();
                 stdin().read_line(&mut input).unwrap();
                 let input = input.trim();
@@ -560,14 +585,16 @@ mod parsing {
                     println!();
                     continue;
                 };
-                print!("parsed formula: ");
+                println!();
+                println!("Parsed formula:");
                 element.print();
                 print!("= ");
                 element.print_debug();
+                println!();
                 if let Some(num) = element.eval() {
-                    println!("Result: {}", num);
+                    println!("Calculated Result: {}", num);
                 } else {
-                    println!("Result: Could not evaluate the formula.");
+                    println!("Calculated Result: Could not evaluate the formula.");
                 }
                 println!();
             }
@@ -641,8 +668,8 @@ mod parsing {
 }
 
 mod printing {
-    use colored::Colorize;
     use crate::Element;
+    use colored::Colorize;
 
     enum Inner<'a, T: 'a>
     where
@@ -659,10 +686,16 @@ mod printing {
         fn print(self, output: &mut String, show_type: bool) {
             match self {
                 Inner::Single(element) => element.add_to_string(true, show_type, output),
-                Inner::Multiple { delimiter: separator, elements } => {
+                Inner::Multiple { delimiter, elements } => {
                     for (i, element) in elements.into_iter().enumerate() {
                         if i != 0 {
-                            output.push_str(separator);
+                            if show_type {
+                                output.push(' ');
+                            }
+                            output.push_str(delimiter);
+                            if show_type {
+                                output.push(' ');
+                            }
                         }
                         element.add_to_string(true, show_type, output);
                     }
@@ -673,12 +706,16 @@ mod printing {
 
     fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
         inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>,
-        output: &mut String, show_types: bool,
+        show_types: bool, type_string: &str, output: &mut String,
     ) {
+        add_type_string(show_types, type_string, output);
         if !show_brackets {
             inner.print(output, show_types);
         } else {
-            output.push_str(&format!("{}(", string_before_brackets.unwrap_or("")));
+            if let Some(str) = string_before_brackets {
+                output.push_str(str);
+            }
+            output.push_str("(");
             inner.print(output, show_types);
             output.push_str(")");
         }
@@ -705,59 +742,70 @@ mod printing {
                 Element::Brackets(elements) => print_in_brackets(
                     Inner::Multiple { delimiter: "", elements },
                     show_brackets,
-                    show_types.then_some("br:"),
-                    output,
+                    None,
                     show_types,
+                    "br",
+                    output,
                 ),
                 Element::Plus(elements) => print_in_brackets(
                     Inner::Multiple { delimiter: "+", elements },
                     show_brackets,
-                    show_types.then_some("plus:"),
-                    output,
+                    None,
                     show_types,
+                    "plus",
+                    output,
                 ),
                 Element::Multiply(elements) => print_in_brackets(
                     Inner::Multiple { delimiter: "*", elements },
                     show_brackets,
-                    show_types.then_some("mul:"),
-                    output,
+                    None,
                     show_types,
+                    "mul",
+                    output,
                 ),
                 Element::Function { name, arguments } => print_in_brackets(
                     Inner::Multiple { delimiter: ",", elements: arguments },
                     show_brackets,
-                    Some(&format!("{}{}", show_types.then_some("fun:").unwrap_or(""), name)),
-                    output,
+                    Some(name),
                     show_types,
+                    "fun",
+                    output,
                 ),
                 Element::Pow(base, exponent) => {
                     print_in_brackets(
                         Inner::Multiple { delimiter: "^", elements: [base.as_ref(), exponent] },
                         show_brackets,
-                        show_types.then_some("pow:"),
-                        output,
+                        None,
                         show_types,
+                        "pow",
+                        output,
                     );
                 },
                 Element::Negate(element) => {
-                    output.push_str(&format!("{}-", show_types.then_some("neg:").unwrap_or("")));
+                    add_element_string(show_types, "neg", "-", output);
                     element.add_to_string(true, show_types, output);
                 },
-                Element::Number(num) => output.push_str(
-                    format!("{}{}", show_types.then_some("num:").unwrap_or(""), num).as_str(),
-                ),
-                Element::Variable(name) => output.push_str(
-                    format!("{}{}", show_types.then_some("var:").unwrap_or(""), name).as_str(),
-                ),
-                Element::String(s) => output.push_str(
-                    format!(
-                        "{}{}",
-                        show_types.then_some("str:").unwrap_or(""),
-                        mark_string_red(s, true)
-                    )
-                    .as_str(),
-                ),
+                Element::Number(num) => add_element_string(show_types, "num", num, output),
+                Element::Variable(name) => add_element_string(show_types, "var", name, output),
+                Element::VariableOrFunction(name) => {
+                    add_element_string(show_types, "var or fun", name, output)
+                },
+                Element::String(s) => add_element_string(show_types, "str", s, output),
             }
+        }
+    }
+
+    fn add_element_string(
+        show_types: bool, type_string: &str, content: impl std::fmt::Display, output: &mut String,
+    ) {
+        add_type_string(show_types, type_string, output);
+        output.push_str(content.to_string().as_str());
+    }
+
+    fn add_type_string(show_types: bool, type_string: &str, output: &mut String) {
+        if show_types {
+            output.push_str(type_string);
+            output.push_str(": ");
         }
     }
 }
@@ -768,7 +816,12 @@ mod evaluation {
     impl Element {
         pub fn eval(&self) -> Option<f64> {
             match self {
-                Element::Brackets(_) | Element::String(_) | Element::Variable(_) => None,
+                Element::Brackets(_)
+                | Element::String(_)
+                | Element::Variable(_)
+                | Element::Function { .. }
+                | Element::VariableOrFunction(_) => None,
+
                 Element::Plus(elements) => {
                     let mut sum = 0.0;
                     for n in elements {
@@ -776,6 +829,7 @@ mod evaluation {
                     }
                     Some(sum)
                 },
+
                 Element::Multiply(elements) => {
                     let mut product = 1.0;
                     for n in elements {
@@ -783,10 +837,10 @@ mod evaluation {
                     }
                     Some(product)
                 },
+
                 Element::Negate(e) => e.eval().map(|n| -n),
                 Element::Number(n) => Some(*n),
                 Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
-                Element::Function { .. } => None,
             }
         }
     }
