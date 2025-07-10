@@ -602,3 +602,118 @@ pub mod testing {
         println!("##### {}", step);
     }
 }
+
+pub mod signature {
+    use crate::Element;
+    use std::collections::HashMap;
+
+    pub enum Signature {
+        NumberOrFunction,
+        Function(Vec<Signature>),
+        Number,
+        Conflicting,
+    }
+
+    impl Signature {
+        fn overwrite_with(&mut self, new: Self) {
+            if matches!(self, Signature::Conflicting) {
+                return;
+            }
+            if matches!(&new, Signature::Conflicting) {
+                *self = new;
+                return;
+            }
+            if new.get_priority() > self.get_priority() {
+                *self = new;
+                return;
+            }
+            if new.get_priority() < self.get_priority() {
+                return;
+            }
+            match (&mut *self, new) {
+                (Signature::Number, Signature::Number) => {},
+                (Signature::Function(_), Signature::Number)
+                | (Signature::Number, Signature::Function(_)) => *self = Signature::Conflicting,
+                (Signature::Function(args_old), Signature::Function(args_new)) => {
+                    if args_old.len() != args_new.len() {
+                        *self = Signature::Conflicting;
+                        return;
+                    }
+                    args_old.iter_mut().zip(args_new).for_each(|(a, b)| {
+                        a.overwrite_with(b);
+                    });
+                },
+                (_, _) => {},
+            }
+        }
+
+        fn get_priority(&self) -> u8 {
+            match self {
+                Signature::NumberOrFunction => 0,
+                Signature::Number => 1,
+                Signature::Function(_) => 1,
+                Signature::Conflicting => 1,
+            }
+        }
+    }
+
+    fn insert_signature_or_replace_with(
+        map: &mut HashMap<String, Signature>, name: &String, val: Signature,
+    ) {
+        if let Some(entry) = map.get_mut(name) {
+            entry.overwrite_with(val)
+        } else {
+            map.insert(name.clone(), val);
+        }
+    }
+
+    impl Element {
+        pub fn generate_needed_elements(&self) -> HashMap<String, Signature> {
+            let mut all_undefined = HashMap::new();
+            self.add_undefined_signatures(&mut all_undefined);
+            all_undefined
+        }
+
+        fn add_undefined_signatures(&self, signatures: &mut HashMap<String, Signature>) {
+            match self {
+                Element::Brackets(elements)
+                | Element::Plus(elements)
+                | Element::Multiply(elements) => {
+                    elements.iter().for_each(|e| e.add_undefined_signatures(signatures))
+                },
+                Element::Pow(base, exponent) => {
+                    base.add_undefined_signatures(signatures);
+                    exponent.add_undefined_signatures(signatures);
+                },
+                Element::Negate(element) => {
+                    element.add_undefined_signatures(signatures);
+                },
+                Element::Function { name, arguments } => {
+                    if signatures.get(name).is_some_and(|sig| matches!(sig, Signature::Conflicting))
+                    {
+                        return;
+                    }
+                    let arg_signatures = arguments
+                        .iter()
+                        .map(|arg| match arg {
+                            Element::Number(_) => Signature::Number,
+                            Element::VariableOrFunction(_) => Signature::NumberOrFunction,
+                            _ => panic!("Invalid element in function arguments: {:?}", arg),
+                        })
+                        .collect::<Vec<_>>();
+
+                    let fn_signature = Signature::Function(arg_signatures);
+                    insert_signature_or_replace_with(signatures, name, fn_signature);
+                },
+                Element::Variable(name) => {
+                    insert_signature_or_replace_with(signatures, name, Signature::Number)
+                },
+                Element::VariableOrFunction(name) => {
+                    insert_signature_or_replace_with(signatures, name, Signature::NumberOrFunction)
+                },
+                Element::Number(_) => {},
+                Element::String(_) => {},
+            }
+        }
+    }
+}
