@@ -766,12 +766,23 @@ pub mod signature {
             }
 
             if let Some(args) = symbol_name_and_args.function_args {
-                self.0.insert(symbol_name_and_args.name, Signature::Function(args.get_signatures_in_right_order()));
+                self.0.insert(
+                    symbol_name_and_args.name,
+                    Signature::Function(args.get_signatures_in_right_order()),
+                );
             } else {
                 self.0.insert(symbol_name_and_args.name, Signature::Number);
             }
 
             Ok(())
+        }
+
+        fn add_symbol_from_string(&mut self, string: &str) -> Result<(), String> {
+            let (sig, def) =
+                string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
+            let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
+            let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
+            self.add_symbol_from_function_signature_and_definition(sig, def)
         }
     }
 
@@ -859,6 +870,8 @@ pub mod signature {
 
     #[test]
     fn test_symbols() {
-        let fun1 = Element::parse("");
+        let mut all = Signatures::new_empty();
+        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
+        println!("{:?}", all.0);
     }
 }
