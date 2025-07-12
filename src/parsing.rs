@@ -766,13 +766,7 @@ pub mod signature {
             }
 
             if let Some(args) = symbol_name_and_args.function_args {
-                let function_signature = Signature::Function(
-                    args.names
-                        .iter()
-                        .map(|name| args.signatures.0.get(name).unwrap().clone())
-                        .collect::<Vec<_>>(),
-                );
-                self.0.insert(symbol_name_and_args.name, function_signature);
+                self.0.insert(symbol_name_and_args.name, Signature::Function(args.get_signatures_in_right_order()));
             } else {
                 self.0.insert(symbol_name_and_args.name, Signature::Number);
             }
@@ -789,6 +783,15 @@ pub mod signature {
     struct FunctionDeclarationArguments {
         names: Vec<String>,
         signatures: Signatures,
+    }
+
+    impl FunctionDeclarationArguments {
+        fn get_signatures_in_right_order(&self) -> Vec<Signature> {
+            self.names
+                .iter()
+                .map(|name| self.signatures.0.get(name).unwrap().clone())
+                .collect::<Vec<_>>()
+        }
     }
 
     impl SymbolDeclarationData {
