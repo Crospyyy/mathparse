@@ -608,7 +608,7 @@ pub mod signature {
     use std::collections::HashMap;
     use std::ops::Deref;
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     pub enum Signature {
         NumberOrFunction,
         Function(Vec<Signature>),
@@ -680,6 +680,7 @@ pub mod signature {
         }
     }
 
+    #[derive(Clone)]
     pub struct Signatures(HashMap<String, Signature>);
 
     impl Signatures {
@@ -751,25 +752,12 @@ pub mod signature {
             }
 
             let required_signatures = Signatures::generate_needed_elements_of_formula(&content);
-            let mut undefined_signatures = Signatures::new_empty();
-            for (name, sig) in required_signatures.0 {
-                if let Some(sig_fun_arg) = symbol_name_and_args.function_args.get_mut(&name) {
-                    if sig_fun_arg.could_be(&sig) {
-                        sig_fun_arg.overwrite_with(sig);
-                        continue;
-                    } else {
-                        return Err(format!("Invalid usage of already defined formula {}", name));
-                    }
-                } else if let Some(already_defined) = self.0.get(&name) {
-                    if sig.could_be(already_defined) {
-                        continue;
-                    } else {
-                        return Err(format!("Invalid usage of already defined formula {}", name));
-                    }
-                } else {
-                    undefined_signatures.0.insert(name, sig);
-                }
-            }
+            let mut undefined_signatures = required_signatures.clone();
+            refine_fn_signature(
+                symbol_name_and_args.function_args.as_mut().map(|a| &mut a.signatures),
+                &mut undefined_signatures,
+                self,
+            )?;
             if !undefined_signatures.0.is_empty() {
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
@@ -777,9 +765,12 @@ pub mod signature {
                 ));
             }
 
-            if symbol_name_and_args.is_function {
+            if let Some(args) = symbol_name_and_args.function_args {
                 let function_signature = Signature::Function(
-                    symbol_name_and_args.function_args.into_values().collect::<Vec<_>>(),
+                    args.names
+                        .iter()
+                        .map(|name| args.signatures.0.get(name).unwrap().clone())
+                        .collect::<Vec<_>>(),
                 );
                 self.0.insert(symbol_name_and_args.name, function_signature);
             } else {
@@ -792,36 +783,79 @@ pub mod signature {
 
     struct SymbolDeclarationData {
         name: String,
-        is_function: bool,
-        function_args: HashMap<String, Signature>,
+        function_args: Option<FunctionDeclarationArguments>,
+    }
+
+    struct FunctionDeclarationArguments {
+        names: Vec<String>,
+        signatures: Signatures,
     }
 
     impl SymbolDeclarationData {
         fn from_formula(formula: &Element) -> Result<Self, String> {
             let insert_name;
-            let is_function;
-            let mut function_args = HashMap::new();
+            let function_args;
             match formula {
                 Element::Variable(name) => {
-                    is_function = false;
+                    function_args = None;
                     insert_name = name;
                 },
                 Element::Function { name, arguments } => {
-                    is_function = true;
                     insert_name = name;
+                    let mut fn_args = FunctionDeclarationArguments {
+                        names: Vec::new(),
+                        signatures: Signatures::new_empty(),
+                    };
                     for arg in arguments {
                         if let Element::VariableOrFunction(name) = arg {
-                            function_args.insert(name.clone(), Signature::NumberOrFunction);
+                            fn_args.names.push(name.clone());
+                            fn_args.signatures.0.insert(name.clone(), Signature::NumberOrFunction);
                         } else {
                             return Err("Invalid argument in function signature".to_string());
                         }
                     }
+                    function_args = Some(fn_args)
                 },
                 _ => {
                     return Err("Invalid formula signature provided".to_string());
                 },
             }
-            Ok(Self { name: insert_name.to_owned(), is_function, function_args })
+            Ok(Self { name: insert_name.to_owned(), function_args })
         }
+    }
+
+    fn refine_fn_signature(
+        mut signature_arguments: Option<&mut Signatures>, undefined: &mut Signatures,
+        refine_with: &Signatures,
+    ) -> Result<(), String> {
+        let mut result = Ok(());
+        undefined.0.retain(|name, sig| {
+            if let Some(fun_arg) = signature_arguments.as_mut().and_then(|a| a.0.get_mut(name)) {
+                if fun_arg.could_be(&sig) {
+                    fun_arg.overwrite_with(sig.clone());
+                    false
+                } else {
+                    result = Err(format!("Invalid usage of already defined formula {}", name));
+                    true
+                }
+            } else if let Some(already_defined) = refine_with.0.get(name) {
+                if sig.could_be(already_defined) {
+                    false
+                } else {
+                    result = Err(format!("Invalid usage of already defined formula {}", name));
+                    true
+                }
+            } else {
+                true
+            }
+        });
+        result
+    }
+
+    struct SymbolDefinition {}
+
+    #[test]
+    fn test_symbols() {
+        let fun1 = Element::parse("");
     }
 }
