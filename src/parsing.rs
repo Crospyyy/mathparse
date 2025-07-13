@@ -680,7 +680,7 @@ pub mod signature {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct Signatures(HashMap<String, Signature>);
 
     impl Signatures {
@@ -925,18 +925,22 @@ pub mod signature {
                             }
                         }
                     }
-                    arguments
-                        .iter()
-                        .for_each(|a| a.list_all_functions_with_argument_variable(name, list))
+                    arguments.iter().for_each(|a| {
+                        a.list_all_function_arguments_where_function_has_name(name, list)
+                    })
                 },
-                Element::Plus(elements) | Element::Multiply(elements) => elements
-                    .iter()
-                    .for_each(|a| a.list_all_functions_with_argument_variable(name, list)),
+                Element::Plus(elements) | Element::Multiply(elements) => {
+                    elements.iter().for_each(|e| {
+                        e.list_all_function_arguments_where_function_has_name(name, list)
+                    })
+                },
                 Element::Pow(a, b) => {
-                    a.list_all_functions_with_argument_variable(name, list);
-                    b.list_all_functions_with_argument_variable(name, list);
+                    a.list_all_function_arguments_where_function_has_name(name, list);
+                    b.list_all_function_arguments_where_function_has_name(name, list);
                 },
-                Element::Negate(e) => e.list_all_functions_with_argument_variable(name, list),
+                Element::Negate(e) => {
+                    e.list_all_function_arguments_where_function_has_name(name, list)
+                },
                 Element::Brackets(_)
                 | Element::String(_)
                 | Element::Number(_)
@@ -951,6 +955,7 @@ pub mod signature {
         function_args: Option<FunctionDeclarationArguments>,
     }
 
+    #[derive(Debug)]
     struct FunctionDeclarationArguments {
         names: Vec<String>,
         signatures: Signatures,
