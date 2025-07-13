@@ -605,7 +605,7 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use std::collections::HashMap;
+    use std::collections::{HashMap, HashSet};
     use std::ops::Deref;
 
     #[derive(Debug, Clone)]
@@ -617,7 +617,7 @@ pub mod signature {
     }
 
     impl Signature {
-        fn overwrite_with(&mut self, new: Self) {
+        fn refine_with(&mut self, new: Self) {
             if matches!(self, Signature::Conflicting) {
                 return;
             }
@@ -642,7 +642,7 @@ pub mod signature {
                         return;
                     }
                     args_old.iter_mut().zip(args_new).for_each(|(a, b)| {
-                        a.overwrite_with(b);
+                        a.refine_with(b);
                     });
                 },
                 (_, _) => {},
@@ -733,7 +733,7 @@ pub mod signature {
 
         fn insert_or_replace_symbol(&mut self, name: &String, val: Signature) {
             if let Some(entry) = self.0.get_mut(name) {
-                entry.overwrite_with(val)
+                entry.refine_with(val)
             } else {
                 self.0.insert(name.clone(), val);
             }
@@ -751,17 +751,19 @@ pub mod signature {
                 ));
             }
 
-            let required_signatures = Signatures::generate_needed_elements_of_formula(&content);
-            let mut undefined_signatures = required_signatures.clone();
-            refine_fn_signature(
-                symbol_name_and_args.function_args.as_mut().map(|a| &mut a.signatures),
-                &mut undefined_signatures,
+            let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
+
+            Self::refine_signature_and_undefined(
+                &mut symbol_name_and_args,
+                &mut required_signatures,
+                &content,
                 self,
-            )?;
-            if !undefined_signatures.0.is_empty() {
+            );
+
+            if !required_signatures.0.is_empty() {
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
-                    symbol_name_and_args.name, undefined_signatures.0
+                    symbol_name_and_args.name, required_signatures.0
                 ));
             }
 
@@ -777,12 +779,170 @@ pub mod signature {
             Ok(())
         }
 
+        fn refine_signature_and_undefined(
+            symbol_name_and_args: &mut SymbolDeclarationData,
+            undefined_signatures: &mut Signatures, formula: &Element, already_defined: &Signatures,
+        ) {
+            let parameter_names = symbol_name_and_args
+                .function_args
+                .as_ref()
+                .map(|v| {
+                    let mut set = HashSet::new();
+                    for e in &v.names {
+                        set.insert(e.clone());
+                    }
+                    set
+                })
+                .unwrap_or(HashSet::new());
+
+            let all_undefined_names =
+                undefined_signatures.0.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
+            for name in all_undefined_names {
+                if parameter_names.contains(&name) {
+                    continue;
+                }
+                if let Some(sig) = already_defined.0.get(&name) {
+                    undefined_signatures.update_signature(&formula, &name, sig.clone())
+                }
+            }
+            if let Some(args) = &mut symbol_name_and_args.function_args {
+                for (param_name, param_sig) in &mut args.signatures.0 {
+                    param_sig.refine_with(undefined_signatures.0[param_name].clone())
+                }
+            }
+            undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
+            undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
+        }
+
         fn add_symbol_from_string(&mut self, string: &str) -> Result<(), String> {
             let (sig, def) =
                 string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
             let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
             let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
             self.add_symbol_from_function_signature_and_definition(sig, def)
+        }
+
+        fn update_signature(
+            &mut self, formula: &Element, element_to_update: &str, new_signature: Signature,
+        ) {
+            let Some(signature) = self.0.get_mut(element_to_update) else { return };
+            signature.refine_with(new_signature.clone());
+
+            // update all functions that contain this symbol as a parameter
+            let mut list_all_parameter_occurrences = HashSet::new();
+            formula.list_all_functions_with_argument_variable(
+                element_to_update,
+                &mut list_all_parameter_occurrences,
+            );
+            for (fn_name, param_index) in list_all_parameter_occurrences {
+                let mut new_fn_signature = self.0[&fn_name].clone();
+                match &mut new_fn_signature {
+                    Signature::Function(args) => args[param_index] = new_signature.clone(),
+                    _ => panic!("This shouldn't happen"),
+                }
+                self.update_signature(formula, &fn_name, new_fn_signature);
+            }
+
+            if let Signature::Function(args) = new_signature {
+                // update all parameters, of which their types may be affected
+                let mut all_params_of_function_type = HashSet::new();
+                formula.list_all_function_arguments_where_function_has_name(
+                    element_to_update,
+                    &mut all_params_of_function_type,
+                );
+                for (param_name, param_index) in all_params_of_function_type {
+                    let new_arg_signature = args[param_index].clone();
+                    self.0.get_mut(&param_name).unwrap().refine_with(new_arg_signature);
+                }
+            }
+        }
+    }
+
+    impl Element {
+        fn get_name(&self) -> Option<&str> {
+            match self {
+                Element::Function { name, .. }
+                | Element::Variable(name)
+                | Element::VariableOrFunction(name) => Some(name),
+                _ => None,
+            }
+        }
+
+        fn name_matches(&self, name: &str) -> bool {
+            match self {
+                Element::Function { name: name_cmp, .. }
+                | Element::Variable(name_cmp)
+                | Element::VariableOrFunction(name_cmp) => name_cmp == name,
+                _ => false,
+            }
+        }
+
+        /// Returns a set of Function names and indices, which parameter is equal to the ```name```
+        fn list_all_functions_with_argument_variable(
+            &self, name: &str, list: &mut HashSet<(String, usize)>,
+        ) {
+            match self {
+                Element::Function { arguments, name: this_name } => {
+                    for (i, _) in arguments.iter().enumerate().filter(|(_, e)| e.name_matches(name))
+                    {
+                        list.insert((this_name.clone(), i));
+                    }
+                    arguments
+                        .iter()
+                        .for_each(|a| a.list_all_functions_with_argument_variable(name, list))
+                },
+                Element::Plus(elements) | Element::Multiply(elements) => elements
+                    .iter()
+                    .for_each(|a| a.list_all_functions_with_argument_variable(name, list)),
+                Element::Pow(a, b) => {
+                    a.list_all_functions_with_argument_variable(name, list);
+                    b.list_all_functions_with_argument_variable(name, list);
+                },
+                Element::Negate(e) => e.list_all_functions_with_argument_variable(name, list),
+                Element::Brackets(_)
+                | Element::String(_)
+                | Element::Number(_)
+                | Element::Variable(_)
+                | Element::VariableOrFunction(_) => {},
+            }
+        }
+
+        /// Returns a set of Function names and indices, which parameter is equal to the ```name```
+        fn list_all_function_arguments_where_function_has_name(
+            &self, name: &str, list: &mut HashSet<(String, usize)>,
+        ) {
+            match self {
+                Element::Function { arguments, name: this_name } => {
+                    if this_name == name {
+                        for (i, arg_name) in arguments
+                            .iter()
+                            .enumerate()
+                            .map(|(i, e)| e.get_name().map(|n| (i, n)))
+                            .flatten()
+                        {
+                            if arg_name != name {
+                                list.insert((arg_name.to_string(), i));
+                            }
+                        }
+                    }
+                    arguments
+                        .iter()
+                        .for_each(|a| a.list_all_functions_with_argument_variable(name, list))
+                },
+                Element::Plus(elements) | Element::Multiply(elements) => elements
+                    .iter()
+                    .for_each(|a| a.list_all_functions_with_argument_variable(name, list)),
+                Element::Pow(a, b) => {
+                    a.list_all_functions_with_argument_variable(name, list);
+                    b.list_all_functions_with_argument_variable(name, list);
+                },
+                Element::Negate(e) => e.list_all_functions_with_argument_variable(name, list),
+                Element::Brackets(_)
+                | Element::String(_)
+                | Element::Number(_)
+                | Element::Variable(_)
+                | Element::VariableOrFunction(_) => {},
+            }
         }
     }
 
@@ -838,7 +998,7 @@ pub mod signature {
         }
     }
 
-    fn refine_fn_signature(
+    fn update_signature(
         mut signature_arguments: Option<&mut Signatures>, undefined: &mut Signatures,
         refine_with: &Signatures,
     ) -> Result<(), String> {
@@ -846,7 +1006,7 @@ pub mod signature {
         undefined.0.retain(|name, sig| {
             if let Some(fun_arg) = signature_arguments.as_mut().and_then(|a| a.0.get_mut(name)) {
                 if fun_arg.could_be(&sig) {
-                    fun_arg.overwrite_with(sig.clone());
+                    fun_arg.refine_with(sig.clone());
                     false
                 } else {
                     result = Err(format!("Invalid usage of already defined formula {}", name));
@@ -872,6 +1032,9 @@ pub mod signature {
     fn test_symbols() {
         let mut all = Signatures::new_empty();
         assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
+        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));
+        println!("{:?}", all.0);
+        assert!(matches!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok(())));
         println!("{:?}", all.0);
     }
 }
