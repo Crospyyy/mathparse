@@ -2,6 +2,7 @@ pub mod implementation {
     use crate::Element;
     use regex::Regex;
     use std::mem;
+    use std::ops::DerefMut;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -36,6 +37,7 @@ pub mod implementation {
             formula.process_minus();
             formula.process_numbers_and_variables();
             formula.remove_unneeded_outer_brackets();
+            formula.convert_to_variables_where_possible();
             if formula.anything_unparsed() { None } else { Some(formula) }
         }
 
@@ -330,8 +332,8 @@ pub mod implementation {
                     if let Ok(num) = s.parse::<f64>() {
                         *self = Element::Number(num);
                     } else {
-                        // If parsing fails, we assume it's a variable
-                        *self = Element::Variable(s.clone());
+                        // If parsing fails, we assume it's a variable or function
+                        *self = Element::VariableOrFunction(s.clone());
                     }
                 },
                 Element::Brackets(e) | Element::Multiply(e) | Element::Plus(e) => {
@@ -382,6 +384,46 @@ pub mod implementation {
                 | Element::Number(_)
                 | Element::String(_)
                 | Element::VariableOrFunction(_) => {},
+            }
+        }
+
+        /// Step 10
+        pub(super) fn convert_to_variables_where_possible(&mut self) {
+            match self {
+                Element::String(_) | Element::Brackets(_) => {}, // these shouldn't exist at this point
+                Element::Plus(elements) | Element::Multiply(elements) => {
+                    for arg in elements {
+                        if !arg.try_convert_to_variable() {
+                            arg.convert_to_variables_where_possible();
+                        }
+                    }
+                },
+                Element::Function { arguments, .. } => {
+                    arguments.iter_mut().for_each(Element::convert_to_variables_where_possible);
+                },
+                Element::Pow(a, b) => {
+                    if !a.try_convert_to_variable() {
+                        a.convert_to_variables_where_possible();
+                    }
+                    if !b.try_convert_to_variable() {
+                        b.convert_to_variables_where_possible();
+                    }
+                },
+                Element::Negate(x) => {
+                    if !x.try_convert_to_variable() {
+                        x.convert_to_variables_where_possible();
+                    }
+                },
+                Element::Variable(_) | Element::VariableOrFunction(_) | Element::Number(_) => {},
+            }
+        }
+
+        fn try_convert_to_variable(&mut self) -> bool {
+            if let Element::VariableOrFunction(name) = self {
+                *self = Element::Variable(name.to_owned());
+                true
+            } else {
+                false
             }
         }
 
@@ -547,6 +589,7 @@ pub mod testing {
             "a(a,c)",
             "a(a+c)",
             "m+a(a,b+c)",
+            "fun3(some_fun)",
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(test_formula_parsing);
@@ -587,6 +630,11 @@ pub mod testing {
             "9. Removing unneeded outer brackets",
             &mut brackets,
             Element::remove_unneeded_outer_brackets,
+        );
+        debug_print_step(
+            "10. Convert ambiguous symbols to variables where possible",
+            &mut brackets,
+            Element::convert_to_variables_where_possible,
         );
         assert_eq!(brackets, Element::parse(input).unwrap());
     }
@@ -818,7 +866,9 @@ pub mod signature {
             let (sig, def) =
                 string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
             let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
+            println!("Signature: {:?}", sig);
             let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
+            println!("Definition: {:?}", def);
             self.add_symbol_from_function_signature_and_definition(sig, def)
         }
 
@@ -1040,6 +1090,10 @@ pub mod signature {
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));
         println!("{:?}", all.0);
         assert!(matches!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok(())));
+        println!("{:?}", all.0);
+        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)");
+        println!("{:?}", result);
+        assert!(matches!(result, Ok(())));
         println!("{:?}", all.0);
     }
 }
