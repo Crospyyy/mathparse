@@ -3,6 +3,7 @@ use crate::parsing::testing::test_with_user_input;
 mod evaluation;
 mod parsing;
 mod printing;
+mod storing;
 
 fn main() {
     test_with_user_input();

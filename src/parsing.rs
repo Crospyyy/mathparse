@@ -2,7 +2,6 @@ pub mod implementation {
     use crate::Element;
     use regex::Regex;
     use std::mem;
-    use std::ops::DerefMut;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -475,7 +474,7 @@ pub mod implementation {
                     groups.push(Element::Brackets(group_to_add));
                 }
             }
-        };
+        }
         for element in input {
             if let Element::String(str) = element {
                 if DEBUG {
@@ -654,7 +653,7 @@ pub mod testing {
 pub mod signature {
     use crate::Element;
     use std::collections::{HashMap, HashSet};
-    use std::ops::Deref;
+    use crate::storing::FormulaStore;
 
     #[derive(Debug, Clone)]
     pub enum Signature {
@@ -706,7 +705,8 @@ pub mod signature {
             }
         }
 
-        fn could_be(&self, other: &Signature) -> bool {
+        /// true if self is less specific than other
+        pub(crate) fn could_be(&self, other: &Signature) -> bool {
             match (self, other) {
                 (Signature::NumberOrFunction, _) => {
                     if !matches!(other, Signature::Conflicting) {
@@ -729,10 +729,10 @@ pub mod signature {
     }
 
     #[derive(Clone, Debug)]
-    pub struct Signatures(HashMap<String, Signature>);
+    pub struct Signatures(pub(crate) HashMap<String, Signature>);
 
     impl Signatures {
-        fn new_empty() -> Self {
+        pub(crate) fn new_empty() -> Self {
             Signatures(HashMap::new())
         }
 
@@ -787,9 +787,9 @@ pub mod signature {
             }
         }
 
-        fn add_symbol_from_function_signature_and_definition(
+        pub(crate) fn add_symbol_from_function_signature_and_definition(
             &mut self, name_and_args: Element, content: Element,
-        ) -> Result<(), String> {
+        ) -> Result<String, String> {
             let mut symbol_name_and_args = SymbolDeclarationData::from_formula(&name_and_args)?;
 
             if self.0.get(&symbol_name_and_args.name).is_some() {
@@ -817,14 +817,14 @@ pub mod signature {
 
             if let Some(args) = symbol_name_and_args.function_args {
                 self.0.insert(
-                    symbol_name_and_args.name,
+                    symbol_name_and_args.name.clone(),
                     Signature::Function(args.get_signatures_in_right_order()),
                 );
             } else {
-                self.0.insert(symbol_name_and_args.name, Signature::Number);
+                self.0.insert(symbol_name_and_args.name.clone(), Signature::Number);
             }
 
-            Ok(())
+            Ok(symbol_name_and_args.name)
         }
 
         fn refine_signature_and_undefined(
@@ -860,16 +860,6 @@ pub mod signature {
             }
             undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
             undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
-        }
-
-        fn add_symbol_from_string(&mut self, string: &str) -> Result<(), String> {
-            let (sig, def) =
-                string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
-            let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
-            println!("Signature: {:?}", sig);
-            let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
-            println!("Definition: {:?}", def);
-            self.add_symbol_from_function_signature_and_definition(sig, def)
         }
 
         fn update_signature(
@@ -1085,15 +1075,16 @@ pub mod signature {
 
     #[test]
     fn test_symbols() {
-        let mut all = Signatures::new_empty();
+        let mut all = FormulaStore::new_empty();
         assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));
-        println!("{:?}", all.0);
+        println!("{:?}", all.get_signatures());
         assert!(matches!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok(())));
-        println!("{:?}", all.0);
+        println!("{:?}", all.get_signatures());
         let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)");
         println!("{:?}", result);
         assert!(matches!(result, Ok(())));
-        println!("{:?}", all.0);
+        println!("{:?}", all.get_signatures());
     }
 }
+
