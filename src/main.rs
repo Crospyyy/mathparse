@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use crate::evaluation::run_formula_evaluator;
 use crate::parsing::testing::test_with_user_input;
 
 mod evaluation;
@@ -7,7 +8,7 @@ mod printing;
 mod storing;
 
 fn main() {
-    test_with_user_input();
+    run_formula_evaluator();
 }
 
 #[derive(Debug, Clone, PartialEq)]

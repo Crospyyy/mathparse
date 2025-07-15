@@ -2,6 +2,7 @@ use crate::Element;
 use crate::parsing::signature::{Signature, Signatures};
 use crate::storing::FormulaStore;
 use std::collections::HashSet;
+use std::io::stdin;
 
 impl Element {
     pub fn eval(&self) -> Option<f64> {
@@ -82,13 +83,17 @@ impl Element {
 }
 
 impl FormulaStore {
-    pub fn eval(&self, name: &str) -> Result<f64,String> {
+    pub fn eval(&self, name: &str) -> Result<f64, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
         let mut all_names = HashSet::new();
         formula.get_all_names(&mut all_names);
         while !all_names.is_empty() {
             for name in &all_names {
-                formula.insert_symbol(&self.get_insertion_element(&name).ok_or("Symbol used in formula is not defined".to_owned())?)?;
+                formula.insert_symbol(
+                    &self
+                        .get_insertion_element(&name)
+                        .ok_or("Symbol used in formula is not defined".to_owned())?,
+                )?;
             }
             all_names.clear();
             formula.get_all_names(&mut all_names);
@@ -98,11 +103,27 @@ impl FormulaStore {
 }
 
 #[test]
-fn test_eval_formula_store(){
+fn test_eval_formula_store() {
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("f(x)=x^2").unwrap();
     store.add_symbol_from_string("a=4").unwrap();
     println!("{}", store.eval("f(a)").unwrap());
+}
+
+pub fn run_formula_evaluator() {
+    let mut store = FormulaStore::new_empty();
+
+    loop {
+        let mut line = "".to_owned();
+        let _ = stdin().read_line(&mut line);
+        line = line.trim().to_string();
+        if line.contains('=') {
+            println!("{:?}", store.add_symbol_from_string(&line));
+        } else {
+            println!("{:?}", store.eval(&line));
+        }
+    }
+
 }
 
 impl Element {
