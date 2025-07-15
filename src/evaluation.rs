@@ -1,6 +1,7 @@
 use crate::Element;
 use crate::parsing::signature::{Signature, Signatures};
 use crate::storing::FormulaStore;
+use std::collections::HashSet;
 
 impl Element {
     pub fn eval(&self) -> Option<f64> {
@@ -37,10 +38,10 @@ impl Element {
         if let Element::Number(num) = self { Some(*num) } else { None }
     }
 
-   // pub fn expanded_with_symbols(symbols: &FormulaStore)->Option<Element>{
-    // 
+    // pub fn expanded_with_symbols(symbols: &FormulaStore)->Option<Element>{
+    //
     // }
-    
+
     // pub fn eval_with_defined(&self, stored: &FormulaStore) -> Option<Element> {
     //     match self {
     //         Element::Brackets(_) | Element::String(_) => None,
@@ -80,16 +81,51 @@ impl Element {
     // }
 }
 
-// impl FormulaStore {
-//     pub fn eval(&self, name: &str) -> Option<f64> {
-//         let formula = Element::parse(name)?;
-//         let sig = Signatures::generate_needed_elements_of_formula(&formula);
-//         if !self.get_signatures().contains_all_of(&sig) {
-//             return None;
-//         }
-//         formula.eval_with_defined(self)
-//     }
-// }
+impl FormulaStore {
+    pub fn eval(&self, name: &str) -> Result<f64,String> {
+        let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
+        let mut all_names = HashSet::new();
+        formula.get_all_names(&mut all_names);
+        while !all_names.is_empty() {
+            for name in &all_names {
+                formula.insert_symbol(&self.get_insertion_element(&name).ok_or("Symbol used in formula is not defined".to_owned())?)?;
+            }
+            all_names.clear();
+            formula.get_all_names(&mut all_names);
+        }
+        formula.eval().ok_or("Could not evaluate formula".to_owned())
+    }
+}
+
+#[test]
+fn test_eval_formula_store(){
+    let mut store = FormulaStore::new_empty();
+    store.add_symbol_from_string("f(x)=x^2").unwrap();
+    println!("{}", store.eval("f(f())").unwrap());
+}
+
+impl Element {
+    pub(crate) fn get_all_names(&self, names: &mut HashSet<String>) {
+        match self {
+            Element::Brackets(_) | Element::String(_) | Element::Number(_) => {},
+            Element::Plus(e) | Element::Multiply(e) => {
+                for e in e {
+                    e.get_all_names(names);
+                }
+            },
+            Element::Pow(a, b) => {
+                a.get_all_names(names);
+                b.get_all_names(names);
+            },
+            Element::Negate(x) => x.get_all_names(names),
+            Element::Function { name, .. }
+            | Element::Variable(name)
+            | Element::VariableOrFunction(name) => {
+                names.insert(name.to_owned());
+            },
+        }
+    }
+}
 
 impl Signatures {
     fn contains_all_of(&self, signatures: &Signatures) -> bool {

@@ -87,6 +87,9 @@ pub mod implementation {
         pub(super) fn resolve_functions(&mut self) {
             match self {
                 Element::Brackets(elements) => {
+                    if elements.is_empty() {
+                        return;
+                    }
                     for i in (0..elements.len() - 1).rev() {
                         let j = i + 1;
                         if let (Element::String(name), Element::Brackets(br_elements)) =
@@ -116,7 +119,9 @@ pub mod implementation {
                     }
                     elements.iter_mut().for_each(Element::resolve_functions);
                 },
-                Element::Plus(elements) | Element::Multiply(elements)|Element::Function {arguments:elements, ..}=> {
+                Element::Plus(elements)
+                | Element::Multiply(elements)
+                | Element::Function { arguments: elements, .. } => {
                     elements.iter_mut().for_each(Element::resolve_functions);
                 },
                 Element::Negate(element) => element.resolve_functions(),

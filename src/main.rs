@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use crate::parsing::testing::test_with_user_input;
 
 mod evaluation;
@@ -34,3 +35,5 @@ pub enum Element {
     /// A variable, which could either be a number or a function
     VariableOrFunction(String),
 }
+
+
