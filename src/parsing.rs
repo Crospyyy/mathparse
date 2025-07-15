@@ -1,6 +1,7 @@
 pub mod implementation {
     use crate::Element;
     use regex::Regex;
+    use std::cmp::PartialEq;
     use std::mem;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
@@ -375,7 +376,8 @@ pub mod implementation {
                 Element::Plus(elements)
                 | Element::Multiply(elements)
                 | Element::Function { arguments: elements, .. } => {
-                    elements.iter_mut().for_each(Element::remove_unneeded_outer_brackets)
+                    elements.iter_mut().for_each(Element::remove_unneeded_outer_brackets);
+                    elements.retain(|e| *e != Element::Brackets(vec![]))
                 },
                 Element::Pow(base, exponent) => {
                     base.remove_unneeded_outer_brackets();
@@ -593,6 +595,7 @@ pub mod testing {
             "m+a(a,b+c)",
             "fun3(some_fun)",
             "fun(12, fun(1, 2))",
+            "fun()",
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(test_formula_parsing);
@@ -1019,7 +1022,7 @@ pub mod signature {
             let insert_name;
             let function_args;
             match formula {
-                Element::Variable(name) => {
+                Element::Variable(name) |Element::VariableOrFunction(name)=> {
                     function_args = None;
                     insert_name = name;
                 },

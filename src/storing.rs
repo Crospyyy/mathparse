@@ -60,8 +60,6 @@ pub struct InsertionElement {
 
 impl Element {
     pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<(), String> {
-        dbg!(insert);
-        dbg!(&self);
         match self {
             Element::Brackets(elements)
             | Element::Plus(elements)
@@ -85,7 +83,7 @@ impl Element {
             let types_equal = if insert.arguments.is_some() {
                 matches!(self, Element::Function { .. })
             } else {
-                matches!(self, Element::Variable(_))
+                matches!(self, Element::Variable(_)|Element::VariableOrFunction(_))
             };
             if !types_equal {
                 return Err("Insertion element and formula don't match".to_owned());

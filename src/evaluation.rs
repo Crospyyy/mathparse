@@ -101,7 +101,8 @@ impl FormulaStore {
 fn test_eval_formula_store(){
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("f(x)=x^2").unwrap();
-    println!("{}", store.eval("f(f())").unwrap());
+    store.add_symbol_from_string("a=4").unwrap();
+    println!("{}", store.eval("f(a)").unwrap());
 }
 
 impl Element {
