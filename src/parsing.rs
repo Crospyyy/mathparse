@@ -114,11 +114,9 @@ pub mod implementation {
                             }
                         }
                     }
-                },
-                Element::Plus(elements) => {
                     elements.iter_mut().for_each(Element::resolve_functions);
                 },
-                Element::Multiply(elements) => {
+                Element::Plus(elements) | Element::Multiply(elements)|Element::Function {arguments:elements, ..}=> {
                     elements.iter_mut().for_each(Element::resolve_functions);
                 },
                 Element::Negate(element) => element.resolve_functions(),
@@ -589,6 +587,7 @@ pub mod testing {
             "a(a+c)",
             "m+a(a,b+c)",
             "fun3(some_fun)",
+            "fun(12, fun(1, 2))",
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(test_formula_parsing);
@@ -652,8 +651,8 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use std::collections::{HashMap, HashSet};
     use crate::storing::FormulaStore;
+    use std::collections::{HashMap, HashSet};
 
     #[derive(Debug, Clone)]
     pub enum Signature {
@@ -789,7 +788,7 @@ pub mod signature {
 
         pub(crate) fn add_symbol_from_function_signature_and_definition(
             &mut self, name_and_args: Element, content: Element,
-        ) -> Result<String, String> {
+        ) -> Result<(String, Option<Vec<String>>), String> {
             let mut symbol_name_and_args = SymbolDeclarationData::from_formula(&name_and_args)?;
 
             if self.0.get(&symbol_name_and_args.name).is_some() {
@@ -815,7 +814,7 @@ pub mod signature {
                 ));
             }
 
-            if let Some(args) = symbol_name_and_args.function_args {
+            if let Some(args) = &symbol_name_and_args.function_args {
                 self.0.insert(
                     symbol_name_and_args.name.clone(),
                     Signature::Function(args.get_signatures_in_right_order()),
@@ -824,7 +823,7 @@ pub mod signature {
                 self.0.insert(symbol_name_and_args.name.clone(), Signature::Number);
             }
 
-            Ok(symbol_name_and_args.name)
+            Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
         }
 
         fn refine_signature_and_undefined(
@@ -899,7 +898,7 @@ pub mod signature {
     }
 
     impl Element {
-        fn get_name(&self) -> Option<&str> {
+        pub(crate) fn get_name(&self) -> Option<&str> {
             match self {
                 Element::Function { name, .. }
                 | Element::Variable(name)
@@ -1087,4 +1086,3 @@ pub mod signature {
         println!("{:?}", all.get_signatures());
     }
 }
-
