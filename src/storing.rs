@@ -126,3 +126,16 @@ fn test_insert_symbols() {
         .unwrap();
     formula.print_debug();
 }
+
+#[test]
+fn test_storing() {
+    let mut store = FormulaStore::new_empty();
+    assert_eq!(store.add_symbol_from_string("f=123"), Ok(()));
+    assert_ne!(store.add_symbol_from_string("1=1"), Ok(()));
+    assert_ne!(store.add_symbol_from_string("f=1"), Ok(()));
+    assert_ne!(store.add_symbol_from_string("x"), Ok(()));
+
+    assert_ne!(store.add_symbol_from_string("g(l)=x^2"), Ok(()));
+    assert_eq!(store.add_symbol_from_string("g(x)=x^2"), Ok(()));
+    assert_ne!(store.add_symbol_from_string("g=2"), Ok(()));
+}

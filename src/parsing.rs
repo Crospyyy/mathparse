@@ -858,7 +858,9 @@ pub mod signature {
             }
             if let Some(args) = &mut symbol_name_and_args.function_args {
                 for (param_name, param_sig) in &mut args.signatures.0 {
-                    param_sig.refine_with(undefined_signatures.0[param_name].clone())
+                    if let Some(var_sig_in_body) = undefined_signatures.0.get(param_name) {
+                        param_sig.refine_with(var_sig_in_body.clone())
+                    }
                 }
             }
             undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
