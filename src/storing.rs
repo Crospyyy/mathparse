@@ -1,6 +1,6 @@
 use crate::Element;
 use crate::parsing::signature::Signatures;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub struct FormulaStore {
     signatures: Signatures,
@@ -20,6 +20,7 @@ impl FormulaStore {
     pub(crate) fn add_symbol_from_string(&mut self, string: &str) -> Result<(), String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
         let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
+        println!("Inserting the following symbol: {string}");
         println!("Signature: {:?}", sig);
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
         println!("Definition: {:?}", def);
@@ -41,11 +42,58 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
+    pub(crate) fn get_insertion_element_expanded(
+        &self, name: &str,
+    ) -> Result<InsertionElement, String> {
+        let arguments = self
+            .parameter_mappings
+            .get(name)
+            .ok_or("No symbol declaration data found".to_owned())?
+            .clone();
+        let mut formula = self.formulas.get(name).ok_or("Symbol not found".to_owned())?.clone();
+        let original_formula = formula.clone();
+        let mut all_var_names = HashSet::new();
+        formula.get_all_names(&mut all_var_names);
+        println!("All undefined symbols in formula {name}: {all_var_names:?}");
+        let undefined = all_var_names
+            .iter()
+            .filter(|n| arguments.as_ref().is_none_or(|a| !a.contains(*n)))
+            .collect::<Vec<_>>();
+        println!("Undefined symbols in formula {name}: {undefined:?}");
+        for name in undefined {
+            let insert = self.get_insertion_element_expanded(name)?;
+            formula.insert_symbol(&insert)?;
+        }
+
+        println!("Expanding symbol: {name}");
+        println!("Expanded formula: {:?} to {:?}", original_formula, formula);
+
+        Ok(InsertionElement { name: name.to_string(), arguments, formula })
+    }
 
     #[cfg(test)]
     pub(crate) fn get_signatures(&self) -> &Signatures {
         &self.signatures
     }
+}
+
+#[test]
+pub fn test_get_insertion_element_expanded() {
+    let mut store = FormulaStore::new_empty();
+    store.add_symbol_from_string("f(i)=i^2").unwrap();
+    store.add_symbol_from_string("g(x)=f(x+1)").unwrap();
+    store.add_symbol_from_string("h(x)=g(x)-3").unwrap();
+    let insert = store.get_insertion_element_expanded("h").unwrap();
+    dbg!(insert);
+}
+#[test]
+pub fn test_insert_formula() {
+    let mut store = FormulaStore::new_empty();
+    store.add_symbol_from_string("fun(f,x,y)=f(x,y)").unwrap();
+    store.add_symbol_from_string("add(x,y)=x+y").unwrap();
+    store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)").unwrap();
+    let insert = store.get_insertion_element_expanded("fun2").unwrap();
+    dbg!(insert);
 }
 
 #[derive(Debug)]
@@ -81,9 +129,15 @@ impl Element {
                 matches!(self, Element::Function { .. })
             } else {
                 matches!(self, Element::Variable(_) | Element::VariableOrFunction(_))
+                    | (matches!(self, Element::Function { .. })
+                        && matches!(insert.formula, Element::VariableOrFunction(_)))
             };
             if !types_equal {
-                return Err("Insertion element and formula don't match".to_owned());
+                return Err(format!(
+                    "Insertion element and formula don't match (self: {:?}, insert: {:?})",
+                    self, insert
+                )
+                .to_owned());
             }
             if let Some(insert_args) = &insert.arguments {
                 let Element::Function { arguments: self_arguments, .. } = self else {
@@ -103,6 +157,10 @@ impl Element {
                     })?
                 }
                 *self = new_formula;
+            } else if let (Element::Function { name, .. }, Element::VariableOrFunction(new_name)) =
+                (&mut *self, &insert.formula)
+            {
+                *name = new_name.clone();
             } else {
                 *self = insert.formula.clone();
             }
@@ -147,4 +205,9 @@ fn test_storing() {
     assert!(store.eval("g()").is_err());
     assert_eq!(store.eval("g(2)"), Ok(4.0));
     assert_eq!(store.eval("f2(2)"), Ok(6.0));
+
+    assert!(matches!(store.add_symbol_from_string("add(a,b)=a+b"), Ok(_)));
+    assert!(matches!(store.eval("add(1,2)"), Ok(3.0)));
+    assert!(matches!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)"), Ok(_)));
+    assert_eq!(store.eval("run(1, 2, add)"), Ok(3.0));
 }

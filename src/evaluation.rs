@@ -40,13 +40,10 @@ impl FormulaStore {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
         let mut all_names = HashSet::new();
         formula.get_all_names(&mut all_names);
+        println!("All names: {:?}", all_names);
         while !all_names.is_empty() {
             for name in &all_names {
-                formula.insert_symbol(
-                    &self
-                        .get_insertion_element(&name)
-                        .ok_or("Symbol used in formula is not defined".to_owned())?,
-                )?;
+                formula.insert_symbol(&self.get_insertion_element_expanded(&name)?)?;
             }
             all_names.clear();
             formula.get_all_names(&mut all_names);
@@ -83,18 +80,18 @@ impl Element {
         match self {
             Element::Brackets(_) | Element::String(_) | Element::Number(_) => {},
             Element::Plus(e) | Element::Multiply(e) => {
-                for e in e {
-                    e.get_all_names(names);
-                }
+                e.iter().for_each(|el| el.get_all_names(names));
             },
             Element::Pow(a, b) => {
                 a.get_all_names(names);
                 b.get_all_names(names);
             },
             Element::Negate(x) => x.get_all_names(names),
-            Element::Function { name, .. }
-            | Element::Variable(name)
-            | Element::VariableOrFunction(name) => {
+            Element::Function { name, arguments } => {
+                names.insert(name.to_owned());
+                arguments.iter().for_each(|arg| arg.get_all_names(names));
+            },
+            Element::Variable(name) | Element::VariableOrFunction(name) => {
                 names.insert(name.to_owned());
             },
         }

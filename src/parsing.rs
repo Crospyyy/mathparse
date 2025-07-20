@@ -765,7 +765,12 @@ pub mod signature {
                     let arg_signatures = arguments
                         .iter()
                         .map(|arg| match arg {
-                            Element::Number(_) => Signature::Number,
+                            Element::Number(_)
+                            | Element::Plus(_)
+                            | Element::Multiply(_)
+                            | Element::Pow(..)
+                            | Element::Negate(_)
+                            | Element::Variable(_) => Signature::Number,
                             Element::VariableOrFunction(_) => Signature::NumberOrFunction,
                             _ => panic!("Invalid element in function arguments: {:?}", arg),
                         })
@@ -818,14 +823,13 @@ pub mod signature {
                 ));
             }
 
-            if let Some(args) = &symbol_name_and_args.function_args {
-                self.0.insert(
-                    symbol_name_and_args.name.clone(),
-                    Signature::Function(args.get_signatures_in_right_order()),
-                );
+            let signature = if let Some(args) = &symbol_name_and_args.function_args {
+                Signature::Function(args.get_signatures_in_right_order())
             } else {
-                self.0.insert(symbol_name_and_args.name.clone(), Signature::Number);
-            }
+                Signature::Number
+            };
+            println!("Adding symbol {} with signature {:?}", symbol_name_and_args.name, signature);
+            self.0.insert(symbol_name_and_args.name.clone(), signature);
 
             Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
         }
@@ -852,14 +856,20 @@ pub mod signature {
                 if parameter_names.contains(&name) {
                     continue;
                 }
-                if let Some(sig) = already_defined.0.get(&name) {
-                    if !undefined_signatures.0[&name].could_be(sig) {
+                if let Some(already_defined_sig) = already_defined.0.get(&name) {
+                    if !undefined_signatures.0[&name].could_be(already_defined_sig)
+                        && !already_defined_sig.could_be(&undefined_signatures.0[&name])
+                    {
                         return Err(format!(
-                            "The signature of {} is not compatible with the already defined signature: {:?} vs {:?}",
-                            name, sig, undefined_signatures.0[&name]
+                            "The signature of {} is not compatible with the already defined signature: undefined: {:?} vs defined {:?}",
+                            name, undefined_signatures.0[&name], already_defined_sig
                         ));
                     }
-                    undefined_signatures.update_signature(&formula, &name, sig.clone())
+                    undefined_signatures.update_signature(
+                        &formula,
+                        &name,
+                        already_defined_sig.clone(),
+                    )
                 }
             }
             if let Some(args) = &mut symbol_name_and_args.function_args {
