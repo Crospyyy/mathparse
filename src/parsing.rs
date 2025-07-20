@@ -708,27 +708,27 @@ pub mod signature {
             }
         }
 
-        // /// true if self is less specific than other
-        // pub(crate) fn could_be(&self, other: &Signature) -> bool {
-        //     match (self, other) {
-        //         (Signature::NumberOrFunction, _) => {
-        //             if !matches!(other, Signature::Conflicting) {
-        //                 true
-        //             } else {
-        //                 false
-        //             }
-        //         },
-        //         (_, Signature::NumberOrFunction) => false,
-        //         (Signature::Function(args_0), Signature::Function(args_1)) => {
-        //             if args_0.len() != args_1.len() {
-        //                 return false;
-        //             }
-        //             args_0.iter().zip(args_1).all(|(a, b)| a.could_be(b))
-        //         },
-        //         (Signature::Number, Signature::Number) => true,
-        //         _ => false,
-        //     }
-        // }
+        /// true if self is less specific than other
+        pub(crate) fn could_be(&self, other: &Signature) -> bool {
+            match (self, other) {
+                (Signature::NumberOrFunction, _) => {
+                    if !matches!(other, Signature::Conflicting) {
+                        true
+                    } else {
+                        false
+                    }
+                },
+                (_, Signature::NumberOrFunction) => false,
+                (Signature::Function(args_0), Signature::Function(args_1)) => {
+                    if args_0.len() != args_1.len() {
+                        return false;
+                    }
+                    args_0.iter().zip(args_1).all(|(a, b)| a.could_be(b))
+                },
+                (Signature::Number, Signature::Number) => true,
+                _ => false,
+            }
+        }
     }
 
     #[derive(Clone, Debug)]
@@ -809,7 +809,7 @@ pub mod signature {
                 &mut required_signatures,
                 &content,
                 self,
-            );
+            )?;
 
             if !required_signatures.0.is_empty() {
                 return Err(format!(
@@ -833,7 +833,7 @@ pub mod signature {
         fn refine_signature_and_undefined(
             symbol_name_and_args: &mut SymbolDeclarationData,
             undefined_signatures: &mut Signatures, formula: &Element, already_defined: &Signatures,
-        ) {
+        ) -> Result<(), String> {
             let parameter_names = symbol_name_and_args
                 .function_args
                 .as_ref()
@@ -853,6 +853,12 @@ pub mod signature {
                     continue;
                 }
                 if let Some(sig) = already_defined.0.get(&name) {
+                    if !undefined_signatures.0[&name].could_be(sig) {
+                        return Err(format!(
+                            "The signature of {} is not compatible with the already defined signature: {:?} vs {:?}",
+                            name, sig, undefined_signatures.0[&name]
+                        ));
+                    }
                     undefined_signatures.update_signature(&formula, &name, sig.clone())
                 }
             }
@@ -865,6 +871,7 @@ pub mod signature {
             }
             undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
             undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
+            Ok(())
         }
 
         fn update_signature(

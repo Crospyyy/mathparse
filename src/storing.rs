@@ -136,6 +136,15 @@ fn test_storing() {
     assert_ne!(store.add_symbol_from_string("x"), Ok(()));
 
     assert_ne!(store.add_symbol_from_string("g(l)=x^2"), Ok(()));
-    assert_eq!(store.add_symbol_from_string("g(x)=x^2"), Ok(()));
+    assert_eq!(store.add_symbol_from_string("g(g)=g^2"), Ok(()));
     assert_ne!(store.add_symbol_from_string("g=2"), Ok(()));
+
+    assert_eq!(store.add_symbol_from_string("f2(f)=f*3"), Ok(()));
+    assert_ne!(store.add_symbol_from_string("f3=f2()"), Ok(()));
+
+    assert_eq!(store.eval("f"), Ok(123.0));
+    assert!(store.eval("f()").is_err());
+    assert!(store.eval("g()").is_err());
+    assert_eq!(store.eval("g(2)"), Ok(4.0));
+    assert_eq!(store.eval("f2(2)"), Ok(6.0));
 }
