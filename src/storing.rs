@@ -41,6 +41,11 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
+
+    #[cfg(test)]
+    pub(crate) fn get_signatures(&self) -> &Signatures {
+        &self.signatures
+    }
 }
 
 #[derive(Debug)]
