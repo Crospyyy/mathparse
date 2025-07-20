@@ -1,7 +1,6 @@
 pub mod implementation {
     use crate::Element;
     use regex::Regex;
-    use std::cmp::PartialEq;
     use std::mem;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
@@ -334,7 +333,7 @@ pub mod implementation {
                 Element::String(s) => {
                     if let Ok(num) = s.parse::<f64>() {
                         *self = Element::Number(num);
-                    } else {
+                    } else if s.chars().all(is_valid_char_for_function_name) {
                         // If parsing fails, we assume it's a variable or function
                         *self = Element::VariableOrFunction(s.clone());
                     }
@@ -431,7 +430,7 @@ pub mod implementation {
             }
         }
 
-        fn anything_unparsed(&self) -> bool {
+        pub(super) fn anything_unparsed(&self) -> bool {
             match self {
                 Element::Brackets(_) | Element::String(_) => true,
                 Element::Plus(elements)
@@ -453,19 +452,8 @@ pub mod implementation {
     }
 
     fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>> {
-        const DEBUG: bool = false;
-        if DEBUG {
-            println!("Processing list of elements: {:?}", input);
-        }
         if !list_contains_char(input, delimiter) {
-            if DEBUG {
-                println!("No '{delimiter}' found in brackets.");
-            }
             return None;
-        }
-
-        if DEBUG {
-            println!("Found '{delimiter}' in list, processing...");
         }
         let mut groups = Vec::new();
         let mut current_group = Vec::new();
@@ -482,22 +470,10 @@ pub mod implementation {
         }
         for element in input {
             if let Element::String(str) = element {
-                if DEBUG {
-                    println!("Processing string element: {:?}", str);
-                }
                 if !str.contains(delimiter) {
-                    if DEBUG {
-                        println!("String does not contain '{delimiter}', adding to current group.");
-                    }
                     current_group.push(element.clone());
                 } else {
                     let parts: Vec<&str> = str.split(delimiter).collect();
-                    if DEBUG {
-                        println!(
-                            "String contains '{delimiter}', splitting into parts: {:?}",
-                            parts
-                        );
-                    }
                     for (i, part) in parts.iter().enumerate() {
                         if i == 0 {
                             if part.is_empty() {
@@ -514,9 +490,6 @@ pub mod implementation {
                     }
                 }
             } else {
-                if DEBUG {
-                    println!("Processing non-string element: {:?}", element);
-                }
                 current_group.push(element.clone());
             }
         }
@@ -541,6 +514,7 @@ pub mod implementation {
 
 pub mod testing {
     use crate::Element;
+    use crate::formula_short::*;
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -582,26 +556,46 @@ pub mod testing {
     #[test]
     pub fn run_all_tests() {
         let inputs = [
-            "((x/x-x)*-x^x)/(x-x)^-x",
-            "(x/x+-x)*x^x",
-            "x/x/x/x",
-            "x/x-x",
-            "123",
-            "x",
-            "1+((2))",
-            "a,b,c",
-            "a(a,c)",
-            "a(a+c)",
-            "m+a(a,b+c)",
-            "fun3(some_fun)",
-            "fun(12, fun(1, 2))",
-            "fun()",
+            (
+                "((x/x-x)*-x^x)/(x-x)^-x",
+                Some(mul([
+                    mul([
+                        plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]),
+                        neg(pow(var("x"), var("x"))),
+                    ]),
+                    inv(pow(plus([var("x"), neg(var("x"))]), neg(var("x")))),
+                ])),
+            ),
+            (
+                "(x/x+-x)*x^x",
+                Some(mul([
+                    plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]),
+                    pow(var("x"), var("x")),
+                ])),
+            ),
+            ("x/x/x/x", Some(mul([var("x"), inv(var("x")), inv(var("x")), inv(var("x"))]))),
+            ("x/x-x", Some(plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]))),
+            ("123", Some(num(123.0))),
+            ("x", Some(var_or_fun("x"))),
+            ("1+((2))", Some(plus([num(1.0), num(2.0)]))),
+            ("a,b,c", None),
+            ("a(a,c)", Some(fun("a", [var_or_fun("a"), var_or_fun("c")]))),
+            ("a(a+c)", Some(fun("a", [plus([var("a"), var("c")])]))),
+            (
+                "m+a(a,b+c)",
+                Some(plus([var("m"), fun("a", [var_or_fun("a"), plus([var("b"), var("c")])])])),
+            ),
+            ("fun3(some_fun)", Some(fun("fun3", [var_or_fun("some_fun")]))),
+            ("fun(12, fun(1, 2))", Some(fun("fun", [num(12.0), fun("fun", [num(1.0), num(2.0)])]))),
+            ("fun()", Some(fun("fun", []))),
         ];
         println!("Starting formula parsing tests");
-        inputs.into_iter().for_each(test_formula_parsing);
+        inputs.into_iter().for_each(|(i, o)| test_formula_parsing(i, o));
     }
 
-    fn test_formula_parsing(input: &str) {
+    #[allow(unused)]
+    fn test_formula_parsing(input: &str, expected_output: Option<Element>) {
+        let expected_output = expected_output;
         let cow = Element::preprocess_string_minus(&input);
 
         println!();
@@ -642,7 +636,9 @@ pub mod testing {
             &mut brackets,
             Element::convert_to_variables_where_possible,
         );
-        assert_eq!(brackets, Element::parse(input).unwrap());
+        let output = if brackets.anything_unparsed() { None } else { Some(brackets.clone()) };
+        assert_eq!(output, Element::parse(input));
+        assert_eq!(output, expected_output);
     }
 
     fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
@@ -665,8 +661,8 @@ pub mod signature {
     #[derive(Debug, Clone)]
     pub enum Signature {
         NumberOrFunction,
-        Function(Vec<Signature>),
         Number,
+        Function(Vec<Signature>),
         Conflicting,
     }
 
@@ -1022,7 +1018,7 @@ pub mod signature {
             let insert_name;
             let function_args;
             match formula {
-                Element::Variable(name) |Element::VariableOrFunction(name)=> {
+                Element::Variable(name) | Element::VariableOrFunction(name) => {
                     function_args = None;
                     insert_name = name;
                 },

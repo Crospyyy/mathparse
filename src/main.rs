@@ -1,6 +1,6 @@
-use std::collections::HashSet;
 use crate::evaluation::run_formula_evaluator;
 use crate::parsing::testing::test_with_user_input;
+use std::collections::HashSet;
 
 mod evaluation;
 mod parsing;
@@ -37,4 +37,42 @@ pub enum Element {
     VariableOrFunction(String),
 }
 
+mod formula_short {
+    use crate::Element;
 
+    pub fn num(num: f64) -> Element {
+        Element::Number(num)
+    }
+
+    pub fn var_or_fun(name: &str) -> Element {
+        Element::VariableOrFunction(name.to_string())
+    }
+
+    pub fn var(name: impl ToString) -> Element {
+        Element::Variable(name.to_string())
+    }
+
+    pub fn fun(name: &str, args: impl IntoIterator<Item = Element>) -> Element {
+        Element::Function { name: name.to_string(), arguments: args.into_iter().collect() }
+    }
+
+    pub fn neg(element: Element) -> Element {
+        Element::Negate(Box::new(element))
+    }
+
+    pub fn plus(elements: impl IntoIterator<Item = Element>) -> Element {
+        Element::Plus(elements.into_iter().collect())
+    }
+
+    pub fn mul(elements: impl IntoIterator<Item = Element>) -> Element {
+        Element::Multiply(elements.into_iter().collect())
+    }
+
+    pub fn pow(base: Element, exponent: Element) -> Element {
+        Element::Pow(Box::new(base), Box::new(exponent))
+    }
+
+    pub fn inv(element: Element) -> Element {
+        pow(element, neg(num(1.0)))
+    }
+}
