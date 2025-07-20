@@ -5,8 +5,12 @@ enum Inner<'a, T: 'a>
 where
     T: IntoIterator<Item = &'a Element>,
 {
+    #[allow(unused)]
     Single(&'a Element),
-    Multiple { delimiter: &'a str, elements: T },
+    Multiple {
+        delimiter: &'a str,
+        elements: T,
+    },
 }
 
 impl<'a, T> Inner<'a, T>

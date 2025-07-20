@@ -656,7 +656,6 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use crate::storing::FormulaStore;
     use std::collections::{HashMap, HashSet};
 
     #[derive(Debug, Clone)]
@@ -709,27 +708,27 @@ pub mod signature {
             }
         }
 
-        /// true if self is less specific than other
-        pub(crate) fn could_be(&self, other: &Signature) -> bool {
-            match (self, other) {
-                (Signature::NumberOrFunction, _) => {
-                    if !matches!(other, Signature::Conflicting) {
-                        true
-                    } else {
-                        false
-                    }
-                },
-                (_, Signature::NumberOrFunction) => false,
-                (Signature::Function(args_0), Signature::Function(args_1)) => {
-                    if args_0.len() != args_1.len() {
-                        return false;
-                    }
-                    args_0.iter().zip(args_1).all(|(a, b)| a.could_be(b))
-                },
-                (Signature::Number, Signature::Number) => true,
-                _ => false,
-            }
-        }
+        // /// true if self is less specific than other
+        // pub(crate) fn could_be(&self, other: &Signature) -> bool {
+        //     match (self, other) {
+        //         (Signature::NumberOrFunction, _) => {
+        //             if !matches!(other, Signature::Conflicting) {
+        //                 true
+        //             } else {
+        //                 false
+        //             }
+        //         },
+        //         (_, Signature::NumberOrFunction) => false,
+        //         (Signature::Function(args_0), Signature::Function(args_1)) => {
+        //             if args_0.len() != args_1.len() {
+        //                 return false;
+        //             }
+        //             args_0.iter().zip(args_1).all(|(a, b)| a.could_be(b))
+        //         },
+        //         (Signature::Number, Signature::Number) => true,
+        //         _ => false,
+        //     }
+        // }
     }
 
     #[derive(Clone, Debug)]
@@ -1047,38 +1046,39 @@ pub mod signature {
         }
     }
 
-    fn update_signature(
-        mut signature_arguments: Option<&mut Signatures>, undefined: &mut Signatures,
-        refine_with: &Signatures,
-    ) -> Result<(), String> {
-        let mut result = Ok(());
-        undefined.0.retain(|name, sig| {
-            if let Some(fun_arg) = signature_arguments.as_mut().and_then(|a| a.0.get_mut(name)) {
-                if fun_arg.could_be(&sig) {
-                    fun_arg.refine_with(sig.clone());
-                    false
-                } else {
-                    result = Err(format!("Invalid usage of already defined formula {}", name));
-                    true
-                }
-            } else if let Some(already_defined) = refine_with.0.get(name) {
-                if sig.could_be(already_defined) {
-                    false
-                } else {
-                    result = Err(format!("Invalid usage of already defined formula {}", name));
-                    true
-                }
-            } else {
-                true
-            }
-        });
-        result
-    }
+    // fn update_signature(
+    //     mut signature_arguments: Option<&mut Signatures>, undefined: &mut Signatures,
+    //     refine_with: &Signatures,
+    // ) -> Result<(), String> {
+    //     let mut result = Ok(());
+    //     undefined.0.retain(|name, sig| {
+    //         if let Some(fun_arg) = signature_arguments.as_mut().and_then(|a| a.0.get_mut(name)) {
+    //             if fun_arg.could_be(&sig) {
+    //                 fun_arg.refine_with(sig.clone());
+    //                 false
+    //             } else {
+    //                 result = Err(format!("Invalid usage of already defined formula {}", name));
+    //                 true
+    //             }
+    //         } else if let Some(already_defined) = refine_with.0.get(name) {
+    //             if sig.could_be(already_defined) {
+    //                 false
+    //             } else {
+    //                 result = Err(format!("Invalid usage of already defined formula {}", name));
+    //                 true
+    //             }
+    //         } else {
+    //             true
+    //         }
+    //     });
+    //     result
+    // }
 
-    struct SymbolDefinition {}
+    // struct SymbolDefinition {}
 
     #[test]
     fn test_symbols() {
+        use crate::storing::FormulaStore;
         let mut all = FormulaStore::new_empty();
         assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));

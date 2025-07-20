@@ -41,14 +41,6 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
-
-    pub(crate) fn get_signatures(&self) -> &Signatures {
-        &self.signatures
-    }
-
-    pub(crate) fn get_formulas(&self) -> &HashMap<String, Element> {
-        &self.formulas
-    }
 }
 
 #[derive(Debug)]
@@ -83,7 +75,7 @@ impl Element {
             let types_equal = if insert.arguments.is_some() {
                 matches!(self, Element::Function { .. })
             } else {
-                matches!(self, Element::Variable(_)|Element::VariableOrFunction(_))
+                matches!(self, Element::Variable(_) | Element::VariableOrFunction(_))
             };
             if !types_equal {
                 return Err("Insertion element and formula don't match".to_owned());
