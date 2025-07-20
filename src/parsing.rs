@@ -512,6 +512,7 @@ pub mod implementation {
     }
 }
 
+#[cfg(test)]
 pub mod testing {
     use crate::Element;
     use crate::formula_short::*;

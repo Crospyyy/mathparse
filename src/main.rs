@@ -1,6 +1,4 @@
 use crate::evaluation::run_formula_evaluator;
-use crate::parsing::testing::test_with_user_input;
-use std::collections::HashSet;
 
 mod evaluation;
 mod parsing;
@@ -37,6 +35,7 @@ pub enum Element {
     VariableOrFunction(String),
 }
 
+#[cfg(test)]
 mod formula_short {
     use crate::Element;
 
