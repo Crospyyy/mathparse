@@ -67,7 +67,7 @@ impl Element {
                     let prev = sum;
                     let e_result = n.safe_eval()?;
                     sum += e_result.value;
-                    if e_result.calculation_data_loss || e_result.value - prev != e_result.value {
+                    if e_result.calculation_data_loss || sum - prev != e_result.value {
                         data_loss = true;
                     }
                 }
@@ -75,25 +75,32 @@ impl Element {
             },
 
             Element::Multiply(elements) => {
-                // let mut product = 1.0;
-                // for n in elements {
-                //     product *= n.eval()?;
-                // }
-                // Some(product)
-                todo!()
+                let mut product = 1.0;
+                for n in elements {
+                    let prev = product;
+                    let e_result = n.safe_eval()?;
+                    product *= e_result.value;
+                    if e_result.calculation_data_loss || product / prev != e_result.value {
+                        data_loss = true;
+                    }
+                }
+                Some(EvaluationResult::new(product, data_loss))
             },
 
             Element::Negate(e) => {
-                // e.eval().map(|n| -n)
-                todo!()
+                e.safe_eval().map(|n| EvaluationResult::new(-n.value, n.calculation_data_loss))
             },
-            Element::Number(n) => {
-                // Some(*n)
-                todo!()
-            },
+            Element::Number(n) => Some(EvaluationResult::new(*n, data_loss)),
             Element::Pow(b, e) => {
-                // Some(b.eval()?.powf(e.eval()?))
-                todo!()
+                let res_1 = b.safe_eval()?;
+                let res_2 = e.safe_eval()?;
+                data_loss = res_1.calculation_data_loss | res_2.calculation_data_loss;
+
+                let calc_result = res_1.value.powf(res_2.value);
+                Some(EvaluationResult::new(
+                    calc_result,
+                    data_loss || (calc_result.powf(1.0 / res_2.value) != res_1.value),
+                ))
             },
         }
     }
