@@ -35,7 +35,6 @@ pub enum Element {
     VariableOrFunction(String),
 }
 
-#[cfg(test)]
 mod formula_short {
     use crate::Element;
 
