@@ -1,7 +1,7 @@
 use crate::Element;
 use crate::formula_short::{plus, var};
 use crate::parsing::signature::Signatures;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub struct FormulaStore {
     signatures: Signatures,
@@ -53,19 +53,10 @@ impl FormulaStore {
             .clone();
         let mut formula = self.formulas.get(name).ok_or("Symbol not found".to_owned())?.clone();
         let original_formula = formula.clone();
-        let mut all_var_names = HashSet::new();
-        formula.get_all_names(&mut all_var_names);
-        println!("All undefined symbols in formula {name}: {all_var_names:?}");
-        let mut undefined = all_var_names
-            .iter()
-            .filter(|n| arguments.as_ref().is_none_or(|a| !a.contains(*n)))
-            .cloned()
-            .collect();
-        println!("Undefined symbols in formula {name}: {undefined:?}");
+
         self.expand_formula(
             &mut formula,
-            &mut undefined,
-            &(arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect()),
+            &arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect(),
         )?;
 
         println!("Expanding symbol: {name}");
@@ -236,6 +227,34 @@ impl Element {
             //     *self = insert.formula.clone();
             // }
         }
+        match self {
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Number(_)
+            | Element::Variable(_)
+            | Element::VariableOrFunction(_) => {},
+            Element::Plus(elements) | Element::Multiply(elements) => {
+                for e in elements {
+                    if let Element::VariableOrFunction(name) = e {
+                        *e = Element::Variable(name.clone());
+                    };
+                }
+            },
+            Element::Pow(a, b) => {
+                if let Element::VariableOrFunction(name) = &**a {
+                    **a = Element::Variable(name.clone());
+                }
+                if let Element::VariableOrFunction(name) = &**b {
+                    **b = Element::Variable(name.clone());
+                }
+            },
+            Element::Negate(a) => {
+                if let Element::VariableOrFunction(name) = &**a {
+                    **a = Element::Variable(name.clone());
+                }
+            },
+            Element::Function { .. } => {},
+        }
         Ok(())
     }
 }
@@ -283,7 +302,11 @@ fn test_storing() {
     assert_eq!(store.eval("f2(2)"), Ok(6.0));
 
     assert!(matches!(store.add_symbol_from_string("add(a,b)=a+b"), Ok(_)));
+    assert!(matches!(store.add_symbol_from_string("mul(a,b)=a*b"), Ok(_)));
+    assert!(matches!(store.add_symbol_from_string("div(a,b)=a/b"), Ok(_)));
     assert!(matches!(store.eval("add(1,2)"), Ok(3.0)));
     assert!(matches!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)"), Ok(_)));
     assert_eq!(store.eval("run(1, 2, add)"), Ok(3.0));
+    assert_eq!(store.eval("run(1, 2, mul)"), Ok(2.0));
+    assert_eq!(store.eval("run(1, 2, div)"), Ok(0.5));
 }

@@ -38,24 +38,22 @@ impl Element {
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        let mut all_names = HashSet::new();
-        formula.get_all_names(&mut all_names);
-        println!("All names: {:?}", all_names);
-        self.expand_formula(&mut formula, &mut all_names, &HashSet::new())?;
+        self.expand_formula(&mut formula, &HashSet::new())?;
         formula.eval().ok_or("Could not evaluate formula".to_owned())
     }
 
     pub(crate) fn expand_formula(
-        &self, formula: &mut Element, all_names: &mut HashSet<String>,
-        ignore_names: &HashSet<String>,
+        &self, formula: &mut Element, ignore_names: &HashSet<String>,
     ) -> Result<(), String> {
+        let mut all_names = HashSet::new();
+        formula.get_all_names(&mut all_names);
         all_names.retain(|name| !ignore_names.contains(name));
         while !all_names.is_empty() {
             for name in all_names.iter() {
                 formula.insert_symbol(&self.get_insertion_element_expanded(name)?)?;
             }
             all_names.clear();
-            formula.get_all_names(all_names);
+            formula.get_all_names(&mut all_names);
             all_names.retain(|name| !ignore_names.contains(name));
         }
         Ok(())
