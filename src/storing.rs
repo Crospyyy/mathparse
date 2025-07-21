@@ -55,15 +55,17 @@ impl FormulaStore {
         let mut all_var_names = HashSet::new();
         formula.get_all_names(&mut all_var_names);
         println!("All undefined symbols in formula {name}: {all_var_names:?}");
-        let undefined = all_var_names
+        let mut undefined = all_var_names
             .iter()
             .filter(|n| arguments.as_ref().is_none_or(|a| !a.contains(*n)))
-            .collect::<Vec<_>>();
+            .cloned()
+            .collect();
         println!("Undefined symbols in formula {name}: {undefined:?}");
-        for name in undefined {
-            let insert = self.get_insertion_element_expanded(name)?;
-            formula.insert_symbol(&insert)?;
-        }
+        self.expand_formula(
+            &mut formula,
+            &mut undefined,
+            &(arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect()),
+        )?;
 
         println!("Expanding symbol: {name}");
         println!("Expanded formula: {:?} to {:?}", original_formula, formula);
@@ -103,67 +105,141 @@ pub struct InsertionElement {
     formula: Element,
 }
 
+impl InsertionElement {
+    pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
+        if let Some(insert_args) = &self.arguments {
+            let self_arguments = param_values;
+            if insert_args.len() != self_arguments.len() {
+                dbg!(insert_args);
+                dbg!(self_arguments);
+                return Err("The function used in the formula and the supplied function have different parameter counts".to_owned());
+            }
+            let mut new_formula = self.formula.clone();
+            for (in_arg, val) in insert_args.iter().zip(self_arguments) {
+                new_formula.insert_symbol(
+                    &InsertionElement {
+                        name: in_arg.clone(),
+                        arguments: None,
+                        formula: val.clone(),
+                    },
+                    &mut false,
+                    true,
+                )?
+            }
+            return Ok(new_formula);
+        }
+        Err("No arguments provided for insertion".to_owned())
+    }
+}
+
 impl Element {
-    pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<(), String> {
+    pub(crate) fn insert_symbol(
+        &mut self, insert: &InsertionElement, found_function_elements_to_replace: &mut bool,
+        replace_fun_args: bool,
+    ) -> Result<(), String> {
         match self {
             Element::Brackets(elements)
             | Element::Plus(elements)
             | Element::Multiply(elements)
             | Element::Function { arguments: elements, .. } => {
                 for e in elements {
-                    e.insert_symbol(insert)?
+                    e.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?
                 }
             },
             Element::Pow(a, b) => {
-                a.insert_symbol(insert)?;
-                b.insert_symbol(insert)?;
+                a.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?;
+                b.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?;
             },
-            Element::Negate(x) => x.insert_symbol(insert)?,
+            Element::Negate(x) => {
+                x.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?
+            },
             Element::Number(_)
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
             | Element::String(_) => {},
         }
         if self.get_name().is_some_and(|n| n == insert.name) {
-            let types_equal = if insert.arguments.is_some() {
-                matches!(self, Element::Function { .. })
-            } else {
-                matches!(self, Element::Variable(_) | Element::VariableOrFunction(_))
-                    | (matches!(self, Element::Function { .. })
-                        && matches!(insert.formula, Element::VariableOrFunction(_)))
-            };
-            if !types_equal {
-                return Err(format!(
-                    "Insertion element and formula don't match (self: {:?}, insert: {:?})",
-                    self, insert
-                )
-                .to_owned());
+            // this is going to be the new logic
+            match (&mut *self, &insert.arguments, &insert.formula) {
+                (Element::Function { name, arguments }, params, insert_formula) => {
+                    match (params, insert_formula) {
+                        (None, Element::VariableOrFunction(new_name)) => {
+                            *name = new_name.clone();
+                        },
+                        (Some(_), _) => {
+                            *self = insert.insert_param_values(arguments.clone())?;
+                        },
+                        (..) => {
+                            return Err(format!(
+                                "Insertion element and formula don't match (self: {:?}, insert: {:?})",
+                                self, insert
+                            ));
+                        },
+                    }
+                },
+                (Element::Variable(name), None, _) => {
+                    *self = insert.formula.clone();
+                },
+                (Element::VariableOrFunction(name), params, _) => {
+                    if params.is_some() {
+                        println!("Skipping this because there is no call yet");
+                    } else {
+                        *self = insert.formula.clone();
+                    }
+                },
+
+                (..) => {
+                    return Err(format!(
+                        "Insertion element and formula don't match (self: {:?}, insert: {:?})",
+                        self, insert
+                    ));
+                },
             }
-            if let Some(insert_args) = &insert.arguments {
-                let Element::Function { arguments: self_arguments, .. } = self else {
-                    panic!("This should be unreachable")
-                };
-                if insert_args.len() != self_arguments.len() {
-                    dbg!(insert_args);
-                    dbg!(self_arguments);
-                    return Err("The function used in the formula and the supplied function have different parameter counts".to_owned());
-                }
-                let mut new_formula = insert.formula.clone();
-                for (in_arg, val) in insert_args.iter().zip(self_arguments) {
-                    new_formula.insert_symbol(&InsertionElement {
-                        name: in_arg.clone(),
-                        arguments: None,
-                        formula: val.clone(),
-                    })?
-                }
-                *self = new_formula;
-            } else if let (Element::Function { name, .. }, Element::VariableOrFunction(new_name)) =
-                (&mut *self, &insert.formula)
-            {
-                *name = new_name.clone();
-            } else {
-                *self = insert.formula.clone();
-            }
+
+            // // this is the logic that was used before
+            // let types_equal = if insert.arguments.is_some() {
+            //     matches!(self, Element::Function { .. })
+            // } else {
+            //     matches!(self, Element::Variable(_) | Element::VariableOrFunction(_))
+            //         | (matches!(self, Element::Function { .. })
+            //             && matches!(insert.formula, Element::VariableOrFunction(_)))
+            // };
+            // if !types_equal {
+            //     return Err(format!(
+            //         "Insertion element and formula don't match (self: {:?}, insert: {:?})",
+            //         self, insert
+            //     )
+            //     .to_owned());
+            // }
+            // if let Some(insert_args) = &insert.arguments {
+            //     let Element::Function { arguments: self_arguments, .. } = self else {
+            //         panic!("This should be unreachable")
+            //     };
+            //     if insert_args.len() != self_arguments.len() {
+            //         dbg!(insert_args);
+            //         dbg!(self_arguments);
+            //         return Err("The function used in the formula and the supplied function have different parameter counts".to_owned());
+            //     }
+            //     let mut new_formula = insert.formula.clone();
+            //     for (in_arg, val) in insert_args.iter().zip(self_arguments) {
+            //         new_formula.insert_symbol(
+            //             &InsertionElement {
+            //                 name: in_arg.clone(),
+            //                 arguments: None,
+            //                 formula: val.clone(),
+            //             },
+            //             found_function_elements_to_replace,
+            //             replace_fun_args,
+            //         )?
+            //     }
+            //     *self = new_formula;
+            // } else if let (Element::Function { name, .. }, Element::VariableOrFunction(new_name)) =
+            //     (&mut *self, &insert.formula)
+            // {
+            //     *name = new_name.clone();
+            // } else {
+            //     *self = insert.formula.clone();
+            // }
         }
         Ok(())
     }
@@ -171,22 +247,30 @@ impl Element {
 
 #[test]
 fn test_insert_symbols() {
+    println!("### Test inserting symbols ###");
+
     let fun = Element::parse("x+y").unwrap();
 
     let mut formula = Element::parse("f(12, f(1, 2))").unwrap();
     formula.print_debug();
     formula
-        .insert_symbol(&InsertionElement {
-            name: "f".to_owned(),
-            arguments: Some(vec!["x".to_owned(), "y".to_owned()]),
-            formula: fun,
-        })
+        .insert_symbol(
+            &InsertionElement {
+                name: "f".to_owned(),
+                arguments: Some(vec!["x".to_owned(), "y".to_owned()]),
+                formula: fun,
+            },
+            &mut false,
+            true,
+        )
         .unwrap();
     formula.print_debug();
 }
 
 #[test]
 fn test_storing() {
+    println!("### Test storing formulas ###");
+
     let mut store = FormulaStore::new_empty();
     assert_eq!(store.add_symbol_from_string("f=123"), Ok(()));
     assert_ne!(store.add_symbol_from_string("1=1"), Ok(()));
@@ -200,7 +284,8 @@ fn test_storing() {
     assert_eq!(store.add_symbol_from_string("f2(f)=f*3"), Ok(()));
     assert_ne!(store.add_symbol_from_string("f3=f2()"), Ok(()));
 
-    assert_eq!(store.eval("f"), Ok(123.0));
+    let result = store.eval("f");
+    assert_eq!(result, Ok(123.0));
     assert!(store.eval("f()").is_err());
     assert!(store.eval("g()").is_err());
     assert_eq!(store.eval("g(2)"), Ok(4.0));

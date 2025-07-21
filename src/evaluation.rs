@@ -41,14 +41,41 @@ impl FormulaStore {
         let mut all_names = HashSet::new();
         formula.get_all_names(&mut all_names);
         println!("All names: {:?}", all_names);
+        self.expand_formula(&mut formula, &mut all_names, &HashSet::new())?;
+        formula.eval().ok_or("Could not evaluate formula".to_owned())
+    }
+
+    pub(crate) fn expand_formula(
+        &self, formula: &mut Element, all_names: &mut HashSet<String>,
+        ignore_names: &HashSet<String>,
+    ) -> Result<(), String> {
+        all_names.retain(|name| !ignore_names.contains(name));
         while !all_names.is_empty() {
-            for name in &all_names {
-                formula.insert_symbol(&self.get_insertion_element_expanded(&name)?)?;
+            let mut found_function_elements_to_replace = false;
+            for name in all_names.iter() {
+                formula.insert_symbol(
+                    &self.get_insertion_element_expanded(name)?,
+                    &mut found_function_elements_to_replace,
+                    false,
+                )?;
             }
             all_names.clear();
-            formula.get_all_names(&mut all_names);
+            formula.get_all_names(all_names);
+            all_names.retain(|name| !ignore_names.contains(name));
+            if !found_function_elements_to_replace {
+                for name in all_names.iter() {
+                    formula.insert_symbol(
+                        &self.get_insertion_element_expanded(name)?,
+                        &mut found_function_elements_to_replace,
+                        true,
+                    )?;
+                }
+                all_names.clear();
+                formula.get_all_names(all_names);
+                all_names.retain(|name| !ignore_names.contains(name));
+            }
         }
-        formula.eval().ok_or("Could not evaluate formula".to_owned())
+        Ok(())
     }
 }
 
