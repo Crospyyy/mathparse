@@ -3,6 +3,25 @@ use crate::storing::FormulaStore;
 use std::collections::HashSet;
 use std::io::stdin;
 
+pub struct EvaluationResult {
+    value: f64,
+    calculation_data_loss: bool,
+}
+
+impl EvaluationResult {
+    pub fn new(value: f64, calculation_data_loss: bool) -> Self {
+        EvaluationResult { value, calculation_data_loss }
+    }
+
+    pub fn no_loss(value: f64) -> Self {
+        EvaluationResult { value, calculation_data_loss: false }
+    }
+
+    pub fn with_loss(value: f64) -> Self {
+        EvaluationResult { value, calculation_data_loss: true }
+    }
+}
+
 impl Element {
     pub fn eval(&self) -> Option<f64> {
         match self {
@@ -31,6 +50,51 @@ impl Element {
             Element::Negate(e) => e.eval().map(|n| -n),
             Element::Number(n) => Some(*n),
             Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
+        }
+    }
+    pub fn safe_eval(&self) -> Option<EvaluationResult> {
+        let mut data_loss = false;
+        match self {
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Variable(_)
+            | Element::Function { .. }
+            | Element::VariableOrFunction(_) => None,
+
+            Element::Plus(elements) => {
+                let mut sum = 0.0;
+                for n in elements {
+                    let prev = sum;
+                    let e_result = n.safe_eval()?;
+                    sum += e_result.value;
+                    if e_result.calculation_data_loss || e_result.value - prev != e_result.value {
+                        data_loss = true;
+                    }
+                }
+                Some(EvaluationResult::new(sum, data_loss))
+            },
+
+            Element::Multiply(elements) => {
+                // let mut product = 1.0;
+                // for n in elements {
+                //     product *= n.eval()?;
+                // }
+                // Some(product)
+                todo!()
+            },
+
+            Element::Negate(e) => {
+                // e.eval().map(|n| -n)
+                todo!()
+            },
+            Element::Number(n) => {
+                // Some(*n)
+                todo!()
+            },
+            Element::Pow(b, e) => {
+                // Some(b.eval()?.powf(e.eval()?))
+                todo!()
+            },
         }
     }
 }
