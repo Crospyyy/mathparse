@@ -1,8 +1,8 @@
 use crate::Element;
-use crate::storing::FormulaStore;
+use crate::libraries::storing::FormulaStore;
 use std::collections::HashSet;
-use std::io::stdin;
 
+#[derive(Debug)]
 pub struct EvaluationResult {
     value: f64,
     calculation_data_loss: bool,
@@ -19,6 +19,14 @@ impl EvaluationResult {
 
     pub fn with_loss(value: f64) -> Self {
         EvaluationResult { value, calculation_data_loss: true }
+    }
+
+    pub fn is_lossy(&self) -> bool {
+        self.calculation_data_loss
+    }
+
+    pub fn value(&self) -> f64 {
+        self.value
     }
 }
 
@@ -112,6 +120,11 @@ impl FormulaStore {
         self.expand_formula(&mut formula, &HashSet::new())?;
         formula.eval().ok_or("Could not evaluate formula".to_owned())
     }
+    pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
+        let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
+        self.expand_formula(&mut formula, &HashSet::new())?;
+        formula.safe_eval().ok_or("Could not evaluate formula".to_owned())
+    }
 
     pub(crate) fn expand_formula(
         &self, formula: &mut Element, ignore_names: &HashSet<String>,
@@ -137,21 +150,6 @@ fn test_eval_formula_store() {
     store.add_symbol_from_string("f(x)=x^2").unwrap();
     store.add_symbol_from_string("a=4").unwrap();
     assert_eq!(store.eval("f(a)").unwrap(), 16.0);
-}
-
-pub fn run_formula_evaluator() {
-    let mut store = FormulaStore::new_empty();
-
-    loop {
-        let mut line = "".to_owned();
-        let _ = stdin().read_line(&mut line);
-        line = line.trim().to_string();
-        if line.contains('=') {
-            println!("{:?}", store.add_symbol_from_string(&line));
-        } else {
-            println!("{:?}", store.eval(&line));
-        }
-    }
 }
 
 impl Element {

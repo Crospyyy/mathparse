@@ -1,9 +1,7 @@
-use crate::evaluation::run_formula_evaluator;
+use crate::application::logic::run_formula_evaluator;
 
-mod evaluation;
-mod parsing;
-mod printing;
-mod storing;
+mod application;
+mod libraries;
 
 fn main() {
     run_formula_evaluator();

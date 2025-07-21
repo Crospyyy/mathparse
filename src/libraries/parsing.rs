@@ -41,7 +41,7 @@ pub mod implementation {
         }
 
         /// Step 0
-        pub(super) fn preprocess_string_minus(input: &str) -> String {
+        pub(crate) fn preprocess_string_minus(input: &str) -> String {
             let without_whitespace = input.replace(" ", "");
             Regex::new(r"([\w)])-([\w(])")
                 .unwrap()
@@ -50,7 +50,7 @@ pub mod implementation {
         }
 
         /// Step 1
-        pub(super) fn resolve_brackets(input: &[char], start: &mut usize) -> Element {
+        pub(crate) fn resolve_brackets(input: &[char], start: &mut usize) -> Element {
             let mut elements = Vec::new();
             let mut i = *start;
             while i < input.len() {
@@ -84,7 +84,7 @@ pub mod implementation {
         }
 
         /// Step 0,5
-        pub(super) fn resolve_functions(&mut self) {
+        pub(crate) fn resolve_functions(&mut self) {
             match self {
                 Element::Brackets(elements) => {
                     if elements.is_empty() {
@@ -134,7 +134,7 @@ pub mod implementation {
         }
 
         /// Step 2
-        pub(super) fn process_plus(&mut self) {
+        pub(crate) fn process_plus(&mut self) {
             match self {
                 Element::Brackets(elements) => {
                     if let Some(elements) = split_list_by_char(elements, '+') {
@@ -163,7 +163,7 @@ pub mod implementation {
         }
 
         /// Steps 3, 5 and 7
-        pub(super) fn process_minus(&mut self) {
+        pub(crate) fn process_minus(&mut self) {
             match self {
                 Element::Brackets(elements) => {
                     if let Some(Element::String(str)) = elements.first() {
@@ -209,7 +209,7 @@ pub mod implementation {
         }
 
         /// Step 3
-        pub(super) fn process_multiply(&mut self) {
+        pub(crate) fn process_multiply(&mut self) {
             match self {
                 Element::Brackets(elements) => {
                     if let Some(groups) = split_list_by_char(elements, '*') {
@@ -246,7 +246,7 @@ pub mod implementation {
         }
 
         /// Step 4
-        pub(super) fn process_divide(&mut self) {
+        pub(crate) fn process_divide(&mut self) {
             let create_divisions = |element: &mut Element, mut new_elements: Vec<Element>| {
                 new_elements[1..].iter_mut().for_each(Element::invert);
                 *element = Element::Multiply(new_elements);
@@ -283,7 +283,7 @@ pub mod implementation {
         }
 
         /// Step 6
-        pub(super) fn process_pow(&mut self) {
+        pub(crate) fn process_pow(&mut self) {
             let create_recursive_pow = |element: &mut Element, mut new_elements: Vec<Element>| {
                 let mut working_element = new_elements.pop().unwrap();
                 for e in new_elements.into_iter().rev() {
@@ -328,7 +328,7 @@ pub mod implementation {
         }
 
         /// Step 8
-        pub(super) fn process_numbers_and_variables(&mut self) {
+        pub(crate) fn process_numbers_and_variables(&mut self) {
             match self {
                 Element::String(s) => {
                     if let Ok(num) = s.parse::<f64>() {
@@ -364,7 +364,7 @@ pub mod implementation {
         }
 
         /// Step 9
-        pub(super) fn remove_unneeded_outer_brackets(&mut self) {
+        pub(crate) fn remove_unneeded_outer_brackets(&mut self) {
             match self {
                 Element::Brackets(elements) => {
                     elements.iter_mut().for_each(Element::remove_unneeded_outer_brackets);
@@ -391,7 +391,7 @@ pub mod implementation {
         }
 
         /// Step 10
-        pub(super) fn convert_to_variables_where_possible(&mut self) {
+        pub(crate) fn convert_to_variables_where_possible(&mut self) {
             match self {
                 Element::String(_) | Element::Brackets(_) => {}, // these shouldn't exist at this point
                 Element::Plus(elements) | Element::Multiply(elements) => {
@@ -430,7 +430,7 @@ pub mod implementation {
             }
         }
 
-        pub(super) fn anything_unparsed(&self) -> bool {
+        pub(crate) fn anything_unparsed(&self) -> bool {
             match self {
                 Element::Brackets(_) | Element::String(_) => true,
                 Element::Plus(elements)
@@ -1097,7 +1097,7 @@ pub mod signature {
 
     #[test]
     fn test_symbols() {
-        use crate::storing::FormulaStore;
+        use crate::libraries::storing::FormulaStore;
         let mut all = FormulaStore::new_empty();
         assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));

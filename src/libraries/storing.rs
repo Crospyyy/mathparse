@@ -1,6 +1,5 @@
 use crate::Element;
-use crate::formula_short::{plus, var};
-use crate::parsing::signature::Signatures;
+use crate::libraries::parsing::signature::Signatures;
 use std::collections::HashMap;
 
 pub struct FormulaStore {
@@ -82,6 +81,7 @@ pub fn test_get_insertion_element_expanded() {
 }
 #[test]
 pub fn test_insert_formula() {
+    use crate::formula_short::{plus, var};
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("fun(f,x,y)=f(x,y)").unwrap();
     store.add_symbol_from_string("add(x,y)=x+y").unwrap();
