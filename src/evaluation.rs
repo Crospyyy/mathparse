@@ -51,29 +51,12 @@ impl FormulaStore {
     ) -> Result<(), String> {
         all_names.retain(|name| !ignore_names.contains(name));
         while !all_names.is_empty() {
-            let mut found_function_elements_to_replace = false;
             for name in all_names.iter() {
-                formula.insert_symbol(
-                    &self.get_insertion_element_expanded(name)?,
-                    &mut found_function_elements_to_replace,
-                    false,
-                )?;
+                formula.insert_symbol(&self.get_insertion_element_expanded(name)?)?;
             }
             all_names.clear();
             formula.get_all_names(all_names);
             all_names.retain(|name| !ignore_names.contains(name));
-            if !found_function_elements_to_replace {
-                for name in all_names.iter() {
-                    formula.insert_symbol(
-                        &self.get_insertion_element_expanded(name)?,
-                        &mut found_function_elements_to_replace,
-                        true,
-                    )?;
-                }
-                all_names.clear();
-                formula.get_all_names(all_names);
-                all_names.retain(|name| !ignore_names.contains(name));
-            }
         }
         Ok(())
     }
@@ -84,7 +67,7 @@ fn test_eval_formula_store() {
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("f(x)=x^2").unwrap();
     store.add_symbol_from_string("a=4").unwrap();
-    println!("{}", store.eval("f(a)").unwrap());
+    assert_eq!(store.eval("f(a)").unwrap(), 16.0);
 }
 
 pub fn run_formula_evaluator() {

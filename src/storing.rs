@@ -1,4 +1,5 @@
 use crate::Element;
+use crate::formula_short::{plus, var};
 use crate::parsing::signature::Signatures;
 use std::collections::{HashMap, HashSet};
 
@@ -95,6 +96,9 @@ pub fn test_insert_formula() {
     store.add_symbol_from_string("add(x,y)=x+y").unwrap();
     store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)").unwrap();
     let insert = store.get_insertion_element_expanded("fun2").unwrap();
+    assert_eq!(insert.name, "fun2");
+    assert_eq!(insert.arguments, Some(vec!["x".to_string(), "y".to_string()]));
+    assert_eq!(insert.formula, plus([var("x"), var("y")]));
     dbg!(insert);
 }
 
@@ -116,15 +120,11 @@ impl InsertionElement {
             }
             let mut new_formula = self.formula.clone();
             for (in_arg, val) in insert_args.iter().zip(self_arguments) {
-                new_formula.insert_symbol(
-                    &InsertionElement {
-                        name: in_arg.clone(),
-                        arguments: None,
-                        formula: val.clone(),
-                    },
-                    &mut false,
-                    true,
-                )?
+                new_formula.insert_symbol(&InsertionElement {
+                    name: in_arg.clone(),
+                    arguments: None,
+                    formula: val.clone(),
+                })?
             }
             return Ok(new_formula);
         }
@@ -133,26 +133,21 @@ impl InsertionElement {
 }
 
 impl Element {
-    pub(crate) fn insert_symbol(
-        &mut self, insert: &InsertionElement, found_function_elements_to_replace: &mut bool,
-        replace_fun_args: bool,
-    ) -> Result<(), String> {
+    pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<(), String> {
         match self {
             Element::Brackets(elements)
             | Element::Plus(elements)
             | Element::Multiply(elements)
             | Element::Function { arguments: elements, .. } => {
                 for e in elements {
-                    e.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?
+                    e.insert_symbol(insert)?;
                 }
             },
             Element::Pow(a, b) => {
-                a.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?;
-                b.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?;
+                a.insert_symbol(insert)?;
+                b.insert_symbol(insert)?;
             },
-            Element::Negate(x) => {
-                x.insert_symbol(insert, found_function_elements_to_replace, replace_fun_args)?
-            },
+            Element::Negate(x) => x.insert_symbol(insert)?,
             Element::Number(_)
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
@@ -254,15 +249,11 @@ fn test_insert_symbols() {
     let mut formula = Element::parse("f(12, f(1, 2))").unwrap();
     formula.print_debug();
     formula
-        .insert_symbol(
-            &InsertionElement {
-                name: "f".to_owned(),
-                arguments: Some(vec!["x".to_owned(), "y".to_owned()]),
-                formula: fun,
-            },
-            &mut false,
-            true,
-        )
+        .insert_symbol(&InsertionElement {
+            name: "f".to_owned(),
+            arguments: Some(vec!["x".to_owned(), "y".to_owned()]),
+            formula: fun,
+        })
         .unwrap();
     formula.print_debug();
 }
