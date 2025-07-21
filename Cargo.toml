@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 regex = "1.11.1"
 colored = "3.0.0"
+num = "0.4.3"

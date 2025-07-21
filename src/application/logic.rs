@@ -1,4 +1,5 @@
 use crate::libraries::storing::FormulaStore;
+use num::BigRational;
 use std::io::{Write, stdin, stdout};
 
 pub fn run_formula_evaluator() {
@@ -18,9 +19,9 @@ pub fn run_formula_evaluator() {
             match result1 {
                 Ok(result) => {
                     if result.is_lossy() {
-                        println!("~= {}", result.value());
+                        println!("~= {}", convert_num_to_string(result.value()));
                     } else {
-                        println!("= {}", result.value());
+                        println!("= {}", convert_num_to_string(result.value()));
                     }
                 },
                 Err(s) => {
@@ -29,4 +30,23 @@ pub fn run_formula_evaluator() {
             }
         }
     }
+}
+
+pub fn convert_num_to_string(num: f64) -> String {
+    if num < 1.0 {
+        num.to_string()
+    } else {
+        let mut string = (num - num.floor()).to_string();
+        string.remove(0);
+        let ratio = BigRational::from_float(num.floor()).unwrap();
+        dbg!(&ratio);
+        string.insert_str(0, ratio.numer().to_string().as_str());
+        string
+    }
+}
+
+#[test]
+fn conv() {
+    let string = convert_num_to_string(123456778.0);
+    dbg!(string);
 }
