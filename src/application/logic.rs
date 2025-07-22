@@ -4,6 +4,7 @@ use std::io::{Write, stdin, stdout};
 
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();
+    store.define_default_internal_functions().unwrap();
 
     loop {
         println!("Input a formula:");

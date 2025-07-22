@@ -1,28 +1,28 @@
 use crate::Element;
-use crate::libraries::storing::FormulaStore;
-use std::collections::HashSet;
+use crate::libraries::storing::{FormulaStore, InternalFunctionDefinition};
+use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct EvaluationResult {
     value: f64,
-    calculation_data_loss: bool,
+    possible_data_loss: bool,
 }
 
 impl EvaluationResult {
     pub fn new(value: f64, calculation_data_loss: bool) -> Self {
-        EvaluationResult { value, calculation_data_loss }
+        EvaluationResult { value, possible_data_loss: calculation_data_loss }
     }
 
     pub fn no_loss(value: f64) -> Self {
-        EvaluationResult { value, calculation_data_loss: false }
+        EvaluationResult { value, possible_data_loss: false }
     }
 
     pub fn with_loss(value: f64) -> Self {
-        EvaluationResult { value, calculation_data_loss: true }
+        EvaluationResult { value, possible_data_loss: true }
     }
 
     pub fn is_lossy(&self) -> bool {
-        self.calculation_data_loss
+        self.possible_data_loss
     }
 
     pub fn value(&self) -> f64 {
@@ -60,22 +60,74 @@ impl Element {
             Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
         }
     }
-    pub fn safe_eval(&self) -> Option<EvaluationResult> {
-        let mut data_loss = false;
+    pub fn eval_with_formulas(
+        &self, formulas: &HashMap<String, InternalFunctionDefinition>,
+    ) -> Option<f64> {
         match self {
+            Element::Function { name, arguments } => {
+                let Some(formula) = formulas.get(name) else { return None };
+                let arguments_evaluated = arguments
+                    .iter()
+                    .map(|a| a.eval_with_formulas(formulas))
+                    .collect::<Option<Vec<_>>>()?;
+                formula(arguments_evaluated)
+            },
+
             Element::Brackets(_)
             | Element::String(_)
             | Element::Variable(_)
-            | Element::Function { .. }
+            | Element::VariableOrFunction(_) => None,
+
+            Element::Plus(elements) => {
+                let mut sum = 0.0;
+                for n in elements {
+                    sum += n.eval_with_formulas(formulas)?;
+                }
+                Some(sum)
+            },
+
+            Element::Multiply(elements) => {
+                let mut product = 1.0;
+                for n in elements {
+                    product *= n.eval_with_formulas(formulas)?;
+                }
+                Some(product)
+            },
+
+            Element::Negate(e) => e.eval_with_formulas(formulas).map(|n| -n),
+            Element::Number(n) => Some(*n),
+            Element::Pow(b, e) => {
+                Some(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?))
+            },
+        }
+    }
+    pub fn safe_eval_with_formulas(
+        &self, formulas: &HashMap<String, InternalFunctionDefinition>,
+    ) -> Option<EvaluationResult> {
+        let mut data_loss = false;
+        match self {
+            Element::Function { name, arguments } => {
+                let Some(formula) = formulas.get(name) else { return None };
+                let arguments_evaluated = arguments
+                    .iter()
+                    .map(|a| a.safe_eval_with_formulas(formulas))
+                    .collect::<Option<Vec<_>>>()?;
+                formula(arguments_evaluated.iter().map(|r| r.value()).collect())
+                    .map(|r| EvaluationResult::new(r, true))
+            },
+
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Variable(_)
             | Element::VariableOrFunction(_) => None,
 
             Element::Plus(elements) => {
                 let mut sum = 0.0;
                 for n in elements {
                     let prev = sum;
-                    let e_result = n.safe_eval()?;
+                    let e_result = n.safe_eval_with_formulas(formulas)?;
                     sum += e_result.value;
-                    if e_result.calculation_data_loss || sum - prev != e_result.value {
+                    if e_result.possible_data_loss || sum - prev != e_result.value {
                         data_loss = true;
                     }
                 }
@@ -86,23 +138,23 @@ impl Element {
                 let mut product = 1.0;
                 for n in elements {
                     let prev = product;
-                    let e_result = n.safe_eval()?;
+                    let e_result = n.safe_eval_with_formulas(formulas)?;
                     product *= e_result.value;
-                    if e_result.calculation_data_loss || product / prev != e_result.value {
+                    if e_result.possible_data_loss || product / prev != e_result.value {
                         data_loss = true;
                     }
                 }
                 Some(EvaluationResult::new(product, data_loss))
             },
 
-            Element::Negate(e) => {
-                e.safe_eval().map(|n| EvaluationResult::new(-n.value, n.calculation_data_loss))
-            },
+            Element::Negate(e) => e
+                .safe_eval_with_formulas(formulas)
+                .map(|n| EvaluationResult::new(-n.value, n.possible_data_loss)),
             Element::Number(n) => Some(EvaluationResult::new(*n, data_loss)),
             Element::Pow(b, e) => {
-                let res_1 = b.safe_eval()?;
-                let res_2 = e.safe_eval()?;
-                data_loss = res_1.calculation_data_loss | res_2.calculation_data_loss;
+                let res_1 = b.safe_eval_with_formulas(formulas)?;
+                let res_2 = e.safe_eval_with_formulas(formulas)?;
+                data_loss = res_1.possible_data_loss | res_2.possible_data_loss;
 
                 let calc_result = res_1.value.powf(res_2.value);
                 Some(EvaluationResult::new(
@@ -117,29 +169,44 @@ impl Element {
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        self.expand_formula(&mut formula, &HashSet::new())?;
-        formula.eval().ok_or("Could not evaluate formula".to_owned())
+        self.expand_formula(
+            &mut formula,
+            &self.internal_function_definitions.keys().cloned().collect(),
+        )?;
+        formula
+            .eval_with_formulas(&self.internal_function_definitions)
+            .ok_or("Could not evaluate formula".to_owned())
     }
     pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        self.expand_formula(&mut formula, &HashSet::new())?;
-        formula.safe_eval().ok_or("Could not evaluate formula".to_owned())
+        self.expand_formula(
+            &mut formula,
+            &self.internal_function_definitions.keys().cloned().collect(),
+        )?;
+        formula
+            .safe_eval_with_formulas(&self.internal_function_definitions)
+            .ok_or("Could not evaluate formula".to_owned())
     }
 
     pub(crate) fn expand_formula(
         &self, formula: &mut Element, ignore_names: &HashSet<String>,
     ) -> Result<(), String> {
         let mut all_names = HashSet::new();
-        formula.get_all_names(&mut all_names);
-        all_names.retain(|name| !ignore_names.contains(name));
-        while !all_names.is_empty() {
-            for name in all_names.iter() {
-                formula.insert_symbol(&self.get_insertion_element_expanded(name)?)?;
-            }
+
+        loop {
             all_names.clear();
             formula.get_all_names(&mut all_names);
             all_names.retain(|name| !ignore_names.contains(name));
+
+            if all_names.is_empty() {
+                break;
+            }
+
+            for name in all_names.iter() {
+                formula.insert_symbol(&self.get_insertion_element_expanded(name)?)?;
+            }
         }
+
         Ok(())
     }
 }
@@ -150,6 +217,20 @@ fn test_eval_formula_store() {
     store.add_symbol_from_string("f(x)=x^2").unwrap();
     store.add_symbol_from_string("a=4").unwrap();
     assert_eq!(store.eval("f(a)").unwrap(), 16.0);
+}
+
+#[test]
+fn test_internal_function_definitions() {
+    let mut store = FormulaStore::new_empty();
+    store.define_default_internal_functions().unwrap();
+    assert_ne!(store.add_symbol_from_string("sin(x)=x"), Ok(()));
+
+    assert_eq!(store.eval("sin(123)"), Ok(123f64.sin()));
+    assert_eq!(store.safe_eval("sin(123)"), Ok(EvaluationResult::with_loss(123f64.sin())));
+    assert_eq!(store.eval("log2(123)"), Ok(123f64.log2()));
+    assert_eq!(store.safe_eval("log2(123)"), Ok(EvaluationResult::with_loss(123f64.log2())));
+    assert_eq!(store.eval("avg(1,2,3)"), Ok((1.0 + 2.0 + 3.0) / 3.0));
+    assert_eq!(store.eval("sum(1,2,3)"), Ok(1.0 + 2.0 + 3.0));
 }
 
 impl Element {

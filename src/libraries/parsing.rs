@@ -796,11 +796,9 @@ pub mod signature {
         }
 
         pub(crate) fn add_symbol_from_function_signature_and_definition(
-            &mut self, name_and_args: Element, content: Element,
+            &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
         ) -> Result<(String, Option<Vec<String>>), String> {
-            let mut symbol_name_and_args = SymbolDeclarationData::from_formula(&name_and_args)?;
-
-            if self.0.get(&symbol_name_and_args.name).is_some() {
+            if self.0.contains_key(&symbol_name_and_args.name) {
                 return Err(format!(
                     "The formula {} is already defined",
                     symbol_name_and_args.name
@@ -1012,7 +1010,7 @@ pub mod signature {
         }
     }
 
-    struct SymbolDeclarationData {
+    pub struct SymbolDeclarationData {
         name: String,
         function_args: Option<FunctionDeclarationArguments>,
     }
@@ -1033,7 +1031,7 @@ pub mod signature {
     }
 
     impl SymbolDeclarationData {
-        fn from_formula(formula: &Element) -> Result<Self, String> {
+        pub(crate) fn from_formula(formula: &Element) -> Result<Self, String> {
             let insert_name;
             let function_args;
             match formula {
@@ -1062,6 +1060,10 @@ pub mod signature {
                 },
             }
             Ok(Self { name: insert_name.to_owned(), function_args })
+        }
+
+        pub fn get_name(&self) -> &String {
+            &self.name
         }
     }
 

@@ -1,11 +1,45 @@
 use crate::Element;
-use crate::libraries::parsing::signature::Signatures;
+use crate::libraries::parsing::signature::{Signatures, SymbolDeclarationData};
 use std::collections::HashMap;
+
+pub type InternalFunctionDefinition = fn(Vec<f64>) -> Option<f64>;
 
 pub struct FormulaStore {
     signatures: Signatures,
     formulas: HashMap<String, Element>,
     parameter_mappings: HashMap<String, Option<Vec<String>>>,
+    pub(super) internal_function_definitions: HashMap<String, InternalFunctionDefinition>,
+}
+
+impl FormulaStore {
+    pub fn define_internal_function(
+        &mut self, name: &str, definition: InternalFunctionDefinition,
+    ) -> Result<(), String> {
+        if self.internal_function_definitions.contains_key(name) {
+            return Err(format!("Internal function definition with key `{}` already exists", name));
+        }
+        if self.formulas.contains_key(name) {
+            return Err(format!("Formula definition with key `{}` already exists", name));
+        }
+        self.internal_function_definitions.insert(name.to_string(), definition);
+        Ok(())
+    }
+
+    pub fn define_default_internal_functions(&mut self) -> Result<(), String> {
+        self.define_internal_function("sin", |args| {
+            if args.len() != 1 { None } else { Some(args[0].sin()) }
+        })?;
+        self.define_internal_function("log2", |args| {
+            if args.len() != 1 { None } else { Some(args[0].log2()) }
+        })?;
+        self.define_internal_function("avg", |args| {
+            if args.len() == 0 { None } else { Some(args.iter().sum::<f64>() / args.len() as f64) }
+        })?;
+        self.define_internal_function("sum", |args| {
+            if args.len() == 0 { None } else { Some(args.iter().sum::<f64>()) }
+        })?;
+        Ok(())
+    }
 }
 
 impl FormulaStore {
@@ -14,6 +48,7 @@ impl FormulaStore {
             signatures: Signatures::new_empty(),
             formulas: HashMap::new(),
             parameter_mappings: HashMap::new(),
+            internal_function_definitions: HashMap::new(),
         }
     }
 
@@ -25,7 +60,18 @@ impl FormulaStore {
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
         println!("Definition: {:?}", def);
 
-        match self.signatures.add_symbol_from_function_signature_and_definition(sig, def.clone()) {
+        let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
+
+        if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
+            return Err(format!(
+                "Internal function definition with key `{}` already exists",
+                string
+            ));
+        }
+        match self
+            .signatures
+            .add_symbol_from_function_signature_and_definition(symbol_name_and_args, def.clone())
+        {
             Ok((name, arg_names)) => {
                 self.formulas.insert(name.clone(), def);
                 self.parameter_mappings.insert(name, arg_names);
