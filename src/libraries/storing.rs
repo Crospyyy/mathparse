@@ -80,7 +80,7 @@ impl FormulaStore {
         if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
             return Err(format!(
                 "Internal function definition with key `{}` already exists",
-                string
+                symbol_name_and_args.get_name()
             ));
         }
         match self
@@ -116,9 +116,6 @@ impl FormulaStore {
             &mut formula,
             &arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect(),
         )?;
-
-        println!("Expanding symbol: {name}");
-        println!("Expanded formula: {:?} to {:?}", original_formula, formula);
 
         Ok(InsertionElement { name: name.to_string(), arguments, formula })
     }

@@ -7,7 +7,7 @@ pub fn run_formula_evaluator() {
     store.define_default_internal_functions().unwrap();
 
     loop {
-        println!("Input a formula:");
+        println!("\nInput a formula:");
         stdout().flush().unwrap();
         let mut line = "".to_owned();
         let _ = stdin().read_line(&mut line);
