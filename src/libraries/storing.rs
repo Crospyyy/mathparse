@@ -62,6 +62,14 @@ impl FormulaStore {
             expect_n_arguments(1, args.len())?;
             Ok(args[0].log2())
         })?;
+        self.define_internal_function("log10", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].log10())
+        })?;
+        self.define_internal_function("ln", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].ln())
+        })?;
         self.define_internal_function("avg", |args| {
             expect_one_or_more_arguments(args.len())?;
             Ok(args.iter().sum::<f64>() / args.len() as f64)
