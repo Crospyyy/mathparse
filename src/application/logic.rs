@@ -5,6 +5,7 @@ use std::io::{Write, stdin, stdout};
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();
     store.define_default_internal_functions().unwrap();
+    store.define_default_symbols().unwrap();
 
     loop {
         println!("\nInput a formula:");
@@ -37,7 +38,7 @@ pub fn run_formula_evaluator() {
 }
 
 pub fn convert_num_to_string(num: f64) -> String {
-    if num < 1.0 {
+    if num < 1.0 || !num.is_finite() {
         num.to_string()
     } else {
         let mut string = (num - num.floor()).to_string();

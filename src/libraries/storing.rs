@@ -30,6 +30,22 @@ impl FormulaStore {
             expect_n_arguments(1, args.len())?;
             Ok(args[0].sin())
         })?;
+        self.define_internal_function("cos", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].cos())
+        })?;
+        self.define_internal_function("tan", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].tan())
+        })?;
+        self.define_internal_function("sqrt", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].sqrt())
+        })?;
+        self.define_internal_function("abs", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].abs())
+        })?;
         self.define_internal_function("log2", |args| {
             expect_n_arguments(1, args.len())?;
             Ok(args[0].log2())
@@ -39,6 +55,12 @@ impl FormulaStore {
             Ok(args.iter().sum::<f64>() / args.len() as f64)
         })?;
         self.define_internal_function("sum", |args| Ok(args.iter().sum::<f64>()))?;
+        Ok(())
+    }
+
+    pub fn define_default_symbols(&mut self) -> Result<(), String> {
+        self.add_variable_with_value("pi", std::f64::consts::PI)?;
+        self.add_variable_with_value("e", std::f64::consts::E)?;
         Ok(())
     }
 }
@@ -75,6 +97,21 @@ impl FormulaStore {
         let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
 
+        self.add_symbol_from_sig_and_def(sig, def)
+    }
+
+    pub fn add_variable_with_value(&mut self, name: &str, value: f64) -> Result<String, String> {
+        let sig = Element::parse(name).ok_or("First formula could not be parsed")?;
+        if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
+            return Err("Signature must be a variable".to_owned());
+        }
+        let def = Element::Number(value);
+        self.add_symbol_from_sig_and_def(sig, def)
+    }
+
+    fn add_symbol_from_sig_and_def(
+        &mut self, sig: Element, def: Element,
+    ) -> Result<String, String> {
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 
         if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
