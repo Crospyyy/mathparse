@@ -1,5 +1,5 @@
 use crate::libraries::storing::FormulaStore;
-use num::BigRational;
+use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
 
 pub fn run_formula_evaluator() {
@@ -40,7 +40,7 @@ pub fn convert_num_to_string(num: f64) -> String {
         let mut string = (num - num.floor()).to_string();
         string.remove(0);
         let ratio = BigRational::from_float(num.floor()).unwrap();
-        dbg!(&ratio);
+        assert_eq!(*ratio.denom(), BigInt::from(1));
         string.insert_str(0, ratio.numer().to_string().as_str());
         string
     }

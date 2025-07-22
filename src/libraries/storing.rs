@@ -2,7 +2,7 @@ use crate::Element;
 use crate::libraries::parsing::signature::{Signatures, SymbolDeclarationData};
 use std::collections::HashMap;
 
-pub type InternalFunctionDefinition = fn(Vec<f64>) -> Option<f64>;
+pub type InternalFunctionDefinition = fn(Vec<f64>) -> Result<f64, String>;
 
 pub struct FormulaStore {
     signatures: Signatures,
@@ -27,19 +27,37 @@ impl FormulaStore {
 
     pub fn define_default_internal_functions(&mut self) -> Result<(), String> {
         self.define_internal_function("sin", |args| {
-            if args.len() != 1 { None } else { Some(args[0].sin()) }
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].sin())
         })?;
         self.define_internal_function("log2", |args| {
-            if args.len() != 1 { None } else { Some(args[0].log2()) }
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].log2())
         })?;
         self.define_internal_function("avg", |args| {
-            if args.len() == 0 { None } else { Some(args.iter().sum::<f64>() / args.len() as f64) }
+            expect_one_or_more_arguments(args.len())?;
+            Ok(args.iter().sum::<f64>() / args.len() as f64)
         })?;
-        self.define_internal_function("sum", |args| {
-            if args.len() == 0 { None } else { Some(args.iter().sum::<f64>()) }
-        })?;
+        self.define_internal_function("sum", |args| Ok(args.iter().sum::<f64>()))?;
         Ok(())
     }
+}
+
+fn expect_n_arguments(expected: usize, got: usize) -> Result<(), String> {
+    if expected == got {
+        Ok(())
+    } else {
+        Err(format!(
+            "Expected {} argument{}, got {}",
+            expected,
+            if expected == 1 { "" } else { "s" },
+            got
+        ))
+    }
+}
+
+fn expect_one_or_more_arguments(got: usize) -> Result<(), String> {
+    if got > 0 { Ok(()) } else { Err("Expected one or more arguments, got 0".to_owned()) }
 }
 
 impl FormulaStore {
