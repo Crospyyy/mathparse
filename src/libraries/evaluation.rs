@@ -243,6 +243,20 @@ fn test_internal_function_definitions() {
     assert_eq!(store.eval("max(1,2,3)"), Ok(3.0));
     assert_eq!(store.eval("min(1,2,3)"), Ok(1.0));
     assert_eq!(store.eval("sum(1,2,3)"), Ok(1.0 + 2.0 + 3.0));
+
+    // Test für floor
+    assert_eq!(store.eval("floor(123.456)").unwrap(), 123.0);
+    assert_eq!(store.eval("floor(-123.456)").unwrap(), -124.0);
+
+    // Test für ceil
+    assert_eq!(store.eval("ceil(123.456)").unwrap(), 124.0);
+    assert_eq!(store.eval("ceil(-123.456)").unwrap(), -123.0);
+
+    // Test für round
+    assert_eq!(store.eval("round(123.456)").unwrap(), 123.0);
+    assert_eq!(store.eval("round(123.789)").unwrap(), 124.0);
+    assert_eq!(store.eval("round(-123.456)").unwrap(), -123.0);
+    assert_eq!(store.eval("round(-123.789)").unwrap(), -124.0);
 }
 
 impl Element {

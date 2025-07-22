@@ -75,6 +75,18 @@ impl FormulaStore {
             Ok(args.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap())
         })?;
         self.define_internal_function("sum", |args| Ok(args.iter().sum::<f64>()))?;
+        self.define_internal_function("floor", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].floor())
+        })?;
+        self.define_internal_function("ceil", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].ceil())
+        })?;
+        self.define_internal_function("round", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].round())
+        })?;
         Ok(())
     }
 
