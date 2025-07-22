@@ -815,6 +815,7 @@ pub mod signature {
             )?;
 
             if !required_signatures.0.is_empty() {
+                todo!("Also consider internally defined functions here");
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
                     symbol_name_and_args.name, required_signatures.0
