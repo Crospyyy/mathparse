@@ -233,9 +233,15 @@ fn test_internal_function_definitions() {
 
     assert_eq!(store.eval("sin(123)"), Ok(123f64.sin()));
     assert_eq!(store.safe_eval("sin(123)"), Ok(EvaluationResult::with_loss(123f64.sin())));
+    assert_eq!(store.eval("cos(123)"), Ok(123f64.cos()));
+    assert_eq!(store.eval("tan(123)"), Ok(123f64.tan()));
+    assert_eq!(store.eval("sqrt(123)"), Ok(123f64.sqrt()));
+    assert_eq!(store.eval("abs(123)"), Ok(123f64.abs()));
     assert_eq!(store.eval("log2(123)"), Ok(123f64.log2()));
     assert_eq!(store.safe_eval("log2(123)"), Ok(EvaluationResult::with_loss(123f64.log2())));
     assert_eq!(store.eval("avg(1,2,3)"), Ok((1.0 + 2.0 + 3.0) / 3.0));
+    assert_eq!(store.eval("max(1,2,3)"), Ok(3.0));
+    assert_eq!(store.eval("min(1,2,3)"), Ok(1.0));
     assert_eq!(store.eval("sum(1,2,3)"), Ok(1.0 + 2.0 + 3.0));
 }
 

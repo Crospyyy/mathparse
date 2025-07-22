@@ -38,6 +38,18 @@ impl FormulaStore {
             expect_n_arguments(1, args.len())?;
             Ok(args[0].tan())
         })?;
+        self.define_internal_function("asin", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].asin())
+        })?;
+        self.define_internal_function("acos", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].acos())
+        })?;
+        self.define_internal_function("atan", |args| {
+            expect_n_arguments(1, args.len())?;
+            Ok(args[0].atan())
+        })?;
         self.define_internal_function("sqrt", |args| {
             expect_n_arguments(1, args.len())?;
             Ok(args[0].sqrt())
@@ -53,6 +65,14 @@ impl FormulaStore {
         self.define_internal_function("avg", |args| {
             expect_one_or_more_arguments(args.len())?;
             Ok(args.iter().sum::<f64>() / args.len() as f64)
+        })?;
+        self.define_internal_function("max", |args| {
+            expect_one_or_more_arguments(args.len())?;
+            Ok(args.iter().copied().max_by(|a, b| a.total_cmp(b)).unwrap())
+        })?;
+        self.define_internal_function("min", |args| {
+            expect_one_or_more_arguments(args.len())?;
+            Ok(args.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap())
         })?;
         self.define_internal_function("sum", |args| Ok(args.iter().sum::<f64>()))?;
         Ok(())
