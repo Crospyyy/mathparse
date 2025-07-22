@@ -70,13 +70,10 @@ impl FormulaStore {
         }
     }
 
-    pub(crate) fn add_symbol_from_string(&mut self, string: &str) -> Result<(), String> {
+    pub(crate) fn add_symbol_from_string(&mut self, string: &str) -> Result<String, String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
         let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
-        println!("Inserting the following symbol: {string}");
-        println!("Signature: {:?}", sig);
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
-        println!("Definition: {:?}", def);
 
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 
@@ -92,8 +89,8 @@ impl FormulaStore {
         {
             Ok((name, arg_names)) => {
                 self.formulas.insert(name.clone(), def);
-                self.parameter_mappings.insert(name, arg_names);
-                Ok(())
+                self.parameter_mappings.insert(name.clone(), arg_names);
+                Ok(name)
             },
             Err(err) => Err(format!("Could not add symbol: {}", err)),
         }
@@ -109,12 +106,10 @@ impl FormulaStore {
     pub(crate) fn get_insertion_element_expanded(
         &self, name: &str,
     ) -> Result<InsertionElement, String> {
-        let arguments = self
-            .parameter_mappings
-            .get(name)
-            .ok_or("No symbol declaration data found".to_owned())?
-            .clone();
-        let mut formula = self.formulas.get(name).ok_or("Symbol not found".to_owned())?.clone();
+        let arguments =
+            self.parameter_mappings.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
+        let mut formula =
+            self.formulas.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
         let original_formula = formula.clone();
 
         self.expand_formula(
@@ -346,30 +341,30 @@ fn test_storing() {
     println!("### Test storing formulas ###");
 
     let mut store = FormulaStore::new_empty();
-    assert_eq!(store.add_symbol_from_string("f=123"), Ok(()));
-    assert_ne!(store.add_symbol_from_string("1=1"), Ok(()));
-    assert_ne!(store.add_symbol_from_string("f=1"), Ok(()));
-    assert_ne!(store.add_symbol_from_string("x"), Ok(()));
+    assert_eq!(store.add_symbol_from_string("f=123"), Ok("f".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("1=1"), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("f=1"), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("x"), Err(_)));
 
-    assert_ne!(store.add_symbol_from_string("g(l)=x^2"), Ok(()));
-    assert_eq!(store.add_symbol_from_string("g(g)=g^2"), Ok(()));
-    assert_ne!(store.add_symbol_from_string("g=2"), Ok(()));
+    assert!(matches!(store.add_symbol_from_string("g(l)=x^2"), Err(_)));
+    assert_eq!(store.add_symbol_from_string("g(g)=g^2"), Ok("g".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("g=2"), Err(_)));
 
-    assert_eq!(store.add_symbol_from_string("f2(f)=f*3"), Ok(()));
-    assert_ne!(store.add_symbol_from_string("f3=f2()"), Ok(()));
+    assert_eq!(store.add_symbol_from_string("f2(f)=f*3"), Ok("f2".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("f3=f2()"), Err(_)));
 
     let result = store.eval("f");
     assert_eq!(result, Ok(123.0));
-    assert!(store.eval("f()").is_err());
-    assert!(store.eval("g()").is_err());
+    assert!(matches!(store.eval("f()"), Err(_)));
+    assert!(matches!(store.eval("g()"), Err(_)));
     assert_eq!(store.eval("g(2)"), Ok(4.0));
     assert_eq!(store.eval("f2(2)"), Ok(6.0));
 
-    assert!(matches!(store.add_symbol_from_string("add(a,b)=a+b"), Ok(_)));
-    assert!(matches!(store.add_symbol_from_string("mul(a,b)=a*b"), Ok(_)));
-    assert!(matches!(store.add_symbol_from_string("div(a,b)=a/b"), Ok(_)));
+    assert_eq!(store.add_symbol_from_string("add(a,b)=a+b"), Ok("add".to_owned()));
+    assert_eq!(store.add_symbol_from_string("mul(a,b)=a*b"), Ok("mul".to_owned()));
+    assert_eq!(store.add_symbol_from_string("div(a,b)=a/b"), Ok("div".to_owned()));
     assert!(matches!(store.eval("add(1,2)"), Ok(3.0)));
-    assert!(matches!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)"), Ok(_)));
+    assert_eq!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)"), Ok("run".to_owned()));
     assert_eq!(store.eval("run(1, 2, add)"), Ok(3.0));
     assert_eq!(store.eval("run(1, 2, mul)"), Ok(2.0));
     assert_eq!(store.eval("run(1, 2, div)"), Ok(0.5));

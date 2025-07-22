@@ -229,7 +229,7 @@ fn test_eval_formula_store() {
 fn test_internal_function_definitions() {
     let mut store = FormulaStore::new_empty();
     store.define_default_internal_functions().unwrap();
-    assert_ne!(store.add_symbol_from_string("sin(x)=x"), Ok(()));
+    assert!(matches!(store.add_symbol_from_string("sin(x)=x"), Err(_)));
 
     assert_eq!(store.eval("sin(123)"), Ok(123f64.sin()));
     assert_eq!(store.safe_eval("sin(123)"), Ok(EvaluationResult::with_loss(123f64.sin())));

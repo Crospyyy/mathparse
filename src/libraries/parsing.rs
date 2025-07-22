@@ -826,7 +826,6 @@ pub mod signature {
             } else {
                 Signature::Number
             };
-            println!("Adding symbol {} with signature {:?}", symbol_name_and_args.name, signature);
             self.0.insert(symbol_name_and_args.name.clone(), signature);
 
             Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
@@ -1101,14 +1100,14 @@ pub mod signature {
     fn test_symbols() {
         use crate::libraries::storing::FormulaStore;
         let mut all = FormulaStore::new_empty();
-        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok(()));
+        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok("fun".to_owned()));
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));
         println!("{:?}", all.get_signatures());
-        assert!(matches!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok(())));
+        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok("fun2".to_owned()));
         println!("{:?}", all.get_signatures());
         let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)");
         println!("{:?}", result);
-        assert!(matches!(result, Ok(())));
+        assert_eq!(result, Ok("fun3".to_owned()));
         println!("{:?}", all.get_signatures());
     }
 }
