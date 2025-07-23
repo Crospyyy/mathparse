@@ -1,0 +1,4 @@
+fn_params_layout = "Compressed"
+use_small_heuristics = "Max"
+match_block_trailing_comma = true
+max_width = 110
