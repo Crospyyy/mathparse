@@ -39,8 +39,8 @@ where
 }
 
 fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
-    inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>,
-    show_types: bool, type_string: &str, output: &mut String,
+    inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>, show_types: bool,
+    type_string: &str, output: &mut String,
 ) {
     add_type_string(show_types, type_string, output);
     if !show_brackets {
@@ -121,12 +121,8 @@ impl Element {
             },
             Element::Number(num) => add_element_string(show_types, "num", num, output),
             Element::Variable(name) => add_element_string(show_types, "var", name, output),
-            Element::VariableOrFunction(name) => {
-                add_element_string(show_types, "var or fun", name, output)
-            },
-            Element::String(s) => {
-                add_element_string(show_types, "str", mark_string_red(s, true), output)
-            },
+            Element::VariableOrFunction(name) => add_element_string(show_types, "var or fun", name, output),
+            Element::String(s) => add_element_string(show_types, "str", mark_string_red(s, true), output),
         }
     }
 }

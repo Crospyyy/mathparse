@@ -60,9 +60,7 @@ impl Element {
             Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
         }
     }
-    pub fn eval_with_formulas(
-        &self, formulas: &HashMap<String, InternalFunction>,
-    ) -> Result<f64, String> {
+    pub fn eval_with_formulas(&self, formulas: &HashMap<String, InternalFunction>) -> Result<f64, String> {
         match self {
             Element::Function { name, arguments } => {
                 let Some(formula) = formulas.get(name) else {
@@ -72,7 +70,8 @@ impl Element {
                     .iter()
                     .map(|a| a.eval_with_formulas(formulas))
                     .collect::<Result<Vec<_>, String>>()?;
-                formula.call(arguments_evaluated)
+                formula
+                    .call(arguments_evaluated)
                     .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
             },
 
@@ -101,9 +100,7 @@ impl Element {
 
             Element::Negate(e) => e.eval_with_formulas(formulas).map(|n| -n),
             Element::Number(n) => Ok(*n),
-            Element::Pow(b, e) => {
-                Ok(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?))
-            },
+            Element::Pow(b, e) => Ok(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?)),
         }
     }
     pub fn safe_eval_with_formulas(
@@ -119,7 +116,8 @@ impl Element {
                     .iter()
                     .map(|a| a.safe_eval_with_formulas(formulas))
                     .collect::<Result<Vec<_>, String>>()?;
-                formula.call(arguments_evaluated.iter().map(|r| r.value()).collect())
+                formula
+                    .call(arguments_evaluated.iter().map(|r| r.value()).collect())
                     .map(|r| EvaluationResult::new(r, true))
                     .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
             },
@@ -179,18 +177,12 @@ impl Element {
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        self.expand_formula(
-            &mut formula,
-            &self.internal_function_definitions.keys().cloned().collect(),
-        )?;
+        self.expand_formula(&mut formula, &self.internal_function_definitions.keys().cloned().collect())?;
         formula.eval_with_formulas(&self.internal_function_definitions)
     }
     pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        self.expand_formula(
-            &mut formula,
-            &self.internal_function_definitions.keys().cloned().collect(),
-        )?;
+        self.expand_formula(&mut formula, &self.internal_function_definitions.keys().cloned().collect())?;
         formula.safe_eval_with_formulas(&self.internal_function_definitions)
     }
 

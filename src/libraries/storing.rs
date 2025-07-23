@@ -170,10 +170,11 @@ impl FormulaStore {
                 symbol_name_and_args.get_name()
             ));
         }
-        match self
-            .signatures
-            .add_symbol_from_function_signature_and_definition(symbol_name_and_args, def.clone(), &self.internal_function_definitions)
-        {
+        match self.signatures.add_symbol_from_function_signature_and_definition(
+            symbol_name_and_args,
+            def.clone(),
+            &self.internal_function_definitions,
+        ) {
             Ok((name, arg_names)) => {
                 self.formulas.insert(name.clone(), def);
                 self.parameter_mappings.insert(name.clone(), arg_names);

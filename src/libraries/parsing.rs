@@ -861,7 +861,8 @@ pub mod signature {
                             name, undefined_signatures.0[&name], internal_fun
                         ));
                     }
-                    let new_signature = undefined_signatures.0[&name].get_refined_with_internal_fun(internal_fun);
+                    let new_signature =
+                        undefined_signatures.0[&name].get_refined_with_internal_fun(internal_fun);
                     undefined_signatures.update_signature(&formula, &name, new_signature);
                     continue;
                 }
