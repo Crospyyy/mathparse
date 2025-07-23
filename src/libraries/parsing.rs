@@ -13,11 +13,7 @@ pub mod implementation {
             .rev()
             .take_while(|&c| is_valid_char_for_function_name(c))
             .for_each(|_| valid_chars_count += 1);
-        if valid_chars_count == 0 {
-            "".to_owned()
-        } else {
-            name[name.len() - valid_chars_count..].to_owned()
-        }
+        if valid_chars_count == 0 { "".to_owned() } else { name[name.len() - valid_chars_count..].to_owned() }
     }
 
     impl Element {
@@ -43,10 +39,7 @@ pub mod implementation {
         /// Step 0
         pub(crate) fn preprocess_string_minus(input: &str) -> String {
             let without_whitespace = input.replace(" ", "");
-            Regex::new(r"([\w)])-([\w(])")
-                .unwrap()
-                .replace_all(&without_whitespace, "$1+-$2")
-                .to_string()
+            Regex::new(r"([\w)])-([\w(])").unwrap().replace_all(&without_whitespace, "$1+-$2").to_string()
         }
 
         /// Step 1
@@ -105,8 +98,7 @@ pub mod implementation {
                             let arguments = split_list_by_char(br_elements, ',')
                                 .unwrap_or_else(|| vec![Element::Brackets(br_elements.clone())]);
 
-                            elements[j] =
-                                Element::Function { name: function_name.clone(), arguments };
+                            elements[j] = Element::Function { name: function_name.clone(), arguments };
 
                             // update or remove the string element
                             let new_str_len = name.len() - function_name.len();
@@ -201,9 +193,7 @@ pub mod implementation {
                     b.process_minus();
                     e.process_minus();
                 },
-                Element::Function { arguments, .. } => {
-                    arguments.iter_mut().for_each(Element::process_minus)
-                },
+                Element::Function { arguments, .. } => arguments.iter_mut().for_each(Element::process_minus),
                 Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
             }
         }
@@ -297,9 +287,7 @@ pub mod implementation {
                         create_recursive_pow(self, new_elements);
                     }
                     match self {
-                        Element::Brackets(elements) => {
-                            elements.iter_mut().for_each(Element::process_pow)
-                        },
+                        Element::Brackets(elements) => elements.iter_mut().for_each(Element::process_pow),
                         Element::Pow(b, e) => {
                             b.process_pow();
                             e.process_pow();
@@ -438,9 +426,7 @@ pub mod implementation {
                 | Element::Function { arguments: elements, .. } => {
                     elements.iter().any(Element::anything_unparsed)
                 },
-                Element::Pow(base, exponent) => {
-                    base.anything_unparsed() || exponent.anything_unparsed()
-                },
+                Element::Pow(base, exponent) => base.anything_unparsed() || exponent.anything_unparsed(),
                 Element::Negate(element) => element.anything_unparsed(),
                 Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => false,
             }
@@ -569,10 +555,7 @@ pub mod testing {
             ),
             (
                 "(x/x+-x)*x^x",
-                Some(mul([
-                    plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]),
-                    pow(var("x"), var("x")),
-                ])),
+                Some(mul([plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]), pow(var("x"), var("x"))])),
             ),
             ("x/x/x/x", Some(mul([var("x"), inv(var("x")), inv(var("x")), inv(var("x"))]))),
             ("x/x-x", Some(plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]))),
@@ -582,10 +565,7 @@ pub mod testing {
             ("a,b,c", None),
             ("a(a,c)", Some(fun("a", [var_or_fun("a"), var_or_fun("c")]))),
             ("a(a+c)", Some(fun("a", [plus([var("a"), var("c")])]))),
-            (
-                "m+a(a,b+c)",
-                Some(plus([var("m"), fun("a", [var_or_fun("a"), plus([var("b"), var("c")])])])),
-            ),
+            ("m+a(a,b+c)", Some(plus([var("m"), fun("a", [var_or_fun("a"), plus([var("b"), var("c")])])]))),
             ("fun3(some_fun)", Some(fun("fun3", [var_or_fun("some_fun")]))),
             ("fun(12, fun(1, 2))", Some(fun("fun", [num(12.0), fun("fun", [num(1.0), num(2.0)])]))),
             ("fun()", Some(fun("fun", []))),
@@ -656,6 +636,7 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
+    use crate::libraries::storing::InternalFunction;
     use std::collections::{HashMap, HashSet};
 
     #[derive(Debug, Clone)]
@@ -684,8 +665,9 @@ pub mod signature {
             }
             match (&mut *self, new) {
                 (Signature::Number, Signature::Number) => {},
-                (Signature::Function(_), Signature::Number)
-                | (Signature::Number, Signature::Function(_)) => *self = Signature::Conflicting,
+                (Signature::Function(_), Signature::Number) | (Signature::Number, Signature::Function(_)) => {
+                    *self = Signature::Conflicting
+                },
                 (Signature::Function(args_old), Signature::Function(args_new)) => {
                     if args_old.len() != args_new.len() {
                         *self = Signature::Conflicting;
@@ -729,6 +711,33 @@ pub mod signature {
                 _ => false,
             }
         }
+
+        pub fn could_be_internal_fun(&self, internal_fn: &InternalFunction) -> bool {
+            match self {
+                Signature::NumberOrFunction => true,
+                Signature::Number => false,
+                Signature::Conflicting => false,
+                Signature::Function(params) => {
+                    internal_fn.is_param_count_valid(params.len())
+                        && params.iter().all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
+                },
+            }
+        }
+        pub fn get_refined_with_internal_fun(&self, internal_fn: &InternalFunction) -> Signature {
+            match self {
+                Signature::NumberOrFunction => {
+                    Signature::Function(vec![Signature::Number; internal_fn.get_param_count()])
+                },
+                Signature::Number | Signature::Conflicting => Signature::Conflicting,
+                Signature::Function(params) => {
+                    if internal_fn.is_param_count_valid(params.len()) {
+                        Signature::Function(vec![Signature::Number; internal_fn.get_param_count()])
+                    } else {
+                        Signature::Conflicting
+                    }
+                },
+            }
+        }
     }
 
     #[derive(Clone, Debug)]
@@ -747,9 +756,7 @@ pub mod signature {
 
         fn add_all_undefined_symbols_of_formula(&mut self, element: &Element) {
             match element {
-                Element::Brackets(elements)
-                | Element::Plus(elements)
-                | Element::Multiply(elements) => {
+                Element::Brackets(elements) | Element::Plus(elements) | Element::Multiply(elements) => {
                     elements.iter().for_each(|e| self.add_all_undefined_symbols_of_formula(e))
                 },
                 Element::Pow(base, exponent) => {
@@ -797,12 +804,10 @@ pub mod signature {
 
         pub(crate) fn add_symbol_from_function_signature_and_definition(
             &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
+            internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(String, Option<Vec<String>>), String> {
             if self.0.contains_key(&symbol_name_and_args.name) {
-                return Err(format!(
-                    "The formula {} is already defined",
-                    symbol_name_and_args.name
-                ));
+                return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
             let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
@@ -812,10 +817,10 @@ pub mod signature {
                 &mut required_signatures,
                 &content,
                 self,
+                internally_defined,
             )?;
 
             if !required_signatures.0.is_empty() {
-                todo!("Also consider internally defined functions here");
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
                     symbol_name_and_args.name, required_signatures.0
@@ -833,25 +838,31 @@ pub mod signature {
         }
 
         fn refine_signature_and_undefined(
-            symbol_name_and_args: &mut SymbolDeclarationData,
-            undefined_signatures: &mut Signatures, formula: &Element, already_defined: &Signatures,
+            symbol_name_and_args: &mut SymbolDeclarationData, undefined_signatures: &mut Signatures,
+            formula: &Element, already_defined: &Signatures,
+            internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(), String> {
             let parameter_names = symbol_name_and_args
                 .function_args
                 .as_ref()
-                .map(|v| {
-                    let mut set = HashSet::new();
-                    for e in &v.names {
-                        set.insert(e.clone());
-                    }
-                    set
-                })
+                .map(|v| v.names.iter().cloned().collect())
                 .unwrap_or(HashSet::new());
 
             let all_undefined_names =
                 undefined_signatures.0.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
             for name in all_undefined_names {
                 if parameter_names.contains(&name) {
+                    continue;
+                }
+                if let Some(internal_fun) = internally_defined.get(&name) {
+                    if !undefined_signatures.0[&name].could_be_internal_fun(internal_fun) {
+                        return Err(format!(
+                            "The signature of {} is not compatible with the internal function: undefined: {:?} vs internal: {:?}",
+                            name, undefined_signatures.0[&name], internal_fun
+                        ));
+                    }
+                    let new_signature = undefined_signatures.0[&name].get_refined_with_internal_fun(internal_fun);
+                    undefined_signatures.update_signature(&formula, &name, new_signature);
                     continue;
                 }
                 if let Some(already_defined_sig) = already_defined.0.get(&name) {
@@ -863,11 +874,7 @@ pub mod signature {
                             name, undefined_signatures.0[&name], already_defined_sig
                         ));
                     }
-                    undefined_signatures.update_signature(
-                        &formula,
-                        &name,
-                        already_defined_sig.clone(),
-                    )
+                    undefined_signatures.update_signature(&formula, &name, already_defined_sig.clone())
                 }
             }
             if let Some(args) = &mut symbol_name_and_args.function_args {
@@ -878,13 +885,12 @@ pub mod signature {
                 }
             }
             undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
+            undefined_signatures.0.retain(|n, _| !internally_defined.contains_key(n));
             undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
             Ok(())
         }
 
-        fn update_signature(
-            &mut self, formula: &Element, element_to_update: &str, new_signature: Signature,
-        ) {
+        fn update_signature(&mut self, formula: &Element, element_to_update: &str, new_signature: Signature) {
             let Some(signature) = self.0.get_mut(element_to_update) else { return };
             signature.refine_with(new_signature.clone());
 
@@ -938,22 +944,17 @@ pub mod signature {
         }
 
         /// Returns a set of Function names and indices, which parameter is equal to the ```name```
-        fn list_all_functions_with_argument_variable(
-            &self, name: &str, list: &mut HashSet<(String, usize)>,
-        ) {
+        fn list_all_functions_with_argument_variable(&self, name: &str, list: &mut HashSet<(String, usize)>) {
             match self {
                 Element::Function { arguments, name: this_name } => {
-                    for (i, _) in arguments.iter().enumerate().filter(|(_, e)| e.name_matches(name))
-                    {
+                    for (i, _) in arguments.iter().enumerate().filter(|(_, e)| e.name_matches(name)) {
                         list.insert((this_name.clone(), i));
                     }
-                    arguments
-                        .iter()
-                        .for_each(|a| a.list_all_functions_with_argument_variable(name, list))
+                    arguments.iter().for_each(|a| a.list_all_functions_with_argument_variable(name, list))
                 },
-                Element::Plus(elements) | Element::Multiply(elements) => elements
-                    .iter()
-                    .for_each(|a| a.list_all_functions_with_argument_variable(name, list)),
+                Element::Plus(elements) | Element::Multiply(elements) => {
+                    elements.iter().for_each(|a| a.list_all_functions_with_argument_variable(name, list))
+                },
                 Element::Pow(a, b) => {
                     a.list_all_functions_with_argument_variable(name, list);
                     b.list_all_functions_with_argument_variable(name, list);
@@ -974,33 +975,26 @@ pub mod signature {
             match self {
                 Element::Function { arguments, name: this_name } => {
                     if this_name == name {
-                        for (i, arg_name) in arguments
-                            .iter()
-                            .enumerate()
-                            .map(|(i, e)| e.get_name().map(|n| (i, n)))
-                            .flatten()
+                        for (i, arg_name) in
+                            arguments.iter().enumerate().map(|(i, e)| e.get_name().map(|n| (i, n))).flatten()
                         {
                             if arg_name != name {
                                 list.insert((arg_name.to_string(), i));
                             }
                         }
                     }
-                    arguments.iter().for_each(|a| {
-                        a.list_all_function_arguments_where_function_has_name(name, list)
-                    })
+                    arguments
+                        .iter()
+                        .for_each(|a| a.list_all_function_arguments_where_function_has_name(name, list))
                 },
-                Element::Plus(elements) | Element::Multiply(elements) => {
-                    elements.iter().for_each(|e| {
-                        e.list_all_function_arguments_where_function_has_name(name, list)
-                    })
-                },
+                Element::Plus(elements) | Element::Multiply(elements) => elements
+                    .iter()
+                    .for_each(|e| e.list_all_function_arguments_where_function_has_name(name, list)),
                 Element::Pow(a, b) => {
                     a.list_all_function_arguments_where_function_has_name(name, list);
                     b.list_all_function_arguments_where_function_has_name(name, list);
                 },
-                Element::Negate(e) => {
-                    e.list_all_function_arguments_where_function_has_name(name, list)
-                },
+                Element::Negate(e) => e.list_all_function_arguments_where_function_has_name(name, list),
                 Element::Brackets(_)
                 | Element::String(_)
                 | Element::Number(_)
@@ -1023,10 +1017,7 @@ pub mod signature {
 
     impl FunctionDeclarationArguments {
         fn get_signatures_in_right_order(&self) -> Vec<Signature> {
-            self.names
-                .iter()
-                .map(|name| self.signatures.0.get(name).unwrap().clone())
-                .collect::<Vec<_>>()
+            self.names.iter().map(|name| self.signatures.0.get(name).unwrap().clone()).collect::<Vec<_>>()
         }
     }
 

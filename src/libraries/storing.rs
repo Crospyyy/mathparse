@@ -2,18 +2,73 @@ use crate::Element;
 use crate::libraries::parsing::signature::{Signatures, SymbolDeclarationData};
 use std::collections::HashMap;
 
-pub type InternalFunctionDefinition = fn(Vec<f64>) -> Result<f64, String>;
+impl InternalFunction {
+    pub fn new_with_one_parameter(definition: fn(f64) -> f64) -> Self {
+        Self::OneParameter(definition)
+    }
+    pub fn new_with_n_parameters(n: usize, definition: fn(Vec<f64>) -> f64) -> Self {
+        Self::NParameters(n, definition)
+    }
+    pub fn new_with_n_or_more_parameters(n: usize, definition: fn(Vec<f64>) -> f64) -> Self {
+        Self::NOrMoreParameters(n, definition)
+    }
+
+    pub fn is_param_count_valid(&self, param_count: usize) -> bool {
+        match self {
+            InternalFunction::OneParameter(_) => param_count == 1,
+            InternalFunction::NParameters(n, _) => param_count == *n,
+            InternalFunction::NOrMoreParameters(n, _) => param_count >= *n,
+        }
+    }
+
+    fn verify_parameter_count(&self, param_count: usize) -> Result<(), String> {
+        self.is_param_count_valid(param_count).then_some(()).ok_or(match self {
+            InternalFunction::OneParameter(_) => {
+                format!("Expected one argument, got {}", param_count)
+            },
+            InternalFunction::NParameters(n, _) => {
+                format!("Expected {} argument{}, got {}", *n, if *n == 1 { "" } else { "s" }, param_count)
+            },
+            InternalFunction::NOrMoreParameters(n, _) => {
+                format!("Expected {} or more arguments, got {}", *n, param_count)
+            },
+        })
+    }
+
+    pub fn call(&self, args: Vec<f64>) -> Result<f64, String> {
+        self.verify_parameter_count(args.len())?;
+        Ok(match self {
+            InternalFunction::OneParameter(fun) => fun(args[0]),
+            InternalFunction::NParameters(_, fun) => fun(args),
+            InternalFunction::NOrMoreParameters(_, fun) => fun(args),
+        })
+    }
+
+    pub fn get_param_count(&self) -> usize {
+        match self {
+            InternalFunction::OneParameter(_) => 1,
+            InternalFunction::NParameters(n, _) | InternalFunction::NOrMoreParameters(n, _) => *n,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum InternalFunction {
+    OneParameter(fn(f64) -> f64),
+    NParameters(usize, fn(Vec<f64>) -> f64),
+    NOrMoreParameters(usize, fn(Vec<f64>) -> f64),
+}
 
 pub struct FormulaStore {
     signatures: Signatures,
     formulas: HashMap<String, Element>,
     parameter_mappings: HashMap<String, Option<Vec<String>>>,
-    pub(super) internal_function_definitions: HashMap<String, InternalFunctionDefinition>,
+    pub(super) internal_function_definitions: HashMap<String, InternalFunction>,
 }
 
 impl FormulaStore {
     pub fn define_internal_function(
-        &mut self, name: &str, definition: InternalFunctionDefinition,
+        &mut self, name: &str, internal_function: InternalFunction,
     ) -> Result<(), String> {
         if self.internal_function_definitions.contains_key(name) {
             return Err(format!("Internal function definition with key `{}` already exists", name));
@@ -21,80 +76,50 @@ impl FormulaStore {
         if self.formulas.contains_key(name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
-        self.internal_function_definitions.insert(name.to_string(), definition);
+        self.internal_function_definitions.insert(name.to_string(), internal_function);
         Ok(())
     }
 
     pub fn define_default_internal_functions(&mut self) -> Result<(), String> {
-        self.define_internal_function("sin", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].sin())
-        })?;
-        self.define_internal_function("cos", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].cos())
-        })?;
-        self.define_internal_function("tan", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].tan())
-        })?;
-        self.define_internal_function("asin", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].asin())
-        })?;
-        self.define_internal_function("acos", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].acos())
-        })?;
-        self.define_internal_function("atan", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].atan())
-        })?;
-        self.define_internal_function("sqrt", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].sqrt())
-        })?;
-        self.define_internal_function("abs", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].abs())
-        })?;
-        self.define_internal_function("log2", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].log2())
-        })?;
-        self.define_internal_function("log10", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].log10())
-        })?;
-        self.define_internal_function("ln", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].ln())
-        })?;
-        self.define_internal_function("avg", |args| {
-            expect_one_or_more_arguments(args.len())?;
-            Ok(args.iter().sum::<f64>() / args.len() as f64)
-        })?;
-        self.define_internal_function("max", |args| {
-            expect_one_or_more_arguments(args.len())?;
-            Ok(args.iter().copied().max_by(|a, b| a.total_cmp(b)).unwrap())
-        })?;
-        self.define_internal_function("min", |args| {
-            expect_one_or_more_arguments(args.len())?;
-            Ok(args.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap())
-        })?;
-        self.define_internal_function("sum", |args| Ok(args.iter().sum::<f64>()))?;
-        self.define_internal_function("floor", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].floor())
-        })?;
-        self.define_internal_function("ceil", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].ceil())
-        })?;
-        self.define_internal_function("round", |args| {
-            expect_n_arguments(1, args.len())?;
-            Ok(args[0].round())
-        })?;
+        self.define_internal_function("sin", InternalFunction::new_with_one_parameter(f64::sin))?;
+        self.define_internal_function("cos", InternalFunction::new_with_one_parameter(f64::cos))?;
+        self.define_internal_function("tan", InternalFunction::new_with_one_parameter(f64::tan))?;
+
+        self.define_internal_function("asin", InternalFunction::new_with_one_parameter(f64::asin))?;
+        self.define_internal_function("acos", InternalFunction::new_with_one_parameter(f64::acos))?;
+        self.define_internal_function("atan", InternalFunction::new_with_one_parameter(f64::atan))?;
+
+        self.define_internal_function("sqrt", InternalFunction::new_with_one_parameter(f64::sqrt))?;
+        self.define_internal_function("abs", InternalFunction::new_with_one_parameter(f64::abs))?;
+        self.define_internal_function("log2", InternalFunction::new_with_one_parameter(f64::log2))?;
+        self.define_internal_function("log10", InternalFunction::new_with_one_parameter(f64::log10))?;
+        self.define_internal_function("ln", InternalFunction::new_with_one_parameter(f64::ln))?;
+        self.define_internal_function("floor", InternalFunction::new_with_one_parameter(f64::floor))?;
+        self.define_internal_function("ceil", InternalFunction::new_with_one_parameter(f64::ceil))?;
+        self.define_internal_function("round", InternalFunction::new_with_one_parameter(f64::round))?;
+
+        self.define_internal_function(
+            "avg",
+            InternalFunction::new_with_n_or_more_parameters(1, |args| {
+                args.iter().sum::<f64>() / args.len() as f64
+            }),
+        )?;
+        self.define_internal_function(
+            "max",
+            InternalFunction::new_with_n_or_more_parameters(1, |args| {
+                args.iter().copied().max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0)
+            }),
+        )?;
+        self.define_internal_function(
+            "min",
+            InternalFunction::new_with_n_or_more_parameters(1, |args| {
+                args.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap_or(0.0)
+            }),
+        )?;
+        self.define_internal_function(
+            "sum",
+            InternalFunction::new_with_n_or_more_parameters(0, |args| args.iter().sum::<f64>()),
+        )?;
         Ok(())
     }
 
@@ -102,19 +127,6 @@ impl FormulaStore {
         self.add_variable_with_value("pi", std::f64::consts::PI)?;
         self.add_variable_with_value("e", std::f64::consts::E)?;
         Ok(())
-    }
-}
-
-fn expect_n_arguments(expected: usize, got: usize) -> Result<(), String> {
-    if expected == got {
-        Ok(())
-    } else {
-        Err(format!(
-            "Expected {} argument{}, got {}",
-            expected,
-            if expected == 1 { "" } else { "s" },
-            got
-        ))
     }
 }
 
@@ -149,9 +161,7 @@ impl FormulaStore {
         self.add_symbol_from_sig_and_def(sig, def)
     }
 
-    fn add_symbol_from_sig_and_def(
-        &mut self, sig: Element, def: Element,
-    ) -> Result<String, String> {
+    fn add_symbol_from_sig_and_def(&mut self, sig: Element, def: Element) -> Result<String, String> {
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 
         if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
@@ -162,7 +172,7 @@ impl FormulaStore {
         }
         match self
             .signatures
-            .add_symbol_from_function_signature_and_definition(symbol_name_and_args, def.clone())
+            .add_symbol_from_function_signature_and_definition(symbol_name_and_args, def.clone(), &self.internal_function_definitions)
         {
             Ok((name, arg_names)) => {
                 self.formulas.insert(name.clone(), def);
@@ -180,19 +190,13 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
-    pub(crate) fn get_insertion_element_expanded(
-        &self, name: &str,
-    ) -> Result<InsertionElement, String> {
+    pub(crate) fn get_insertion_element_expanded(&self, name: &str) -> Result<InsertionElement, String> {
         let arguments =
             self.parameter_mappings.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
-        let mut formula =
-            self.formulas.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
+        let mut formula = self.formulas.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
         let original_formula = formula.clone();
 
-        self.expand_formula(
-            &mut formula,
-            &arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect(),
-        )?;
+        self.expand_formula(&mut formula, &arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect())?;
 
         Ok(InsertionElement { name: name.to_string(), arguments, formula })
     }
@@ -240,7 +244,10 @@ impl InsertionElement {
             if insert_args.len() != self_arguments.len() {
                 dbg!(insert_args);
                 dbg!(self_arguments);
-                return Err("The function used in the formula and the supplied function have different parameter counts".to_owned());
+                return Err(
+                    "The function used in the formula and the supplied function have different parameter counts"
+                        .to_owned(),
+                );
             }
             let mut new_formula = self.formula.clone();
             for (in_arg, val) in insert_args.iter().zip(self_arguments) {

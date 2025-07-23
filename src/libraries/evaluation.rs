@@ -1,5 +1,5 @@
 use crate::Element;
-use crate::libraries::storing::{FormulaStore, InternalFunctionDefinition};
+use crate::libraries::storing::{FormulaStore, InternalFunction};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq)]
@@ -61,7 +61,7 @@ impl Element {
         }
     }
     pub fn eval_with_formulas(
-        &self, formulas: &HashMap<String, InternalFunctionDefinition>,
+        &self, formulas: &HashMap<String, InternalFunction>,
     ) -> Result<f64, String> {
         match self {
             Element::Function { name, arguments } => {
@@ -72,7 +72,7 @@ impl Element {
                     .iter()
                     .map(|a| a.eval_with_formulas(formulas))
                     .collect::<Result<Vec<_>, String>>()?;
-                formula(arguments_evaluated)
+                formula.call(arguments_evaluated)
                     .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
             },
 
@@ -107,7 +107,7 @@ impl Element {
         }
     }
     pub fn safe_eval_with_formulas(
-        &self, formulas: &HashMap<String, InternalFunctionDefinition>,
+        &self, formulas: &HashMap<String, InternalFunction>,
     ) -> Result<EvaluationResult, String> {
         let mut data_loss = false;
         match self {
@@ -119,7 +119,7 @@ impl Element {
                     .iter()
                     .map(|a| a.safe_eval_with_formulas(formulas))
                     .collect::<Result<Vec<_>, String>>()?;
-                formula(arguments_evaluated.iter().map(|r| r.value()).collect())
+                formula.call(arguments_evaluated.iter().map(|r| r.value()).collect())
                     .map(|r| EvaluationResult::new(r, true))
                     .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
             },
