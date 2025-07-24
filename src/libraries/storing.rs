@@ -199,7 +199,9 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
-    pub(crate) fn get_insertion_element_expanded(&self, name: &str, ignore_names: &HashSet<String>) -> Result<InsertionElement, String> {
+    pub(crate) fn get_insertion_element_expanded(
+        &self, name: &str, ignore_names: &HashSet<String>,
+    ) -> Result<InsertionElement, String> {
         let arguments =
             self.parameter_mappings.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
         let mut formula = self.formulas.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();

@@ -639,6 +639,7 @@ pub mod signature {
     use crate::libraries::storing::InternalFunction;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
+    use std::ops::{Deref, DerefMut};
 
     #[derive(Debug, Clone)]
     pub enum Signature {
@@ -725,6 +726,20 @@ pub mod signature {
     #[derive(Clone, Debug)]
     pub struct Signatures(pub(crate) HashMap<String, Signature>);
 
+    impl Deref for Signatures {
+        type Target = HashMap<String, Signature>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl DerefMut for Signatures {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
     impl Signatures {
         pub(crate) fn new_empty() -> Self {
             Signatures(HashMap::new())
@@ -741,7 +756,7 @@ pub mod signature {
                 internally_defined.iter().map(|item| (item.0.clone(), item.1.get_signature())).collect(),
             );
             all_undefined.add_all_undefined_symbols_of_formula(formula);
-            all_undefined.0.retain(|_, sig| !matches!(sig, Signature::InternalFunction(_))); // remove the internal functions again
+            all_undefined.retain(|_, sig| !matches!(sig, Signature::InternalFunction(_))); // remove the internal functions again
             // todo update all of the signatures based on them having relationships with other symbols (use `update_signature` method for every entry in `all_undefined`)
             all_undefined
         }
@@ -787,10 +802,10 @@ pub mod signature {
         }
 
         fn insert_or_replace_symbol(&mut self, name: &String, val: Signature) {
-            if let Some(entry) = self.0.get_mut(name) {
+            if let Some(entry) = self.get_mut(name) {
                 entry.refine_with(val)
             } else {
-                self.0.insert(name.clone(), val);
+                self.insert(name.clone(), val);
             }
         }
 
@@ -798,7 +813,7 @@ pub mod signature {
             &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
             internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(String, Option<Vec<String>>), String> {
-            if self.0.contains_key(&symbol_name_and_args.name) {
+            if self.contains_key(&symbol_name_and_args.name) {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
@@ -814,7 +829,7 @@ pub mod signature {
                 internally_defined,
             )?;
 
-            if !required_signatures.0.is_empty() {
+            if !required_signatures.is_empty() {
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
                     symbol_name_and_args.name, required_signatures.0
@@ -826,7 +841,7 @@ pub mod signature {
             } else {
                 Signature::Number
             };
-            self.0.insert(symbol_name_and_args.name.clone(), signature);
+            self.insert(symbol_name_and_args.name.clone(), signature);
 
             Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
         }
@@ -844,7 +859,7 @@ pub mod signature {
                 .unwrap_or(HashSet::new());
 
             let all_undefined_names =
-                undefined_signatures.0.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
+                undefined_signatures.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
             for name in all_undefined_names {
                 if parameter_names.contains(&name) {
                     continue;
@@ -859,7 +874,7 @@ pub mod signature {
                     undefined_signatures.update_signature(&formula, &name, internal_fun.get_signature());
                     continue;
                 }
-                if let Some(already_defined_sig) = already_defined.0.get(&name) {
+                if let Some(already_defined_sig) = already_defined.get(&name) {
                     if !undefined_signatures.0[&name].could_be(already_defined_sig)
                         && !already_defined_sig.could_be(&undefined_signatures.0[&name])
                     {
@@ -873,19 +888,19 @@ pub mod signature {
             }
             if let Some(args) = &mut symbol_name_and_args.function_args {
                 for (param_name, param_sig) in &mut args.signatures.0 {
-                    if let Some(var_sig_in_body) = undefined_signatures.0.get(param_name) {
+                    if let Some(var_sig_in_body) = undefined_signatures.get(param_name) {
                         param_sig.refine_with(var_sig_in_body.clone())
                     }
                 }
             }
-            undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
-            undefined_signatures.0.retain(|n, _| !internally_defined.contains_key(n));
-            undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
+            undefined_signatures.retain(|n, _| !parameter_names.contains(n));
+            undefined_signatures.retain(|n, _| !internally_defined.contains_key(n));
+            undefined_signatures.retain(|n, _| !already_defined.contains_key(n));
             Ok(())
         }
 
         fn update_signature(&mut self, formula: &Element, element_to_update: &str, new_signature: Signature) {
-            let Some(signature) = self.0.get_mut(element_to_update) else { return };
+            let Some(signature) = self.get_mut(element_to_update) else { return };
             signature.refine_with(new_signature.clone());
             dbg!(&signature);
 
@@ -913,7 +928,7 @@ pub mod signature {
                 );
                 for (param_name, param_index) in all_params_of_function_type {
                     let new_arg_signature = args[param_index].clone();
-                    self.0.get_mut(&param_name).unwrap().refine_with(new_arg_signature);
+                    self.get_mut(&param_name).unwrap().refine_with(new_arg_signature);
                 }
             }
         }
@@ -1016,7 +1031,7 @@ pub mod signature {
 
     impl FunctionDeclarationArguments {
         fn get_signatures_in_right_order(&self) -> Vec<Signature> {
-            self.names.iter().map(|name| self.signatures.0.get(name).unwrap().clone()).collect::<Vec<_>>()
+            self.names.iter().map(|name| self.signatures.get(name).unwrap().clone()).collect::<Vec<_>>()
         }
     }
 
@@ -1038,7 +1053,7 @@ pub mod signature {
                     for arg in arguments {
                         if let Element::VariableOrFunction(name) = arg {
                             fn_args.names.push(name.clone());
-                            fn_args.signatures.0.insert(name.clone(), Signature::NumberOrFunction);
+                            fn_args.signatures.insert(name.clone(), Signature::NumberOrFunction);
                         } else {
                             return Err("Invalid argument in function signature".to_string());
                         }
