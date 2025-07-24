@@ -2,9 +2,11 @@ use crate::application::logic::run_formula_evaluator;
 
 mod application;
 mod libraries;
+mod gui_application;
 
 fn main() {
-    run_formula_evaluator();
+    gui_application::main();
+    // run_formula_evaluator();
 }
 
 #[derive(Debug, Clone, PartialEq)]

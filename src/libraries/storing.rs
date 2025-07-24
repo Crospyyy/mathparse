@@ -1,5 +1,5 @@
-use crate::Element;
 use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
+use crate::Element;
 use std::collections::{HashMap, HashSet};
 
 impl InternalFunction {
@@ -132,8 +132,8 @@ impl FormulaStore {
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
-        self.add_variable_with_value("pi", std::f64::consts::PI)?;
-        self.add_variable_with_value("e", std::f64::consts::E)?;
+        self.add_variable_with_value("pi", std::f64::consts::PI, false)?;
+        self.add_variable_with_value("e", std::f64::consts::E, false)?;
         Ok(())
     }
 }
@@ -152,24 +152,29 @@ impl FormulaStore {
         }
     }
 
-    pub(crate) fn add_symbol_from_string(&mut self, string: &str) -> Result<String, String> {
+    pub(crate) fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<String, String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
         let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
 
-        self.add_symbol_from_sig_and_def(sig, def)
+        self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
 
-    pub fn add_variable_with_value(&mut self, name: &str, value: f64) -> Result<String, String> {
+    pub fn add_variable_with_value(
+        &mut self, name: &str, value: f64, dry_run: bool,
+    ) -> Result<String, String> {
         let sig = Element::parse(name).ok_or("First formula could not be parsed")?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
             return Err("Signature must be a variable".to_owned());
         }
         let def = Element::Number(value);
-        self.add_symbol_from_sig_and_def(sig, def)
+
+        self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
 
-    fn add_symbol_from_sig_and_def(&mut self, sig: Element, def: Element) -> Result<String, String> {
+    fn add_symbol_from_sig_and_def(
+        &mut self, sig: Element, def: Element, dry_run: bool,
+    ) -> Result<String, String> {
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 
         if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
@@ -182,6 +187,7 @@ impl FormulaStore {
             symbol_name_and_args,
             def.clone(),
             &self.internal_function_definitions,
+            dry_run,
         ) {
             Ok((name, arg_names)) => {
                 self.formulas.insert(name.clone(), def);
@@ -221,9 +227,9 @@ impl FormulaStore {
 #[test]
 pub fn test_get_insertion_element_expanded() {
     let mut store = FormulaStore::new_empty();
-    store.add_symbol_from_string("f(i)=i^2").unwrap();
-    store.add_symbol_from_string("g(x)=f(x+1)").unwrap();
-    store.add_symbol_from_string("h(x)=g(x)-3").unwrap();
+    store.add_symbol_from_string("f(i)=i^2", false).unwrap();
+    store.add_symbol_from_string("g(x)=f(x+1)", false).unwrap();
+    store.add_symbol_from_string("h(x)=g(x)-3", false).unwrap();
     let insert = store.get_insertion_element_expanded("h", &HashSet::new()).unwrap();
     dbg!(insert);
 }
@@ -231,9 +237,9 @@ pub fn test_get_insertion_element_expanded() {
 pub fn test_insert_formula() {
     use crate::formula_short::{plus, var};
     let mut store = FormulaStore::new_empty();
-    store.add_symbol_from_string("fun(f,x,y)=f(x,y)").unwrap();
-    store.add_symbol_from_string("add(x,y)=x+y").unwrap();
-    store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)").unwrap();
+    store.add_symbol_from_string("fun(f,x,y)=f(x,y)", false).unwrap();
+    store.add_symbol_from_string("add(x,y)=x+y", false).unwrap();
+    store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)", false).unwrap();
     let insert = store.get_insertion_element_expanded("fun2", &HashSet::new()).unwrap();
     assert_eq!(insert.name, "fun2");
     assert_eq!(insert.arguments, Some(vec!["x".to_string(), "y".to_string()]));
@@ -433,17 +439,17 @@ fn test_storing() {
     println!("### Test storing formulas ###");
 
     let mut store = FormulaStore::new_empty();
-    assert_eq!(store.add_symbol_from_string("f=123"), Ok("f".to_owned()));
-    assert!(matches!(store.add_symbol_from_string("1=1"), Err(_)));
-    assert!(matches!(store.add_symbol_from_string("f=1"), Err(_)));
-    assert!(matches!(store.add_symbol_from_string("x"), Err(_)));
+    assert_eq!(store.add_symbol_from_string("f=123", false), Ok("f".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("1=1", false), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("f=1", false), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("x", false), Err(_)));
 
-    assert!(matches!(store.add_symbol_from_string("g(l)=x^2"), Err(_)));
-    assert_eq!(store.add_symbol_from_string("g(g)=g^2"), Ok("g".to_owned()));
-    assert!(matches!(store.add_symbol_from_string("g=2"), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("g(l)=x^2", false), Err(_)));
+    assert_eq!(store.add_symbol_from_string("g(g)=g^2", false), Ok("g".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("g=2", false), Err(_)));
 
-    assert_eq!(store.add_symbol_from_string("f2(f)=f*3"), Ok("f2".to_owned()));
-    assert!(matches!(store.add_symbol_from_string("f3=f2()"), Err(_)));
+    assert_eq!(store.add_symbol_from_string("f2(f)=f*3", false), Ok("f2".to_owned()));
+    assert!(matches!(store.add_symbol_from_string("f3=f2()", false), Err(_)));
 
     let result = store.eval("f");
     assert_eq!(result, Ok(123.0));
@@ -452,11 +458,11 @@ fn test_storing() {
     assert_eq!(store.eval("g(2)"), Ok(4.0));
     assert_eq!(store.eval("f2(2)"), Ok(6.0));
 
-    assert_eq!(store.add_symbol_from_string("add(a,b)=a+b"), Ok("add".to_owned()));
-    assert_eq!(store.add_symbol_from_string("mul(a,b)=a*b"), Ok("mul".to_owned()));
-    assert_eq!(store.add_symbol_from_string("div(a,b)=a/b"), Ok("div".to_owned()));
+    assert_eq!(store.add_symbol_from_string("add(a,b)=a+b", false), Ok("add".to_owned()));
+    assert_eq!(store.add_symbol_from_string("mul(a,b)=a*b", false), Ok("mul".to_owned()));
+    assert_eq!(store.add_symbol_from_string("div(a,b)=a/b", false), Ok("div".to_owned()));
     assert!(matches!(store.eval("add(1,2)"), Ok(3.0)));
-    assert_eq!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)"), Ok("run".to_owned()));
+    assert_eq!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)", false), Ok("run".to_owned()));
     assert_eq!(store.eval("run(1, 2, add)"), Ok(3.0));
     assert_eq!(store.eval("run(1, 2, mul)"), Ok(2.0));
     assert_eq!(store.eval("run(1, 2, div)"), Ok(0.5));

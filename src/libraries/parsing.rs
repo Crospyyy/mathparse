@@ -812,6 +812,7 @@ pub mod signature {
         pub(crate) fn add_symbol_from_function_signature_and_definition(
             &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
             internally_defined: &HashMap<String, InternalFunction>,
+            dry_run: bool,
         ) -> Result<(String, Option<Vec<String>>), String> {
             if self.contains_key(&symbol_name_and_args.name) {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
@@ -840,7 +841,9 @@ pub mod signature {
             } else {
                 Signature::Number
             };
-            self.insert(symbol_name_and_args.name.clone(), signature);
+            if !dry_run {
+                self.insert(symbol_name_and_args.name.clone(), signature);
+            }
 
             Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
         }
@@ -1104,12 +1107,12 @@ pub mod signature {
     fn test_symbols() {
         use crate::libraries::storing::FormulaStore;
         let mut all = FormulaStore::new_empty();
-        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b"), Ok("fun".to_owned()));
-        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b"), Err(_)));
+        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
+        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
         println!("{:?}", all.get_signatures());
-        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c"), Ok("fun2".to_owned()));
+        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c", false), Ok("fun2".to_owned()));
         println!("{:?}", all.get_signatures());
-        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)");
+        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)", false);
         println!("{:?}", result);
         assert_eq!(result, Ok("fun3".to_owned()));
         println!("{:?}", all.get_signatures());

@@ -212,8 +212,8 @@ impl FormulaStore {
 #[test]
 fn test_eval_formula_store() {
     let mut store = FormulaStore::new_empty();
-    store.add_symbol_from_string("f(x)=x^2").unwrap();
-    store.add_symbol_from_string("a=4").unwrap();
+    store.add_symbol_from_string("f(x)=x^2", false).unwrap();
+    store.add_symbol_from_string("a=4", false).unwrap();
     assert_eq!(store.eval("f(a)").unwrap(), 16.0);
 }
 
@@ -221,7 +221,7 @@ fn test_eval_formula_store() {
 fn test_internal_function_definitions() {
     let mut store = FormulaStore::new_empty();
     store.define_default_internal_functions().unwrap();
-    assert!(matches!(store.add_symbol_from_string("sin(x)=x"), Err(_)));
+    assert!(matches!(store.add_symbol_from_string("sin(x)=x", false), Err(_)));
 
     assert_eq!(store.eval("sin(123)"), Ok(123f64.sin()));
     assert_eq!(store.safe_eval("sin(123)"), Ok(EvaluationResult::with_loss(123f64.sin())));
@@ -270,16 +270,16 @@ fn test_define_functions_with_internal_function_definitions() {
     let mut store = FormulaStore::new_empty();
     store.define_default_internal_functions().unwrap();
 
-    store.add_symbol_from_string("f(x)=sin(x)").unwrap();
-    assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)"), Err(_)));
-    store.add_symbol_from_string("g(x)=f(x)+cos(x)").unwrap();
+    store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
+    assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
+    store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
 
     assert_eq!(store.eval("f(0)").unwrap(), 0f64.sin());
     assert_eq!(store.eval("g(0)").unwrap(), 0f64.cos());
 
-    store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)").unwrap();
+    store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
     assert_eq!(store.eval("good_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0);
-    store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)").unwrap();
+    store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
     assert_eq!(store.eval("weird_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0 + 1.0);
 }
 

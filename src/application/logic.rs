@@ -14,7 +14,7 @@ pub fn run_formula_evaluator() {
         let _ = stdin().read_line(&mut line);
         line = line.trim().to_string();
         if line.contains('=') {
-            let result = store.add_symbol_from_string(&line);
+            let result = store.add_symbol_from_string(&line, false);
             match result {
                 Ok(name) => println!("Added new symbol '{}'", name),
                 Err(s) => println!("Error: {}", s),
