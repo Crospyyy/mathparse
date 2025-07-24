@@ -1,5 +1,5 @@
-use crate::Element;
 use crate::libraries::storing::{FormulaStore, InternalFunction};
+use crate::Element;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq)]
@@ -176,9 +176,14 @@ impl Element {
 
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
+        dbg!("Parsing formula: {}", &name);
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
+        dbg!("Parsed formula: {:?}", &formula);
         let dont_expand = self.internal_function_definitions.keys().cloned().collect();
+        dbg!("Expanding formula with internal functions: {:?}", &dont_expand);
         self.expand_formula(&mut formula, &dont_expand)?;
+        dbg!("Expanded formula: {:?}", &formula);
+        dbg!("Evaluating formula with internal functions: {:?}", &self.internal_function_definitions);
         formula.eval_with_formulas(&self.internal_function_definitions)
     }
     pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
@@ -193,12 +198,16 @@ impl FormulaStore {
         let mut all_names = HashSet::new();
 
         loop {
+            let before = all_names.clone();
             all_names.clear();
             formula.get_all_names(&mut all_names);
             all_names = all_names.difference(ignore_names).cloned().collect();
 
             if all_names.is_empty() {
                 break;
+            }
+            if all_names == before {
+                return Err("Formula cannot be expanded".to_owned());
             }
             for name in all_names.iter() {
                 formula.insert_symbol(&self.get_insertion_element_expanded(name, ignore_names)?)?;
