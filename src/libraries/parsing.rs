@@ -160,7 +160,12 @@ pub mod implementation {
                 Element::Brackets(elements) => {
                     if let Some(Element::String(str)) = elements.first() {
                         if str.starts_with('-') {
-                            elements[0] = Element::String(str[1..].to_owned());
+                            let new_string = str[1..].to_owned();
+                            if new_string.is_empty() {
+                                elements.remove(0);
+                            } else {
+                                elements[0] = Element::String(new_string);
+                            }
                             *self = Element::Negate(Box::new(self.clone()));
                         }
                     } else {
@@ -569,6 +574,7 @@ pub mod testing {
             ("fun3(some_fun)", Some(fun("fun3", [var_or_fun("some_fun")]))),
             ("fun(12, fun(1, 2))", Some(fun("fun", [num(12.0), fun("fun", [num(1.0), num(2.0)])]))),
             ("fun()", Some(fun("fun", []))),
+            ("fun()-fun()", Some(plus([fun("fun", []), neg(fun("fun", []))]))),
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(|(i, o)| test_formula_parsing(i, o));
@@ -811,8 +817,7 @@ pub mod signature {
 
         pub(crate) fn add_symbol_from_function_signature_and_definition(
             &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
-            internally_defined: &HashMap<String, InternalFunction>,
-            dry_run: bool,
+            internally_defined: &HashMap<String, InternalFunction>, dry_run: bool,
         ) -> Result<(String, Option<Vec<String>>), String> {
             if self.contains_key(&symbol_name_and_args.name) {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
