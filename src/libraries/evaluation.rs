@@ -251,6 +251,21 @@ fn test_internal_function_definitions() {
     assert_eq!(store.eval("round(-123.789)").unwrap(), -124.0);
 }
 
+#[test]
+fn test_define_functions_with_internal_function_definitions() {
+    let mut store = FormulaStore::new_empty();
+    store.define_default_internal_functions().unwrap();
+
+    store.add_symbol_from_string("f(x)=sin(x)").unwrap();
+    store.add_symbol_from_string("g(x)=f(x)+cos(x)").unwrap();
+
+    assert_eq!(store.eval("f(0)").unwrap(), 0f64.sin());
+    assert_eq!(store.eval("g(0)").unwrap(), 0f64.cos());
+
+    store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)").unwrap();
+    assert_eq!(store.eval("weird_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0 + 1.0);
+}
+
 impl Element {
     pub(crate) fn get_all_names(&self, names: &mut HashSet<String>) {
         match self {

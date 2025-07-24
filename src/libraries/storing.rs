@@ -1,5 +1,5 @@
 use crate::Element;
-use crate::libraries::parsing::signature::{Signatures, SymbolDeclarationData};
+use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use std::collections::HashMap;
 
 impl InternalFunction {
@@ -48,6 +48,14 @@ impl InternalFunction {
         match self {
             InternalFunction::OneParameter(_) => 1,
             InternalFunction::NParameters(n, _) | InternalFunction::NOrMoreParameters(n, _) => *n,
+        }
+    }
+
+    pub fn get_signature(&self) -> Signature {
+        match self {
+            InternalFunction::OneParameter(_) => Signature::InternalFunction(ParamCount::Exactly(1)),
+            InternalFunction::NParameters(n, _) => Signature::InternalFunction(ParamCount::Exactly(*n)),
+            InternalFunction::NOrMoreParameters(n, _) => Signature::InternalFunction(ParamCount::AtLeast(*n)),
         }
     }
 }
