@@ -215,6 +215,7 @@ fn test_eval_formula_store() {
     store.add_symbol_from_string("f(x)=x^2", false).unwrap();
     store.add_symbol_from_string("a=4", false).unwrap();
     assert_eq!(store.eval("f(a)").unwrap(), 16.0);
+    assert!(store.eval("f").is_err());
 }
 
 #[test]
