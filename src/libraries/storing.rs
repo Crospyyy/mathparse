@@ -1,6 +1,6 @@
 use crate::Element;
-use crate::libraries::parsing::signature::{Signatures, SymbolDeclarationData};
-use std::collections::HashMap;
+use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
+use std::collections::{HashMap, HashSet};
 
 impl InternalFunction {
     pub fn new_with_one_parameter(definition: fn(f64) -> f64) -> Self {
@@ -48,6 +48,14 @@ impl InternalFunction {
         match self {
             InternalFunction::OneParameter(_) => 1,
             InternalFunction::NParameters(n, _) | InternalFunction::NOrMoreParameters(n, _) => *n,
+        }
+    }
+
+    pub fn get_signature(&self) -> Signature {
+        match self {
+            InternalFunction::OneParameter(_) => Signature::InternalFunction(ParamCount::Exactly(1)),
+            InternalFunction::NParameters(n, _) => Signature::InternalFunction(ParamCount::Exactly(*n)),
+            InternalFunction::NOrMoreParameters(n, _) => Signature::InternalFunction(ParamCount::AtLeast(*n)),
         }
     }
 }
@@ -191,13 +199,15 @@ impl FormulaStore {
             formula: self.formulas.get(name)?.clone(),
         })
     }
-    pub(crate) fn get_insertion_element_expanded(&self, name: &str) -> Result<InsertionElement, String> {
+    pub(crate) fn get_insertion_element_expanded(
+        &self, name: &str, ignore_names: &HashSet<String>,
+    ) -> Result<InsertionElement, String> {
         let arguments =
             self.parameter_mappings.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
         let mut formula = self.formulas.get(name).ok_or(format!("Symbol `{name}` not found"))?.clone();
-        let original_formula = formula.clone();
 
-        self.expand_formula(&mut formula, &arguments.as_ref().unwrap_or(&vec![]).iter().cloned().collect())?;
+        let params_hashset = HashSet::from_iter(arguments.iter().flatten().cloned());
+        self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
 
         Ok(InsertionElement { name: name.to_string(), arguments, formula })
     }
@@ -214,7 +224,7 @@ pub fn test_get_insertion_element_expanded() {
     store.add_symbol_from_string("f(i)=i^2").unwrap();
     store.add_symbol_from_string("g(x)=f(x+1)").unwrap();
     store.add_symbol_from_string("h(x)=g(x)-3").unwrap();
-    let insert = store.get_insertion_element_expanded("h").unwrap();
+    let insert = store.get_insertion_element_expanded("h", &HashSet::new()).unwrap();
     dbg!(insert);
 }
 #[test]
@@ -224,7 +234,7 @@ pub fn test_insert_formula() {
     store.add_symbol_from_string("fun(f,x,y)=f(x,y)").unwrap();
     store.add_symbol_from_string("add(x,y)=x+y").unwrap();
     store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)").unwrap();
-    let insert = store.get_insertion_element_expanded("fun2").unwrap();
+    let insert = store.get_insertion_element_expanded("fun2", &HashSet::new()).unwrap();
     assert_eq!(insert.name, "fun2");
     assert_eq!(insert.arguments, Some(vec!["x".to_string(), "y".to_string()]));
     assert_eq!(insert.formula, plus([var("x"), var("y")]));

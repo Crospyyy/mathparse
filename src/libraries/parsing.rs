@@ -500,8 +500,8 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::Element;
     use crate::formula_short::*;
+    use crate::Element;
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -635,39 +635,42 @@ pub mod testing {
 }
 
 pub mod signature {
-    use crate::Element;
     use crate::libraries::storing::InternalFunction;
+    use crate::Element;
+    use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
+    use std::ops::{Deref, DerefMut};
 
     #[derive(Debug, Clone)]
     pub enum Signature {
         NumberOrFunction,
         Number,
         Function(Vec<Signature>),
+        /// This Function only takes numbers as parameters
+        InternalFunction(ParamCount),
         Conflicting,
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    pub enum ParamCount {
+        Exactly(usize),
+        AtLeast(usize),
+    }
+
+    impl ParamCount {
+        pub(crate) fn number_would_be_valid(&self, param_count: usize) -> bool {
+            match self {
+                ParamCount::Exactly(n) => param_count == *n,
+                ParamCount::AtLeast(n) => param_count >= *n,
+            }
+        }
     }
 
     impl Signature {
         fn refine_with(&mut self, new: Self) {
-            if matches!(self, Signature::Conflicting) {
-                return;
-            }
-            if matches!(&new, Signature::Conflicting) {
-                *self = new;
-                return;
-            }
-            if new.get_priority() > self.get_priority() {
-                *self = new;
-                return;
-            }
-            if new.get_priority() < self.get_priority() {
-                return;
-            }
             match (&mut *self, new) {
-                (Signature::Number, Signature::Number) => {},
-                (Signature::Function(_), Signature::Number) | (Signature::Number, Signature::Function(_)) => {
-                    *self = Signature::Conflicting
-                },
+                (Signature::NumberOrFunction, new) => *self = new,
+                (_, Signature::NumberOrFunction) | (Signature::Number, Signature::Number) => {},
                 (Signature::Function(args_old), Signature::Function(args_new)) => {
                     if args_old.len() != args_new.len() {
                         *self = Signature::Conflicting;
@@ -676,81 +679,85 @@ pub mod signature {
                     args_old.iter_mut().zip(args_new).for_each(|(a, b)| {
                         a.refine_with(b);
                     });
+                    if args_old.iter().any(|a| matches!(a, Signature::Conflicting)) {
+                        *self = Signature::Conflicting;
+                    }
                 },
-                (_, _) => {},
+                (Signature::Function(args_old), Signature::InternalFunction(param_count)) => {
+                    if !param_count.number_would_be_valid(args_old.len()) {
+                        *self = Signature::Conflicting;
+                        return;
+                    }
+                    if !args_old.iter().all(|a| matches!(a, Signature::Number | Signature::NumberOrFunction))
+                    {
+                        *self = Signature::Conflicting;
+                        return;
+                    }
+                    *self = Signature::InternalFunction(param_count);
+                },
+                (Signature::InternalFunction(param_count), Signature::Function(params)) => {
+                    if !param_count.number_would_be_valid(params.len())
+                        || !params
+                            .iter()
+                            .all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
+                    {
+                        *self = Signature::Conflicting;
+                    }
+                },
+                (Signature::InternalFunction(count_old), Signature::InternalFunction(count_new)) => {
+                    if *count_old != count_new {
+                        *self = Signature::Conflicting;
+                    }
+                },
+                (this, other) => {
+                    *self = Signature::Conflicting;
+                },
             }
         }
 
-        fn get_priority(&self) -> u8 {
-            match self {
-                Signature::NumberOrFunction => 0,
-                Signature::Number => 1,
-                Signature::Function(_) => 1,
-                Signature::Conflicting => 1,
-            }
-        }
-
-        /// true if self is less specific than other
+        /// True if self is less specific than other and could be refined to match it
         pub(crate) fn could_be(&self, other: &Signature) -> bool {
-            match (self, other) {
-                (Signature::NumberOrFunction, _) => {
-                    if !matches!(other, Signature::Conflicting) {
-                        true
-                    } else {
-                        false
-                    }
-                },
-                (_, Signature::NumberOrFunction) => false,
-                (Signature::Function(args_0), Signature::Function(args_1)) => {
-                    if args_0.len() != args_1.len() {
-                        return false;
-                    }
-                    args_0.iter().zip(args_1).all(|(a, b)| a.could_be(b))
-                },
-                (Signature::Number, Signature::Number) => true,
-                _ => false,
-            }
-        }
-
-        pub fn could_be_internal_fun(&self, internal_fn: &InternalFunction) -> bool {
-            match self {
-                Signature::NumberOrFunction => true,
-                Signature::Number => false,
-                Signature::Conflicting => false,
-                Signature::Function(params) => {
-                    internal_fn.is_param_count_valid(params.len())
-                        && params.iter().all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
-                },
-            }
-        }
-        pub fn get_refined_with_internal_fun(&self, internal_fn: &InternalFunction) -> Signature {
-            match self {
-                Signature::NumberOrFunction => {
-                    Signature::Function(vec![Signature::Number; internal_fn.get_param_count()])
-                },
-                Signature::Number | Signature::Conflicting => Signature::Conflicting,
-                Signature::Function(params) => {
-                    if internal_fn.is_param_count_valid(params.len()) {
-                        Signature::Function(vec![Signature::Number; internal_fn.get_param_count()])
-                    } else {
-                        Signature::Conflicting
-                    }
-                },
-            }
+            let mut refined = self.clone();
+            refined.refine_with(other.clone());
+            !matches!(refined, Signature::Conflicting)
         }
     }
 
     #[derive(Clone, Debug)]
     pub struct Signatures(pub(crate) HashMap<String, Signature>);
 
+    impl Deref for Signatures {
+        type Target = HashMap<String, Signature>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl DerefMut for Signatures {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.0
+        }
+    }
+
     impl Signatures {
         pub(crate) fn new_empty() -> Self {
             Signatures(HashMap::new())
         }
 
-        pub fn generate_needed_elements_of_formula(formula: &Element) -> Signatures {
-            let mut all_undefined = Signatures::new_empty();
+        pub fn new_from_map(map: HashMap<String, Signature>) -> Self {
+            Signatures(map)
+        }
+
+        pub fn generate_needed_elements_of_formula(
+            formula: &Element, internally_defined: &HashMap<String, InternalFunction>,
+        ) -> Signatures {
+            let mut all_undefined = Signatures::new_from_map(
+                internally_defined.iter().map(|item| (item.0.clone(), item.1.get_signature())).collect(),
+            );
             all_undefined.add_all_undefined_symbols_of_formula(formula);
+            all_undefined.retain(|_, sig| !matches!(sig, Signature::InternalFunction(_))); // remove the internal functions again
+            // todo update all of the signatures based on them having relationships with other symbols (use `update_signature` method for every entry in `all_undefined`)
             all_undefined
         }
 
@@ -795,10 +802,10 @@ pub mod signature {
         }
 
         fn insert_or_replace_symbol(&mut self, name: &String, val: Signature) {
-            if let Some(entry) = self.0.get_mut(name) {
+            if let Some(entry) = self.get_mut(name) {
                 entry.refine_with(val)
             } else {
-                self.0.insert(name.clone(), val);
+                self.insert(name.clone(), val);
             }
         }
 
@@ -806,11 +813,12 @@ pub mod signature {
             &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
             internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(String, Option<Vec<String>>), String> {
-            if self.0.contains_key(&symbol_name_and_args.name) {
+            if self.contains_key(&symbol_name_and_args.name) {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
-            let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
+            let mut required_signatures =
+                Signatures::generate_needed_elements_of_formula(&content, internally_defined);
 
             Self::refine_signature_and_undefined(
                 &mut symbol_name_and_args,
@@ -820,7 +828,7 @@ pub mod signature {
                 internally_defined,
             )?;
 
-            if !required_signatures.0.is_empty() {
+            if !required_signatures.is_empty() {
                 return Err(format!(
                     "The formula {} requires the following elements to be defined: {:?}",
                     symbol_name_and_args.name, required_signatures.0
@@ -832,7 +840,7 @@ pub mod signature {
             } else {
                 Signature::Number
             };
-            self.0.insert(symbol_name_and_args.name.clone(), signature);
+            self.insert(symbol_name_and_args.name.clone(), signature);
 
             Ok((symbol_name_and_args.name, symbol_name_and_args.function_args.map(|b| b.names)))
         }
@@ -849,24 +857,22 @@ pub mod signature {
                 .unwrap_or(HashSet::new());
 
             let all_undefined_names =
-                undefined_signatures.0.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
+                undefined_signatures.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
             for name in all_undefined_names {
                 if parameter_names.contains(&name) {
                     continue;
                 }
                 if let Some(internal_fun) = internally_defined.get(&name) {
-                    if !undefined_signatures.0[&name].could_be_internal_fun(internal_fun) {
+                    if !undefined_signatures.0[&name].could_be(&internal_fun.get_signature()) {
                         return Err(format!(
                             "The signature of {} is not compatible with the internal function: undefined: {:?} vs internal: {:?}",
                             name, undefined_signatures.0[&name], internal_fun
                         ));
                     }
-                    let new_signature =
-                        undefined_signatures.0[&name].get_refined_with_internal_fun(internal_fun);
-                    undefined_signatures.update_signature(&formula, &name, new_signature);
+                    undefined_signatures.update_signature(&formula, &name, internal_fun.get_signature());
                     continue;
                 }
-                if let Some(already_defined_sig) = already_defined.0.get(&name) {
+                if let Some(already_defined_sig) = already_defined.get(&name) {
                     if !undefined_signatures.0[&name].could_be(already_defined_sig)
                         && !already_defined_sig.could_be(&undefined_signatures.0[&name])
                     {
@@ -880,19 +886,19 @@ pub mod signature {
             }
             if let Some(args) = &mut symbol_name_and_args.function_args {
                 for (param_name, param_sig) in &mut args.signatures.0 {
-                    if let Some(var_sig_in_body) = undefined_signatures.0.get(param_name) {
+                    if let Some(var_sig_in_body) = undefined_signatures.get(param_name) {
                         param_sig.refine_with(var_sig_in_body.clone())
                     }
                 }
             }
-            undefined_signatures.0.retain(|n, _| !parameter_names.contains(n));
-            undefined_signatures.0.retain(|n, _| !internally_defined.contains_key(n));
-            undefined_signatures.0.retain(|n, _| !already_defined.0.contains_key(n));
+            undefined_signatures.retain(|n, _| !parameter_names.contains(n));
+            undefined_signatures.retain(|n, _| !internally_defined.contains_key(n));
+            undefined_signatures.retain(|n, _| !already_defined.contains_key(n));
             Ok(())
         }
 
         fn update_signature(&mut self, formula: &Element, element_to_update: &str, new_signature: Signature) {
-            let Some(signature) = self.0.get_mut(element_to_update) else { return };
+            let Some(signature) = self.get_mut(element_to_update) else { return };
             signature.refine_with(new_signature.clone());
 
             // update all functions that contain this symbol as a parameter
@@ -919,7 +925,7 @@ pub mod signature {
                 );
                 for (param_name, param_index) in all_params_of_function_type {
                     let new_arg_signature = args[param_index].clone();
-                    self.0.get_mut(&param_name).unwrap().refine_with(new_arg_signature);
+                    self.get_mut(&param_name).unwrap().refine_with(new_arg_signature);
                 }
             }
         }
@@ -976,8 +982,12 @@ pub mod signature {
             match self {
                 Element::Function { arguments, name: this_name } => {
                     if this_name == name {
-                        for (i, arg_name) in
-                            arguments.iter().enumerate().map(|(i, e)| e.get_name().map(|n| (i, n))).flatten()
+                        for (i, arg_name) in arguments
+                            .iter()
+                            .enumerate()
+                            .filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
+                            .map(|(i, e)| e.get_name().map(|n| (i, n)))
+                            .flatten()
                         {
                             if arg_name != name {
                                 list.insert((arg_name.to_string(), i));
@@ -1018,7 +1028,7 @@ pub mod signature {
 
     impl FunctionDeclarationArguments {
         fn get_signatures_in_right_order(&self) -> Vec<Signature> {
-            self.names.iter().map(|name| self.signatures.0.get(name).unwrap().clone()).collect::<Vec<_>>()
+            self.names.iter().map(|name| self.signatures.get(name).unwrap().clone()).collect::<Vec<_>>()
         }
     }
 
@@ -1040,7 +1050,7 @@ pub mod signature {
                     for arg in arguments {
                         if let Element::VariableOrFunction(name) = arg {
                             fn_args.names.push(name.clone());
-                            fn_args.signatures.0.insert(name.clone(), Signature::NumberOrFunction);
+                            fn_args.signatures.insert(name.clone(), Signature::NumberOrFunction);
                         } else {
                             return Err("Invalid argument in function signature".to_string());
                         }
