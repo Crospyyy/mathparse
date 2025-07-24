@@ -1,5 +1,4 @@
 use crate::application::logic::run_formula_evaluator;
-use num::{BigInt, BigRational};
 
 mod application;
 mod libraries;

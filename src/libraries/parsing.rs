@@ -500,8 +500,8 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::Element;
     use crate::formula_short::*;
+    use crate::Element;
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -635,8 +635,8 @@ pub mod testing {
 }
 
 pub mod signature {
-    use crate::Element;
     use crate::libraries::storing::InternalFunction;
+    use crate::Element;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};
@@ -698,8 +698,8 @@ pub mod signature {
                 (Signature::InternalFunction(param_count), Signature::Function(params)) => {
                     if !param_count.number_would_be_valid(params.len())
                         || !params
-                        .iter()
-                        .all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
+                            .iter()
+                            .all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
                     {
                         *self = Signature::Conflicting;
                     }
@@ -819,7 +819,6 @@ pub mod signature {
 
             let mut required_signatures =
                 Signatures::generate_needed_elements_of_formula(&content, internally_defined);
-            dbg!(&required_signatures);
 
             Self::refine_signature_and_undefined(
                 &mut symbol_name_and_args,
@@ -851,7 +850,6 @@ pub mod signature {
             formula: &Element, already_defined: &Signatures,
             internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(), String> {
-            dbg!(&undefined_signatures);
             let parameter_names = symbol_name_and_args
                 .function_args
                 .as_ref()
