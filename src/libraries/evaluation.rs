@@ -177,7 +177,8 @@ impl Element {
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
         let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
-        self.expand_formula(&mut formula, &self.internal_function_definitions.keys().cloned().collect())?;
+        let dont_expand = self.internal_function_definitions.keys().cloned().collect();
+        self.expand_formula(&mut formula, &dont_expand)?;
         formula.eval_with_formulas(&self.internal_function_definitions)
     }
     pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
@@ -194,14 +195,13 @@ impl FormulaStore {
         loop {
             all_names.clear();
             formula.get_all_names(&mut all_names);
-            all_names.retain(|name| !ignore_names.contains(name));
+            all_names = all_names.difference(ignore_names).cloned().collect();
 
             if all_names.is_empty() {
                 break;
             }
-
             for name in all_names.iter() {
-                formula.insert_symbol(&self.get_insertion_element_expanded(name)?)?;
+                formula.insert_symbol(&self.get_insertion_element_expanded(name, ignore_names)?)?;
             }
         }
 
@@ -271,11 +271,14 @@ fn test_define_functions_with_internal_function_definitions() {
     store.define_default_internal_functions().unwrap();
 
     store.add_symbol_from_string("f(x)=sin(x)").unwrap();
+    assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)"), Err(_)));
     store.add_symbol_from_string("g(x)=f(x)+cos(x)").unwrap();
 
     assert_eq!(store.eval("f(0)").unwrap(), 0f64.sin());
     assert_eq!(store.eval("g(0)").unwrap(), 0f64.cos());
 
+    store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)").unwrap();
+    assert_eq!(store.eval("good_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0);
     store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)").unwrap();
     assert_eq!(store.eval("weird_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0 + 1.0);
 }

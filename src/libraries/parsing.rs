@@ -656,6 +656,15 @@ pub mod signature {
         AtLeast(usize),
     }
 
+    impl ParamCount {
+        pub(crate) fn number_would_be_valid(&self, param_count: usize) -> bool {
+            match self {
+                ParamCount::Exactly(n) => param_count == *n,
+                ParamCount::AtLeast(n) => param_count >= *n,
+            }
+        }
+    }
+
     impl Signature {
         fn refine_with(&mut self, new: Self) {
             match (&mut *self, new) {
@@ -663,6 +672,7 @@ pub mod signature {
                 (_, Signature::NumberOrFunction) | (Signature::Number, Signature::Number) => {},
                 (Signature::Function(args_old), Signature::Function(args_new)) => {
                     if args_old.len() != args_new.len() {
+                        dbg!(args_old, args_new);
                         *self = Signature::Conflicting;
                         return;
                     }
@@ -670,15 +680,30 @@ pub mod signature {
                         a.refine_with(b);
                     });
                     if args_old.iter().any(|a| matches!(a, Signature::Conflicting)) {
-                        *self = Signature::Conflicting;
+                        dbg!(*self = Signature::Conflicting);
                     }
+                },
+                (Signature::Function(args_old), Signature::InternalFunction(param_count)) => {
+                    if !param_count.number_would_be_valid(args_old.len()) {
+                        dbg!(*self = Signature::Conflicting);
+                        return;
+                    }
+                    if !args_old.iter().all(|a| matches!(a, Signature::Number | Signature::NumberOrFunction))
+                    {
+                        dbg!(*self = Signature::Conflicting);
+                        return;
+                    }
+                    *self = Signature::InternalFunction(param_count);
                 },
                 (Signature::InternalFunction(count_old), Signature::InternalFunction(count_new)) => {
                     if *count_old != count_new {
-                        *self = Signature::Conflicting;
+                        dbg!(*self = Signature::Conflicting);
                     }
                 },
-                (_, _) => *self = Signature::Conflicting,
+                (this, other) => {
+                    dbg!(this, other);
+                    *self = Signature::Conflicting;
+                },
             }
         }
 
@@ -734,6 +759,7 @@ pub mod signature {
                         .collect::<Vec<_>>();
 
                     self.insert_or_replace_symbol(name, Signature::Function(arg_signatures));
+                    todo!("The problem with using sum twice in the same formula with different argument counts lies here")
                 },
                 Element::Variable(name) => self.insert_or_replace_symbol(name, Signature::Number),
                 Element::VariableOrFunction(name) => {
@@ -761,6 +787,7 @@ pub mod signature {
             }
 
             let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
+            dbg!(&required_signatures);
 
             Self::refine_signature_and_undefined(
                 &mut symbol_name_and_args,
@@ -792,6 +819,7 @@ pub mod signature {
             formula: &Element, already_defined: &Signatures,
             internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(), String> {
+            dbg!(&undefined_signatures);
             let parameter_names = symbol_name_and_args
                 .function_args
                 .as_ref()
@@ -842,6 +870,7 @@ pub mod signature {
         fn update_signature(&mut self, formula: &Element, element_to_update: &str, new_signature: Signature) {
             let Some(signature) = self.0.get_mut(element_to_update) else { return };
             signature.refine_with(new_signature.clone());
+            dbg!(&signature);
 
             // update all functions that contain this symbol as a parameter
             let mut list_all_parameter_occurrences = HashSet::new();
@@ -924,8 +953,12 @@ pub mod signature {
             match self {
                 Element::Function { arguments, name: this_name } => {
                     if this_name == name {
-                        for (i, arg_name) in
-                            arguments.iter().enumerate().map(|(i, e)| e.get_name().map(|n| (i, n))).flatten()
+                        for (i, arg_name) in arguments
+                            .iter()
+                            .enumerate()
+                            .filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
+                            .map(|(i, e)| e.get_name().map(|n| (i, n)))
+                            .flatten()
                         {
                             if arg_name != name {
                                 list.insert((arg_name.to_string(), i));
