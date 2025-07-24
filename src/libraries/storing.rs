@@ -75,6 +75,15 @@ pub struct FormulaStore {
 }
 
 impl FormulaStore {
+    pub(crate) fn get_symbols(&self) -> Vec<(&String, &Option<Vec<String>>, &Element)> {
+        self.parameter_mappings
+            .iter()
+            .map(|(name, params)| (name, params, self.formulas.get(name).unwrap()))
+            .collect::<Vec<_>>()
+    }
+}
+
+impl FormulaStore {
     pub fn define_internal_function(
         &mut self, name: &str, internal_function: InternalFunction,
     ) -> Result<(), String> {
@@ -190,8 +199,11 @@ impl FormulaStore {
             dry_run,
         ) {
             Ok((name, arg_names)) => {
-                self.formulas.insert(name.clone(), def);
-                self.parameter_mappings.insert(name.clone(), arg_names);
+                if !dry_run {
+                    self.formulas.insert(name.clone(), def);
+                    self.parameter_mappings.insert(name.clone(), arg_names);
+                }
+
                 Ok(name)
             },
             Err(err) => Err(format!("Could not add symbol: {}", err)),

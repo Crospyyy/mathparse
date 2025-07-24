@@ -26,7 +26,7 @@ mod controller {
     use crate::libraries::storing::FormulaStore;
     use eframe::epaint::FontId;
     use eframe::{App, CreationContext, Frame};
-    use egui::{CentralPanel, Context, FontFamily, FontSelection, TextEdit};
+    use egui::{CentralPanel, Context, FontFamily, FontSelection, RichText, ScrollArea, TextEdit};
 
     pub struct Window {
         formula_store: FormulaStore,
@@ -69,6 +69,18 @@ mod controller {
                 }
             }
         }
+
+        fn try_apply_calculation(&mut self) {
+            let input = self.ui_state.top_user_input.trim();
+            if input.is_empty() {
+                self.ui_state.calculation_result.clear();
+                return;
+            }
+            if input.contains("=") {
+                let _ = self.formula_store.add_symbol_from_string(input, false);
+                self.update_calculation_result();
+            }
+        }
     }
 
     impl App for Window {
@@ -80,7 +92,23 @@ mod controller {
                 if response.changed() {
                     self.update_calculation_result();
                 }
-                ui.label(&self.ui_state.calculation_result)
+
+                // if response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                //     self.try_apply_calculation();
+                // }
+                ui.label(RichText::new(&self.ui_state.calculation_result).size(14.0));
+                let area = ScrollArea::vertical().auto_shrink(false);
+                area.show(ui, |ui| {
+                    self.formula_store.get_symbols().iter().for_each(|(name, params, value)| {
+                        let mut text = name.to_string();
+                        if let Some(params) = params {
+                            text.push_str(&format!("({})", params.join(", ")));
+                        }
+                        text.push_str(" = ");
+                        text.push_str(&value.to_string());
+                        ui.label(RichText::new(text).size(14.0));
+                    });
+                });
             });
         }
     }

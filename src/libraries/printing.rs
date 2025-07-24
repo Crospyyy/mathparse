@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use crate::Element;
 use colored::Colorize;
 
@@ -59,16 +60,23 @@ fn mark_string_red(str: impl ToString, apply_color: bool) -> String {
     if apply_color { str.to_string().red().to_string() } else { str.to_string() }
 }
 
+impl Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut string = String::new();
+        self.add_to_string(false, false, &mut string);
+        write!(f, "{}", string)
+    }
+}
+
 impl Element {
     pub fn print_debug(&self) {
         let mut string = String::new();
         self.add_to_string(true, true, &mut string);
         println!("{}", string);
     }
+
     pub fn print(&self) {
-        let mut string = String::new();
-        self.add_to_string(false, false, &mut string);
-        println!("{}", string);
+        println!("{}", self);
     }
 
     fn add_to_string(&self, show_brackets: bool, show_types: bool, output: &mut String) {
