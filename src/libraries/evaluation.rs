@@ -236,6 +236,20 @@ fn test_internal_function_definitions() {
     assert_eq!(store.eval("min(1,2,3)"), Ok(1.0));
     assert_eq!(store.eval("sum(1,2,3)"), Ok(1.0 + 2.0 + 3.0));
 
+    let functions_that_take_one_argument =
+        ["sin", "cos", "tan", "sqrt", "abs", "log2", "floor", "ceil", "round"];
+    for function in functions_that_take_one_argument {
+        assert!(store.eval(&format!("{}(0)", function)).is_ok());
+        assert!(store.eval(&format!("{}(0, 0)", function)).is_err());
+    }
+    let functions_that_take_one_or_more_arguments = ["avg", "max", "min"];
+    for function in functions_that_take_one_or_more_arguments {
+        assert!(store.eval(&format!("{}()", function)).is_err());
+        assert!(store.eval(&format!("{}(0)", function)).is_ok());
+        assert!(store.eval(&format!("{}(0,0)", function)).is_ok());
+    }
+    assert_eq!(store.eval("sum()"), Ok(0.0));
+
     // Test für floor
     assert_eq!(store.eval("floor(123.456)").unwrap(), 123.0);
     assert_eq!(store.eval("floor(-123.456)").unwrap(), -124.0);
