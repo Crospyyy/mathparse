@@ -672,7 +672,6 @@ pub mod signature {
                 (_, Signature::NumberOrFunction) | (Signature::Number, Signature::Number) => {},
                 (Signature::Function(args_old), Signature::Function(args_new)) => {
                     if args_old.len() != args_new.len() {
-                        dbg!(args_old, args_new);
                         *self = Signature::Conflicting;
                         return;
                     }
@@ -680,28 +679,36 @@ pub mod signature {
                         a.refine_with(b);
                     });
                     if args_old.iter().any(|a| matches!(a, Signature::Conflicting)) {
-                        dbg!(*self = Signature::Conflicting);
+                        *self = Signature::Conflicting;
                     }
                 },
                 (Signature::Function(args_old), Signature::InternalFunction(param_count)) => {
                     if !param_count.number_would_be_valid(args_old.len()) {
-                        dbg!(*self = Signature::Conflicting);
+                        *self = Signature::Conflicting;
                         return;
                     }
                     if !args_old.iter().all(|a| matches!(a, Signature::Number | Signature::NumberOrFunction))
                     {
-                        dbg!(*self = Signature::Conflicting);
+                        *self = Signature::Conflicting;
                         return;
                     }
                     *self = Signature::InternalFunction(param_count);
                 },
+                (Signature::InternalFunction(param_count), Signature::Function(params)) => {
+                    if !param_count.number_would_be_valid(params.len())
+                        || !params
+                        .iter()
+                        .all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
+                    {
+                        *self = Signature::Conflicting;
+                    }
+                },
                 (Signature::InternalFunction(count_old), Signature::InternalFunction(count_new)) => {
                     if *count_old != count_new {
-                        dbg!(*self = Signature::Conflicting);
+                        *self = Signature::Conflicting;
                     }
                 },
                 (this, other) => {
-                    dbg!(this, other);
                     *self = Signature::Conflicting;
                 },
             }
@@ -723,9 +730,19 @@ pub mod signature {
             Signatures(HashMap::new())
         }
 
-        pub fn generate_needed_elements_of_formula(formula: &Element) -> Signatures {
-            let mut all_undefined = Signatures::new_empty();
+        pub fn new_from_map(map: HashMap<String, Signature>) -> Self {
+            Signatures(map)
+        }
+
+        pub fn generate_needed_elements_of_formula(
+            formula: &Element, internally_defined: &HashMap<String, InternalFunction>,
+        ) -> Signatures {
+            let mut all_undefined = Signatures::new_from_map(
+                internally_defined.iter().map(|item| (item.0.clone(), item.1.get_signature())).collect(),
+            );
             all_undefined.add_all_undefined_symbols_of_formula(formula);
+            all_undefined.0.retain(|_, sig| !matches!(sig, Signature::InternalFunction(_))); // remove the internal functions again
+            // todo update all of the signatures based on them having relationships with other symbols (use `update_signature` method for every entry in `all_undefined`)
             all_undefined
         }
 
@@ -759,10 +776,6 @@ pub mod signature {
                         .collect::<Vec<_>>();
 
                     self.insert_or_replace_symbol(name, Signature::Function(arg_signatures));
-                    todo!(
-                        "The problem with using sum twice in the same formula with different argument counts lies here. \
-                        Maybe provide the internal functions as an argument to this function and check against them?"
-                    );
                 },
                 Element::Variable(name) => self.insert_or_replace_symbol(name, Signature::Number),
                 Element::VariableOrFunction(name) => {
@@ -789,7 +802,8 @@ pub mod signature {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
-            let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
+            let mut required_signatures =
+                Signatures::generate_needed_elements_of_formula(&content, internally_defined);
             dbg!(&required_signatures);
 
             Self::refine_signature_and_undefined(
