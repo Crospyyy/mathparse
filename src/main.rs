@@ -1,9 +1,10 @@
-use crate::application::logic::run_formula_evaluator;
-
 mod application;
 mod libraries;
+
+#[cfg(not(test))]
 mod gui_application;
 
+#[cfg(not(test))]
 fn main() {
     gui_application::main();
     // run_formula_evaluator();
