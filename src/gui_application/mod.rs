@@ -1,7 +1,7 @@
-use crate::gui_application::controller::Window;
-use eframe::NativeOptions;
 
 pub fn main() {
+    use crate::gui_application::controller::Window;
+    use eframe::NativeOptions;
     eframe::run_native("Window", NativeOptions::default(), Box::new(|cc| Ok(Box::new(Window::new(cc)))))
         .expect("panic message");
 }
