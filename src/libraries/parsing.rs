@@ -759,7 +759,10 @@ pub mod signature {
                         .collect::<Vec<_>>();
 
                     self.insert_or_replace_symbol(name, Signature::Function(arg_signatures));
-                    todo!("The problem with using sum twice in the same formula with different argument counts lies here")
+                    todo!(
+                        "The problem with using sum twice in the same formula with different argument counts lies here. \
+                        Maybe provide the internal functions as an argument to this function and check against them?"
+                    );
                 },
                 Element::Variable(name) => self.insert_or_replace_symbol(name, Signature::Number),
                 Element::VariableOrFunction(name) => {
