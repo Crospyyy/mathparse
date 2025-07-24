@@ -908,7 +908,6 @@ pub mod signature {
         fn update_signature(&mut self, formula: &Element, element_to_update: &str, new_signature: Signature) {
             let Some(signature) = self.get_mut(element_to_update) else { return };
             signature.refine_with(new_signature.clone());
-            dbg!(&signature);
 
             // update all functions that contain this symbol as a parameter
             let mut list_all_parameter_occurrences = HashSet::new();
