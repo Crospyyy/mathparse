@@ -154,7 +154,7 @@ mod controller {
                         }
                         text.push_str(" = ");
                         text.push_str(&value.to_string());
-                        ui.label(RichText::new(text).size(14.0));
+                        ui.label(RichText::new(text).size(17.0));
                     });
                 });
             });
