@@ -27,7 +27,9 @@ mod controller {
     use eframe::epaint::FontId;
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange};
-    use egui::{CentralPanel, Context, FontFamily, FontSelection, Label, RichText, ScrollArea, TextEdit};
+    use egui::{
+        CentralPanel, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea, TextEdit,
+    };
 
     pub struct Window {
         formula_store: FormulaStore,
@@ -87,6 +89,13 @@ mod controller {
         }
     }
 
+    fn set_cursor_pos(response: &Response, cursor_pos: usize) {
+        if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
+            state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos))));
+            state.store(&response.ctx, response.id);
+        }
+    }
+
     impl App for Window {
         fn update(&mut self, ctx: &Context, frame: &mut Frame) {
             CentralPanel::default().show(ctx, |ui| {
@@ -104,13 +113,10 @@ mod controller {
                             .filter(|(name, ..)| name.starts_with(&var_name))
                             .map(|(name, ..)| *name)
                             .collect::<Vec<_>>();
-                        if ui.input(|i| i.key_pressed(egui::Key::Tab)) && compatible_symbols.len() == 1 {
-                            self.ui_state.top_user_input += &compatible_symbols[0][var_name.len()..];
-                            if let Some(mut state) = TextEdit::load_state(ctx, response.id) {
-                                let text_len = self.ui_state.top_user_input.len();
-                                state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(text_len))));
-                                state.store(ctx, response.id);
-                            }
+                        let longest_common_start = determine_longest_common_start(&compatible_symbols);
+                        if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start {
+                            self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
+                            set_cursor_pos(&response, self.ui_state.top_user_input.len());
                         }
                         if !compatible_symbols.is_empty() {
                             response.show_tooltip_ui(|ui| {
@@ -145,5 +151,25 @@ mod controller {
                 });
             });
         }
+    }
+
+    fn determine_longest_common_start(names: &Vec<&String>) -> String {
+        if names.is_empty() {
+            return String::new();
+        }
+        let common_start = names[0].clone();
+        let mut longest_common = common_start.len();
+        for name in names.iter().skip(1) {
+            if longest_common == 0 {
+                return String::new();
+            }
+            for i in 0..longest_common.min(name.len()) {
+                if common_start.chars().nth(i) != name.chars().nth(i) {
+                    longest_common = i;
+                    break;
+                }
+            }
+        }
+        common_start[..longest_common].to_string()
     }
 }
