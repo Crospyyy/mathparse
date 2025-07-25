@@ -8,12 +8,12 @@ pub fn main() {
 mod ui {
     pub(super) struct UiState {
         pub(super) top_user_input: String,
-        pub(super) calculation_result: String,
+        pub(super) calculation_result: Result<String, String>,
     }
 
     impl UiState {
         pub(super) fn new() -> Self {
-            Self { top_user_input: "".to_string(), calculation_result: "".to_string() }
+            Self { top_user_input: "".to_string(), calculation_result: Ok("".to_string()) }
         }
     }
 }
@@ -28,7 +28,8 @@ mod controller {
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange};
     use egui::{
-        CentralPanel, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea, TextEdit,
+        CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
+        TextEdit,
     };
 
     pub struct Window {
@@ -47,36 +48,33 @@ mod controller {
         fn update_calculation_result(&mut self) {
             let input = self.ui_state.top_user_input.trim();
             if input.is_empty() {
-                self.ui_state.calculation_result.clear();
+                self.ui_state.calculation_result = Ok("".to_string());
                 return;
             }
             if input.contains("=") {
-                let result = self.formula_store.add_symbol_from_string(input, true);
-                self.ui_state.calculation_result = match result {
-                    Ok(name) => format!("Create new symbol '{}'", name),
-                    Err(s) => format!("Error: {}", s),
-                }
+                self.ui_state.calculation_result = self
+                    .formula_store
+                    .add_symbol_from_string(input, true)
+                    .map(|name| format!("Create new symbol '{}'", name))
+                    .map_err(|s| format!("Error: {}", s));
             } else {
-                let result1 = self.formula_store.safe_eval(input);
-                self.ui_state.calculation_result = match result1 {
-                    Ok(result) => {
+                self.ui_state.calculation_result = self
+                    .formula_store
+                    .safe_eval(input)
+                    .map(|result| {
                         if result.is_lossy() {
                             format!("~= {}", result.value())
                         } else {
                             format!("= {}", result.value())
                         }
-                    },
-                    Err(s) => {
-                        format!("Error: {}", s)
-                    },
-                }
+                    })
+                    .map_err(|s| format!("Error: {}", s));
             }
         }
 
         fn try_apply_calculation(&mut self) {
             let input = self.ui_state.top_user_input.trim();
             if input.is_empty() {
-                self.ui_state.calculation_result.clear();
                 return;
             }
             if input.contains("=") {
@@ -142,7 +140,10 @@ mod controller {
                     self.try_apply_calculation();
                     response.request_focus();
                 }
-                ui.label(RichText::new(&self.ui_state.calculation_result).size(20.0));
+                ui.label(match &self.ui_state.calculation_result {
+                    Ok(result) => RichText::new(result).size(20.0),
+                    Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
+                });
                 ui.separator();
                 let area = ScrollArea::vertical().auto_shrink(false);
                 area.show(ui, |ui| {
