@@ -116,16 +116,19 @@ mod controller {
 
                         if !compatible_symbols.is_empty() {
                             let longest_common_start = determine_longest_common_start(&compatible_symbols);
-                            response.show_tooltip_ui(|ui| {
-                                for name in compatible_symbols {
-                                    ui.add(Label::new(name).extend());
+                            if !(compatible_symbols.len() == 1 && compatible_symbols[0] == &var_name) {
+                                response.show_tooltip_ui(|ui| {
+                                    for name in compatible_symbols {
+                                        ui.add(Label::new(name).extend());
+                                    }
+                                });
+                                if ui.input(|i| i.key_pressed(egui::Key::Tab))
+                                    && var_name != longest_common_start
+                                {
+                                    self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
+                                    self.update_calculation_result();
+                                    set_cursor_pos(&response, self.ui_state.top_user_input.len());
                                 }
-                            });
-                            if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start
-                            {
-                                self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
-                                self.update_calculation_result();
-                                set_cursor_pos(&response, self.ui_state.top_user_input.len());
                             }
                         }
                     }
@@ -139,7 +142,8 @@ mod controller {
                     self.try_apply_calculation();
                     response.request_focus();
                 }
-                ui.label(RichText::new(&self.ui_state.calculation_result).size(14.0));
+                ui.label(RichText::new(&self.ui_state.calculation_result).size(20.0));
+                ui.separator();
                 let area = ScrollArea::vertical().auto_shrink(false);
                 area.show(ui, |ui| {
                     self.formula_store.get_symbols().iter().for_each(|(name, params, value)| {
@@ -166,7 +170,9 @@ mod controller {
             if longest_common == 0 {
                 return String::new();
             }
-            for i in 0..longest_common.min(name.len()) {
+            let max = longest_common.min(name.len());
+            longest_common = max;
+            for i in 0..max {
                 if common_start.chars().nth(i) != name.chars().nth(i) {
                     longest_common = i;
                     break;
