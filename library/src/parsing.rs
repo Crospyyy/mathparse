@@ -279,10 +279,11 @@ pub mod implementation {
                     arguments.iter_mut().for_each(Element::process_divide);
                 },
                 Element::Negate(e) => e.process_divide(),
-                Element::Variable(_)
-                | Element::Number(_)
-                | Element::VariableOrFunction(_)
-                | Element::Pow(_, _) => {},
+                Element::Pow(a, b) => {
+                    a.process_divide();
+                    b.process_divide();
+                },
+                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
             }
         }
 
@@ -629,7 +630,7 @@ pub mod testing {
         let mut brackets = Element::resolve_brackets(&chars, &mut start);
 
         brackets.print();
-        brackets.print_debug();
+        println!("{}", brackets.get_debug_string());
         let mut result = Ok(());
         'processing: {
             debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
@@ -644,6 +645,9 @@ pub mod testing {
                     result = output;
                 }
             });
+            if result.is_err() {
+                break 'processing;
+            }
             debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
             debug_print_step(
                 "8. Convert to numbers and variables",
@@ -675,7 +679,7 @@ pub mod testing {
         print_heading(step);
         operation(element);
         element.print();
-        element.print_debug();
+        println!("{}", element.get_debug_string());
     }
 
     fn print_heading(step: &str) {
@@ -684,10 +688,9 @@ pub mod testing {
 
     mod formula_generation {
         use crate::Element;
-        use rand::{random, random_range, rng};
-        use std::fmt::Display;
-        use std::ops::Range;
         use crate::parsing::testing::test_formula_parsing;
+        use rand::random_range;
+        use std::fmt::Display;
 
         enum Formula {
             Plus(Vec<Formula>),
@@ -813,9 +816,9 @@ pub mod testing {
 
         #[test]
         fn test_formula_generation() {
+            println!("Starting formula generation tests");
             for _ in 0..100 {
-                let formula = Formula::generate_random(2);
-                println!("Generated formula: {}", formula);
+                let formula = Formula::generate_random(3);
                 let parsed_result = Element::parse(&formula.to_string());
                 if parsed_result.is_err() {
                     println!("Failed to parse: {}", formula);
@@ -828,7 +831,7 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use crate::storing::{FormulaStore, InternalFunction};
+    use crate::storing::InternalFunction;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};
@@ -1292,6 +1295,4 @@ pub mod signature {
     // }
 
     // struct SymbolDefinition {}
-
-
 }

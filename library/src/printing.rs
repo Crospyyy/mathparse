@@ -69,10 +69,40 @@ impl Display for Element {
 }
 
 impl Element {
+    #[deprecated(note = "Bitte verwende stattdessen `get_debug_string`.")]
+    /// todo remove the whole debug printing implementation
     pub fn print_debug(&self) {
         let mut string = String::new();
         self.add_to_string(true, true, &mut string);
         println!("{}", string);
+    }
+
+    pub fn get_debug_string(&self) -> String {
+        match self {
+            Element::Brackets(e) => {
+                format!("br({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
+            },
+            Element::Plus(e) => {
+                format!("add({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
+            },
+            Element::Multiply(e) => {
+                format!("mul({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
+            },
+            Element::Pow(a, b) => format!("pow({}, {})", a.get_debug_string(), b.get_debug_string()),
+            Element::String(s) => format!("\"{s}\""),
+            Element::Negate(e) => format!("neg({})", e.get_debug_string()),
+            Element::Number(n) => format!("num({})", n),
+            Element::Function { name, arguments } => {
+                format!(
+                    "fun({name}, [{}])",
+                    arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
+                )
+            },
+            Element::Variable(name) => format!("var({})", name),
+            Element::VariableOrFunction(name) => {
+                format!("var_or_fun({})", name)
+            },
+        }
     }
 
     pub fn print(&self) {
