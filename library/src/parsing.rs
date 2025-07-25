@@ -278,8 +278,8 @@ pub mod implementation {
                 Element::Function { arguments, .. } => {
                     arguments.iter_mut().for_each(Element::process_divide);
                 },
-                Element::Negate(_)
-                | Element::Variable(_)
+                Element::Negate(e) => e.process_divide(),
+                Element::Variable(_)
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
                 | Element::Pow(_, _) => {},
@@ -591,12 +591,12 @@ pub mod testing {
             ("fun(12, fun(1, 2))", Some(fun("fun", [num(12.0), fun("fun", [num(1.0), num(2.0)])]))),
             ("fun()", Some(fun("fun", []))),
             ("fun()-fun()", Some(plus([fun("fun", []), neg(fun("fun", []))]))),
+            ("1+2*3-4/2", Some(plus([num(1), mul([num(2), num(3)]), neg(mul([num(4), inv(num(2))]))]))),
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(|(i, o)| test_formula_parsing(i, o));
     }
 
-    #[allow(unused)]
     fn test_formula_parsing(input: &str, expected_output: Option<Element>) {
         let expected_output = expected_output;
         let cow = Element::preprocess_string_minus(&input);
@@ -665,6 +665,26 @@ pub mod testing {
 
     fn print_heading(step: &str) {
         println!("##### {}", step);
+    }
+
+    #[test]
+    pub fn test_evaluation() {
+        let inputs = [
+            ("1+2", Some(3.0)),
+            ("1+2*3", Some(7.0)),
+            ("1+2*3-4/2", Some(5.0)),
+            ("(1+2)*3", Some(9.0)),
+            ("(1+2)*(3-4)", Some(-3.0)),
+            ("x/x-x", None), // x is not defined
+        ];
+        println!("Starting formula evaluation tests");
+        inputs.into_iter().for_each(|(i, o)| test_formula_evaluation(i, o));
+    }
+
+    fn test_formula_evaluation(input: &str, expected_output: Option<f64>) {
+        println!("Testing formula evaluation for input: {}", input);
+        let output = Element::parse(input).ok().as_ref().and_then(Element::eval);
+        assert_eq!(output, expected_output);
     }
 }
 

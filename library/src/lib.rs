@@ -29,11 +29,12 @@ pub enum Element {
     VariableOrFunction(String),
 }
 
+#[allow(unused)]
 mod formula_short {
     use crate::Element;
 
-    pub fn num(num: f64) -> Element {
-        Element::Number(num)
+    pub fn num(num: impl Into<f64>) -> Element {
+        Element::Number(num.into())
     }
 
     pub fn var_or_fun(name: &str) -> Element {
@@ -64,6 +65,7 @@ mod formula_short {
         Element::Pow(Box::new(base), Box::new(exponent))
     }
 
+    /// = element^-1
     pub fn inv(element: Element) -> Element {
         pow(element, neg(num(1.0)))
     }
