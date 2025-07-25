@@ -116,16 +116,17 @@ mod controller {
 
                         if !compatible_symbols.is_empty() {
                             let longest_common_start = determine_longest_common_start(&compatible_symbols);
-                            if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start
-                            {
-                                self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
-                                set_cursor_pos(&response, self.ui_state.top_user_input.len());
-                            }
                             response.show_tooltip_ui(|ui| {
                                 for name in compatible_symbols {
                                     ui.add(Label::new(name).extend());
                                 }
                             });
+                            if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start
+                            {
+                                self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
+                                self.update_calculation_result();
+                                set_cursor_pos(&response, self.ui_state.top_user_input.len());
+                            }
                         }
                     }
                 }
