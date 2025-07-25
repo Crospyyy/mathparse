@@ -25,4 +25,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Run tests
+        working-directory: ./library
         run: cargo test --verbose --package library
