@@ -1,6 +1,9 @@
-use crate::libraries::storing::FormulaStore;
+fn main() {
+    println!("Hello, world!");
+}
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
+use library::storing::FormulaStore;
 
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();

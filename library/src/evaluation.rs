@@ -1,6 +1,6 @@
 use crate::Element;
-use crate::libraries::storing::{FormulaStore, InternalFunction};
 use std::collections::{HashMap, HashSet};
+use crate::storing::{FormulaStore, InternalFunction};
 
 #[derive(Debug, PartialEq)]
 pub struct EvaluationResult {

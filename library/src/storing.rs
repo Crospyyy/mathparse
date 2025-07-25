@@ -1,6 +1,6 @@
 use crate::Element;
-use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use std::collections::{HashMap, HashSet};
+use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 
 impl InternalFunction {
     pub fn new_with_one_parameter(definition: fn(f64) -> f64) -> Self {
@@ -75,7 +75,7 @@ pub struct FormulaStore {
 }
 
 impl FormulaStore {
-    pub(crate) fn get_symbols(&self) -> Vec<(&String, &Option<Vec<String>>, &Element)> {
+    pub fn get_symbols(&self) -> Vec<(&String, &Option<Vec<String>>, &Element)> {
         self.parameter_mappings
             .iter()
             .map(|(name, params)| (name, params, self.formulas.get(name).unwrap()))
@@ -152,7 +152,7 @@ fn expect_one_or_more_arguments(got: usize) -> Result<(), String> {
 }
 
 impl FormulaStore {
-    pub(crate) fn new_empty() -> Self {
+    pub fn new_empty() -> Self {
         FormulaStore {
             signatures: Signatures::new_empty(),
             formulas: HashMap::new(),
@@ -161,7 +161,7 @@ impl FormulaStore {
         }
     }
 
-    pub(crate) fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<String, String> {
+    pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<String, String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
         let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
         let def = Element::parse(def).ok_or("Second formula could not be parsed")?;

@@ -1,7 +1,7 @@
 pub mod implementation {
     use crate::Element;
-    use regex::Regex;
     use std::mem;
+    use regex::Regex;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -647,10 +647,10 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use crate::libraries::storing::InternalFunction;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};
+    use crate::storing::{FormulaStore, InternalFunction};
 
     #[derive(Debug, Clone)]
     pub enum Signature {
@@ -1114,7 +1114,6 @@ pub mod signature {
 
     #[test]
     fn test_symbols() {
-        use crate::libraries::storing::FormulaStore;
         let mut all = FormulaStore::new_empty();
         assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
         assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));

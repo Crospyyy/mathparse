@@ -1,14 +1,7 @@
-mod application;
-mod libraries;
-
-#[cfg(not(test))]
-mod gui_application;
-
-#[cfg(not(test))]
-fn main() {
-    gui_application::main();
-    // run_formula_evaluator();
-}
+mod evaluation;
+pub mod parsing;
+mod printing;
+pub mod storing;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

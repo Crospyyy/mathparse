@@ -1,5 +1,6 @@
+use crate::controller::Window;
+
 pub fn main() {
-    use crate::gui_application::controller::Window;
     use eframe::NativeOptions;
     eframe::run_native("Window", NativeOptions::default(), Box::new(|cc| Ok(Box::new(Window::new(cc)))))
         .expect("panic message");
@@ -21,9 +22,6 @@ mod ui {
 mod logic {}
 
 mod controller {
-    use crate::gui_application::ui::UiState;
-    use crate::libraries::parsing::implementation::get_fun_name_end_of_string;
-    use crate::libraries::storing::FormulaStore;
     use eframe::epaint::FontId;
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange};
@@ -31,6 +29,9 @@ mod controller {
         CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
         TextEdit,
     };
+    use library::parsing::implementation::get_fun_name_end_of_string;
+    use library::storing::FormulaStore;
+    use crate::ui::UiState;
 
     pub struct Window {
         formula_store: FormulaStore,
