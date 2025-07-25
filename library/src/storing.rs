@@ -163,8 +163,8 @@ impl FormulaStore {
 
     pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<String, String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
-        let sig = Element::parse(sig).ok_or("First formula could not be parsed")?;
-        let def = Element::parse(def).ok_or("Second formula could not be parsed")?;
+        let sig = Element::parse(sig).map_err(|err|format!("First formula could not be parsed: {err}"))?;
+        let def = Element::parse(def).map_err(|err|format!("Second formula could not be parsed: {err}"))?;
 
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
@@ -172,7 +172,7 @@ impl FormulaStore {
     pub fn add_variable_with_value(
         &mut self, name: &str, value: f64, dry_run: bool,
     ) -> Result<String, String> {
-        let sig = Element::parse(name).ok_or("First formula could not be parsed")?;
+        let sig = Element::parse(name).map_err(|err|format!("First formula could not be parsed: {err}"))?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
             return Err("Signature must be a variable".to_owned());
         }

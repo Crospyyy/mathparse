@@ -177,7 +177,7 @@ impl Element {
 impl FormulaStore {
     pub fn eval(&self, name: &str) -> Result<f64, String> {
         dbg!("Parsing formula: {}", &name);
-        let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
+        let mut formula = Element::parse(name).map_err(|err|format!("Could not parse formula: {err}"))?;
         dbg!("Parsed formula: {:?}", &formula);
         let dont_expand = self.internal_function_definitions.keys().cloned().collect();
         dbg!("Expanding formula with internal functions: {:?}", &dont_expand);
@@ -187,7 +187,7 @@ impl FormulaStore {
         formula.eval_with_formulas(&self.internal_function_definitions)
     }
     pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
-        let mut formula = Element::parse(name).ok_or("Could not parse formula".to_owned())?;
+        let mut formula = Element::parse(name).map_err(|err|format!("Could not parse formula: {err}"))?;
         self.expand_formula(&mut formula, &self.internal_function_definitions.keys().cloned().collect())?;
         formula.safe_eval_with_formulas(&self.internal_function_definitions)
     }

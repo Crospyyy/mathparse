@@ -1,7 +1,7 @@
 pub mod implementation {
     use crate::Element;
-    use std::mem;
     use regex::Regex;
+    use std::mem;
 
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -22,7 +22,7 @@ pub mod implementation {
     }
 
     impl Element {
-        pub fn parse(input: &str) -> Option<Self> {
+        pub fn parse(input: &str) -> Result<Self, String> {
             let cow = Element::preprocess_string_minus(&input);
             let chars = cow.chars().collect::<Vec<_>>();
             let mut start = 0;
@@ -33,12 +33,16 @@ pub mod implementation {
             formula.process_multiply();
             formula.process_divide();
             formula.process_minus();
-            formula.process_pow();
+            formula.process_pow()?;
             formula.process_minus();
             formula.process_numbers_and_variables();
             formula.remove_unneeded_outer_brackets();
             formula.convert_to_variables_where_possible();
-            if formula.anything_unparsed() { None } else { Some(formula) }
+            if formula.anything_unparsed() {
+                Err("Parts of the formula could not be parsed".to_string())
+            } else {
+                Ok(formula)
+            }
         }
 
         /// Step 0
@@ -283,45 +287,52 @@ pub mod implementation {
         }
 
         /// Step 6
-        pub(crate) fn process_pow(&mut self) {
-            let create_recursive_pow = |element: &mut Element, mut new_elements: Vec<Element>| {
-                let mut working_element = new_elements.pop().unwrap();
-                for e in new_elements.into_iter().rev() {
-                    working_element = Element::Pow(Box::new(e), Box::new(working_element));
-                }
-                *element = working_element;
-            };
+        pub(crate) fn process_pow(&mut self) -> Result<(), String> {
+            let create_recursive_pow =
+                |element: &mut Element, mut new_elements: Vec<Element>| -> Result<(), String> {
+                    let mut working_element =
+                        new_elements.pop().ok_or("No element provided for power operation")?;
+                    for e in new_elements.into_iter().rev() {
+                        working_element = Element::Pow(Box::new(e), Box::new(working_element));
+                    }
+                    *element = working_element;
+                    Ok(())
+                };
             match self {
                 Element::Brackets(elements) => {
                     if let Some(new_elements) = split_list_by_char(elements, '^') {
-                        create_recursive_pow(self, new_elements);
+                        create_recursive_pow(self, new_elements)?;
                     }
                     match self {
-                        Element::Brackets(elements) => elements.iter_mut().for_each(Element::process_pow),
-                        Element::Pow(b, e) => {
-                            b.process_pow();
-                            e.process_pow();
+                        Element::Brackets(elements) => {
+                            elements.iter_mut().map(Element::process_pow).collect()
                         },
-                        _ => {},
+                        Element::Pow(b, e) => {
+                            b.process_pow()?;
+                            e.process_pow()
+                        },
+                        _ => Ok(()),
                     }
                 },
                 Element::Plus(elements) | Element::Multiply(elements) => {
-                    elements.iter_mut().for_each(Element::process_pow);
+                    elements.iter_mut().map(Element::process_pow).collect()
                 },
                 Element::Negate(e) => e.process_pow(),
                 Element::String(s) => {
                     if let Some(new_elements) = split_string_by_char(s, '^') {
-                        create_recursive_pow(self, new_elements);
+                        create_recursive_pow(self, new_elements)
+                    } else {
+                        Ok(())
                     }
                 },
                 Element::Pow(b, p) => {
-                    b.process_pow();
-                    p.process_pow();
+                    b.process_pow()?;
+                    p.process_pow()
                 },
                 Element::Function { arguments, .. } => {
-                    arguments.iter_mut().for_each(Element::process_pow);
+                    arguments.iter_mut().map(Element::process_pow).collect()
                 },
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
+                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => Ok(()),
             }
         }
 
@@ -529,7 +540,7 @@ pub mod testing {
                 return;
             }
 
-            let Some(element) = Element::parse(input) else {
+            let Ok(element) = Element::parse(input) else {
                 println!("Could not parse the formula: {}", input);
                 println!();
                 continue;
@@ -604,36 +615,48 @@ pub mod testing {
 
         brackets.print();
         brackets.print_debug();
+        let mut result = Ok(());
+        'processing: {
+            debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
+            debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
+            debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
+            debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply);
+            debug_print_step("4. Processing '/'", &mut brackets, Element::process_divide);
+            debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
+            debug_print_step("6. Processing '^'", &mut brackets, |e| {
+                let output = e.process_pow();
+                if output.is_err() {
+                    result = output;
+                }
+            });
+            debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
+            debug_print_step(
+                "8. Convert to numbers and variables",
+                &mut brackets,
+                Element::process_numbers_and_variables,
+            );
+            debug_print_step(
+                "9. Removing unneeded outer brackets",
+                &mut brackets,
+                Element::remove_unneeded_outer_brackets,
+            );
+            debug_print_step(
+                "10. Convert ambiguous symbols to variables where possible",
+                &mut brackets,
+                Element::convert_to_variables_where_possible,
+            );
+        }
 
-        debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
-        debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
-        debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
-        debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply);
-        debug_print_step("4. Processing '/'", &mut brackets, Element::process_divide);
-        debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
-        debug_print_step("6. Processing '^'", &mut brackets, Element::process_pow);
-        debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
-        debug_print_step(
-            "8. Convert to numbers and variables",
-            &mut brackets,
-            Element::process_numbers_and_variables,
-        );
-        debug_print_step(
-            "9. Removing unneeded outer brackets",
-            &mut brackets,
-            Element::remove_unneeded_outer_brackets,
-        );
-        debug_print_step(
-            "10. Convert ambiguous symbols to variables where possible",
-            &mut brackets,
-            Element::convert_to_variables_where_possible,
-        );
-        let output = if brackets.anything_unparsed() { None } else { Some(brackets.clone()) };
+        let output = if brackets.anything_unparsed() {
+            Err("Parts of the formula could not be parsed".to_string())
+        } else {
+            Ok(brackets)
+        };
         assert_eq!(output, Element::parse(input));
-        assert_eq!(output, expected_output);
+        assert_eq!(output.ok(), expected_output);
     }
 
-    fn debug_print_step(step: &str, element: &mut Element, operation: fn(&mut Element)) {
+    fn debug_print_step(step: &str, element: &mut Element, operation: impl FnOnce(&mut Element)) {
         print_heading(step);
         operation(element);
         element.print();
@@ -647,10 +670,10 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
+    use crate::storing::{FormulaStore, InternalFunction};
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};
-    use crate::storing::{FormulaStore, InternalFunction};
 
     #[derive(Debug, Clone)]
     pub enum Signature {
