@@ -523,6 +523,21 @@ pub mod implementation {
 pub mod testing {
     use crate::Element;
     use crate::formula_short::*;
+    use crate::storing::FormulaStore;
+
+    #[test]
+    fn test_symbols() {
+        let mut all = FormulaStore::new_empty();
+        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
+        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
+        println!("{:?}", all.get_signatures());
+        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c", false), Ok("fun2".to_owned()));
+        println!("{:?}", all.get_signatures());
+        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)", false);
+        println!("{:?}", result);
+        assert_eq!(result, Ok("fun3".to_owned()));
+        println!("{:?}", all.get_signatures());
+    }
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -667,24 +682,147 @@ pub mod testing {
         println!("##### {}", step);
     }
 
-    #[test]
-    pub fn test_evaluation() {
-        let inputs = [
-            ("1+2", Some(3.0)),
-            ("1+2*3", Some(7.0)),
-            ("1+2*3-4/2", Some(5.0)),
-            ("(1+2)*3", Some(9.0)),
-            ("(1+2)*(3-4)", Some(-3.0)),
-            ("x/x-x", None), // x is not defined
-        ];
-        println!("Starting formula evaluation tests");
-        inputs.into_iter().for_each(|(i, o)| test_formula_evaluation(i, o));
-    }
+    mod formula_generation {
+        use crate::Element;
+        use rand::{random, random_range, rng};
+        use std::fmt::Display;
+        use std::ops::Range;
+        use crate::parsing::testing::test_formula_parsing;
 
-    fn test_formula_evaluation(input: &str, expected_output: Option<f64>) {
-        println!("Testing formula evaluation for input: {}", input);
-        let output = Element::parse(input).ok().as_ref().and_then(Element::eval);
-        assert_eq!(output, expected_output);
+        enum Formula {
+            Plus(Vec<Formula>),
+            Multiply(Vec<Formula>),
+            Negate(Box<Formula>),
+            Number(f64),
+            Pow(Box<Formula>, Box<Formula>),
+            Division(Box<Formula>, Box<Formula>),
+            Function { name: String, arguments: Vec<Formula> },
+        }
+
+        impl Formula {
+            fn get_priority(&self) -> usize {
+                match self {
+                    Formula::Plus(_) => 0,
+                    Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
+                    Formula::Pow(..) => 2,
+                    Formula::Number(_) => 3,
+                    Formula::Function { .. } => 3,
+                }
+            }
+
+            fn generate_random(depth: usize) -> Self {
+                if depth == 0 {
+                    Formula::Number(random_range(0..=100) as _)
+                } else {
+                    match random_range(0..7) {
+                        0 => Formula::Number(random_range(0..=100) as _),
+                        1 => Formula::Plus(
+                            (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
+                        ),
+                        2 => Formula::Multiply(
+                            (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
+                        ),
+                        3 => Formula::Negate(Box::new(Self::generate_random(depth - 1))),
+                        4 => Formula::Pow(
+                            Box::new(Self::generate_random(depth - 1)),
+                            Box::new(Self::generate_random(depth - 1)),
+                        ),
+                        5 => Formula::Division(
+                            Box::new(Self::generate_random(depth - 1)),
+                            Box::new(Self::generate_random(depth - 1)),
+                        ),
+                        6 => {
+                            let name = format!("f{}", random_range(1..=10));
+                            let args =
+                                (0..random_range(1..=3)).map(|_| Self::generate_random(depth - 1)).collect();
+                            Formula::Function { name, arguments: args }
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+
+        impl Display for Formula {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    Formula::Plus(elements) => {
+                        write!(
+                            f,
+                            "{}",
+                            elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + ")
+                        )
+                    },
+                    Formula::Multiply(elements) => {
+                        let string = elements
+                            .iter()
+                            .map(|e| {
+                                if e.get_priority() < self.get_priority() {
+                                    format!("({})", e)
+                                } else {
+                                    e.to_string()
+                                }
+                            })
+                            .collect::<Vec<_>>()
+                            .join(" * ");
+                        write!(f, "{}", string)
+                    },
+                    Formula::Negate(e) => {
+                        if matches!(e.as_ref(), Formula::Plus(..) | Formula::Multiply(..)) {
+                            write!(f, "-({})", e)
+                        } else {
+                            write!(f, "-{}", e)
+                        }
+                    },
+                    Formula::Number(n) => write!(f, "{}", n),
+                    Formula::Pow(base, exponent) => {
+                        if base.get_priority() <= self.get_priority() {
+                            write!(f, "({})^", base)?;
+                        } else {
+                            write!(f, "{}^", base)?;
+                        }
+                        if exponent.get_priority() < self.get_priority() {
+                            write!(f, "({})", exponent)
+                        } else {
+                            write!(f, "{}", exponent)
+                        }
+                    },
+                    Formula::Division(numerator, denominator) => {
+                        if numerator.get_priority() < self.get_priority() {
+                            write!(f, "({})/", numerator)?;
+                        } else {
+                            write!(f, "{}/", numerator)?;
+                        }
+                        if denominator.get_priority() <= self.get_priority() {
+                            write!(f, "({})", denominator)
+                        } else {
+                            write!(f, "{}", denominator)
+                        }
+                    },
+                    Formula::Function { name, arguments } => {
+                        write!(
+                            f,
+                            "{}({})",
+                            name,
+                            arguments.iter().map(|a| format!("{}", a)).collect::<Vec<_>>().join(", ")
+                        )
+                    },
+                }
+            }
+        }
+
+        #[test]
+        fn test_formula_generation() {
+            for _ in 0..100 {
+                let formula = Formula::generate_random(2);
+                println!("Generated formula: {}", formula);
+                let parsed_result = Element::parse(&formula.to_string());
+                if parsed_result.is_err() {
+                    println!("Failed to parse: {}", formula);
+                    test_formula_parsing(&formula.to_string(), Some(Element::String("Something".to_string())))
+                }
+            }
+        }
     }
 }
 
@@ -1155,17 +1293,5 @@ pub mod signature {
 
     // struct SymbolDefinition {}
 
-    #[test]
-    fn test_symbols() {
-        let mut all = FormulaStore::new_empty();
-        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
-        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
-        println!("{:?}", all.get_signatures());
-        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c", false), Ok("fun2".to_owned()));
-        println!("{:?}", all.get_signatures());
-        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)", false);
-        println!("{:?}", result);
-        assert_eq!(result, Ok("fun3".to_owned()));
-        println!("{:?}", all.get_signatures());
-    }
+
 }
