@@ -22,16 +22,16 @@ mod ui {
 mod logic {}
 
 mod controller {
+    use crate::ui::UiState;
     use eframe::epaint::FontId;
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange};
     use egui::{
         CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
-        TextEdit,
+        TextEdit, Ui,
     };
     use library::parsing::implementation::get_fun_name_end_of_string;
     use library::storing::FormulaStore;
-    use crate::ui::UiState;
 
     pub struct Window {
         formula_store: FormulaStore,
@@ -45,6 +45,9 @@ mod controller {
             store.define_default_symbols().unwrap();
             store.add_variable_with_value("speed_of_sound_mps", 343.0, false).unwrap();
             store.add_variable_with_value("speed_of_light_mps", 299_792_458.0, false).unwrap();
+            store.add_variable_with_value("kw_to_ps", 1.35962, false).unwrap();
+            store.add_variable_with_value("km_to_miles", 0.6214, false).unwrap();
+            store.add_variable_with_value("liter_to_gallons", 0.264172, false).unwrap();
             Self { formula_store: store, ui_state: UiState::new() }
         }
 
@@ -88,6 +91,53 @@ mod controller {
                 }
             }
         }
+
+        fn show_top_input(&mut self, ui: &mut Ui) {
+            let edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
+                .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
+                .lock_focus(true);
+            let response = ui.add_sized([ui.available_width(), 20.0], edit);
+            if response.has_focus() {
+                let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input);
+                if !var_name.is_empty() {
+                    let compatible_symbols = self
+                        .formula_store
+                        .get_symbols()
+                        .iter()
+                        .filter(|(name, ..)| name.starts_with(&var_name))
+                        .map(|(name, ..)| *name)
+                        .collect::<Vec<_>>();
+
+                    if !compatible_symbols.is_empty() {
+                        let longest_common_start = determine_longest_common_start(&compatible_symbols);
+                        if !(compatible_symbols.len() == 1 && compatible_symbols[0] == &var_name) {
+                            response.show_tooltip_ui(|ui| {
+                                for name in compatible_symbols {
+                                    ui.add(Label::new(name).extend());
+                                }
+                            });
+                            if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start
+                            {
+                                self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
+                                self.update_calculation_result();
+                                set_cursor_pos(&response, self.ui_state.top_user_input.len());
+                            }
+                        }
+                    }
+                }
+            }
+            if response.changed() {
+                self.update_calculation_result();
+            }
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.try_apply_calculation();
+                response.request_focus();
+            }
+            ui.label(match &self.ui_state.calculation_result {
+                Ok(result) => RichText::new(result).size(20.0),
+                Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
+            });
+        }
     }
 
     fn set_cursor_pos(response: &Response, cursor_pos: usize) {
@@ -100,57 +150,13 @@ mod controller {
     impl App for Window {
         fn update(&mut self, ctx: &Context, frame: &mut Frame) {
             CentralPanel::default().show(ctx, |ui| {
-                let edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
-                    .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
-                    .lock_focus(true);
-                let response = ui.add_sized([ui.available_width(), 20.0], edit);
-                if response.has_focus() {
-                    let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input);
-                    if !var_name.is_empty() {
-                        let compatible_symbols = self
-                            .formula_store
-                            .get_symbols()
-                            .iter()
-                            .filter(|(name, ..)| name.starts_with(&var_name))
-                            .map(|(name, ..)| *name)
-                            .collect::<Vec<_>>();
-
-                        if !compatible_symbols.is_empty() {
-                            let longest_common_start = determine_longest_common_start(&compatible_symbols);
-                            if !(compatible_symbols.len() == 1 && compatible_symbols[0] == &var_name) {
-                                response.show_tooltip_ui(|ui| {
-                                    for name in compatible_symbols {
-                                        ui.add(Label::new(name).extend());
-                                    }
-                                });
-                                if ui.input(|i| i.key_pressed(egui::Key::Tab))
-                                    && var_name != longest_common_start
-                                {
-                                    self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
-                                    self.update_calculation_result();
-                                    set_cursor_pos(&response, self.ui_state.top_user_input.len());
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if response.changed() {
-                    self.update_calculation_result();
-                }
-
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    self.try_apply_calculation();
-                    response.request_focus();
-                }
-                ui.label(match &self.ui_state.calculation_result {
-                    Ok(result) => RichText::new(result).size(20.0),
-                    Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
-                });
+                self.show_top_input(ui);
                 ui.separator();
                 let area = ScrollArea::vertical().auto_shrink(false);
                 area.show(ui, |ui| {
-                    self.formula_store.get_symbols().iter().for_each(|(name, params, value)| {
+                    let mut elements = self.formula_store.get_symbols();
+                    elements.sort_by_key(|e| e.0);
+                    elements.iter().for_each(|(name, params, value)| {
                         let mut text = name.to_string();
                         if let Some(params) = params {
                             text.push_str(&format!("({})", params.join(", ")));
