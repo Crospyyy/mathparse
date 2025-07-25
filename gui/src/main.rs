@@ -43,6 +43,8 @@ mod controller {
             let mut store = FormulaStore::new_empty();
             store.define_default_internal_functions().unwrap();
             store.define_default_symbols().unwrap();
+            store.add_variable_with_value("speed_of_sound_mps", 343.0, false).unwrap();
+            store.add_variable_with_value("speed_of_light_mps", 299_792_458.0, false).unwrap();
             Self { formula_store: store, ui_state: UiState::new() }
         }
 
