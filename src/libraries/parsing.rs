@@ -7,13 +7,18 @@ pub mod implementation {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
     }
 
-    fn get_largest_fun_name(name: &str) -> String {
+    pub fn get_fun_name_end_of_string(name: &str) -> String {
         let mut valid_chars_count = 0;
         name.chars()
             .rev()
             .take_while(|&c| is_valid_char_for_function_name(c))
             .for_each(|_| valid_chars_count += 1);
-        if valid_chars_count == 0 { "".to_owned() } else { name[name.len() - valid_chars_count..].to_owned() }
+        if valid_chars_count == 0 {
+            "".to_owned()
+        } else {
+            let name = name[name.len() - valid_chars_count..].to_owned();
+            if name.chars().nth(0).is_none_or(|c| matches!(c, '0'..='9')) { "".to_owned() } else { name }
+        }
     }
 
     impl Element {
@@ -89,8 +94,8 @@ pub mod implementation {
                             (&elements[i], &elements[j])
                         {
                             let name = name.to_string();
-                            let function_name = get_largest_fun_name(&name);
-                            if function_name.chars().nth(0).is_none_or(|c| matches!(c, '0'..='9')) {
+                            let function_name = get_fun_name_end_of_string(&name);
+                            if function_name.is_empty() {
                                 continue; // Function names cannot be empty or start with a digit
                             }
 
@@ -505,8 +510,8 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::formula_short::*;
     use crate::Element;
+    use crate::formula_short::*;
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -641,8 +646,8 @@ pub mod testing {
 }
 
 pub mod signature {
-    use crate::libraries::storing::InternalFunction;
     use crate::Element;
+    use crate::libraries::storing::InternalFunction;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};

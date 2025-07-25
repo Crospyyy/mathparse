@@ -1,6 +1,6 @@
-use std::fmt::Display;
 use crate::Element;
 use colored::Colorize;
+use std::fmt::Display;
 
 enum Inner<'a, T: 'a>
 where

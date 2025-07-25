@@ -1,4 +1,3 @@
-
 pub fn main() {
     use crate::gui_application::controller::Window;
     use eframe::NativeOptions;
@@ -23,10 +22,12 @@ mod logic {}
 
 mod controller {
     use crate::gui_application::ui::UiState;
+    use crate::libraries::parsing::implementation::get_fun_name_end_of_string;
     use crate::libraries::storing::FormulaStore;
     use eframe::epaint::FontId;
     use eframe::{App, CreationContext, Frame};
-    use egui::{CentralPanel, Context, FontFamily, FontSelection, RichText, ScrollArea, TextEdit};
+    use egui::text::{CCursor, CCursorRange};
+    use egui::{CentralPanel, Context, FontFamily, FontSelection, Label, RichText, ScrollArea, TextEdit};
 
     pub struct Window {
         formula_store: FormulaStore,
@@ -77,8 +78,11 @@ mod controller {
                 return;
             }
             if input.contains("=") {
-                let _ = self.formula_store.add_symbol_from_string(input, false);
-                self.update_calculation_result();
+                let result = self.formula_store.add_symbol_from_string(input, false);
+                if result.is_ok() {
+                    self.ui_state.top_user_input.clear();
+                    self.update_calculation_result();
+                }
             }
         }
     }
@@ -87,8 +91,37 @@ mod controller {
         fn update(&mut self, ctx: &Context, frame: &mut Frame) {
             CentralPanel::default().show(ctx, |ui| {
                 let edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
-                    .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)));
+                    .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
+                    .lock_focus(true);
                 let response = ui.add_sized([ui.available_width(), 20.0], edit);
+                if response.has_focus() {
+                    let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input);
+                    if !var_name.is_empty() {
+                        let compatible_symbols = self
+                            .formula_store
+                            .get_symbols()
+                            .iter()
+                            .filter(|(name, ..)| name.starts_with(&var_name))
+                            .map(|(name, ..)| *name)
+                            .collect::<Vec<_>>();
+                        if ui.input(|i| i.key_pressed(egui::Key::Tab)) && compatible_symbols.len() == 1 {
+                            self.ui_state.top_user_input += &compatible_symbols[0][var_name.len()..];
+                            if let Some(mut state) = TextEdit::load_state(ctx, response.id) {
+                                let text_len = self.ui_state.top_user_input.len();
+                                state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(text_len))));
+                                state.store(ctx, response.id);
+                            }
+                        }
+                        if !compatible_symbols.is_empty() {
+                            response.show_tooltip_ui(|ui| {
+                                for name in compatible_symbols {
+                                    ui.add(Label::new(name).extend());
+                                }
+                            });
+                        }
+                    }
+                }
+
                 if response.changed() {
                     self.update_calculation_result();
                 }

@@ -1,5 +1,5 @@
-use crate::libraries::storing::{FormulaStore, InternalFunction};
 use crate::Element;
+use crate::libraries::storing::{FormulaStore, InternalFunction};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, PartialEq)]

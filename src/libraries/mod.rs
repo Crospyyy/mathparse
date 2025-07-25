@@ -1,4 +1,4 @@
 mod evaluation;
-mod parsing;
+pub mod parsing;
 mod printing;
 pub mod storing;

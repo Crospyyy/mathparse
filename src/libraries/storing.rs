@@ -1,5 +1,5 @@
-use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use crate::Element;
+use crate::libraries::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use std::collections::{HashMap, HashSet};
 
 impl InternalFunction {
