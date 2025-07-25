@@ -1,6 +1,6 @@
 use crate::Element;
-use std::collections::{HashMap, HashSet};
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
+use std::collections::{HashMap, HashSet};
 
 impl InternalFunction {
     pub fn new_with_one_parameter(definition: fn(f64) -> f64) -> Self {
@@ -143,6 +143,8 @@ impl FormulaStore {
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
         self.add_variable_with_value("pi", std::f64::consts::PI, false)?;
         self.add_variable_with_value("e", std::f64::consts::E, false)?;
+        self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
+        self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         Ok(())
     }
 }
@@ -163,8 +165,8 @@ impl FormulaStore {
 
     pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<String, String> {
         let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
-        let sig = Element::parse(sig).map_err(|err|format!("First formula could not be parsed: {err}"))?;
-        let def = Element::parse(def).map_err(|err|format!("Second formula could not be parsed: {err}"))?;
+        let sig = Element::parse(sig).map_err(|err| format!("First formula could not be parsed: {err}"))?;
+        let def = Element::parse(def).map_err(|err| format!("Second formula could not be parsed: {err}"))?;
 
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
@@ -172,7 +174,7 @@ impl FormulaStore {
     pub fn add_variable_with_value(
         &mut self, name: &str, value: f64, dry_run: bool,
     ) -> Result<String, String> {
-        let sig = Element::parse(name).map_err(|err|format!("First formula could not be parsed: {err}"))?;
+        let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
             return Err("Signature must be a variable".to_owned());
         }
