@@ -88,9 +88,10 @@ mod new_calculation {
         Float(BigFloat),
     }
 
+    #[allow(unused)]
     impl Number {
         fn from_string(str: &str) -> Self {
-            Self::Rational(todo!())
+            Self::Rational(rational_from_string(str))
         }
 
         fn is_exact(&self) -> bool {
@@ -102,7 +103,7 @@ mod new_calculation {
 
         fn get_rational(&self) -> Option<BigRational> {
             match self {
-                Number::Rational(r) => r.into(),
+                Number::Rational(r) => Some(r.clone()),
                 Number::Float(f) => {
                     f.inexact().not().then_some(())?;
                     Some(rational_from_float(f))
@@ -133,7 +134,7 @@ mod new_calculation {
         fn neg(&self, ctx: &mut Context) -> Self {
             match self {
                 Self::Rational(r) => Self::Rational(-r),
-                Self::Float(f) => Self::Float(expr!(-f, ctx)),
+                Self::Float(f) => Self::Float(expr!(-f, &mut *ctx)),
             }
         }
 
@@ -142,7 +143,7 @@ mod new_calculation {
                 Self::Rational(a + b)
             } else {
                 let (a, b) = (self.get_float(), other.get_float());
-                Self::Float(expr!(a + b, ctx))
+                Self::Float(expr!(a + b, &mut *ctx))
             }
         }
 
@@ -151,7 +152,7 @@ mod new_calculation {
                 Self::Rational(a * b)
             } else {
                 let (a, b) = (self.get_float(), other.get_float());
-                Self::Float(expr!(a * b, ctx))
+                Self::Float(expr!(a * b, &mut *ctx))
             }
         }
 
@@ -160,7 +161,7 @@ mod new_calculation {
                 return Self::Rational(a.pow(b));
             }
             let (a, b) = (self.get_float(), other.get_float());
-            Self::Float(expr!(pow(a, b), ctx))
+            Self::Float(expr!(pow(a, b), &mut *ctx))
         }
     }
 
@@ -186,7 +187,7 @@ mod new_calculation {
 
     fn float_to_string_with_rounding(float: &BigFloat, decimals: usize) -> String {
         let scientific = float_to_scientific_rounded_to(&float, decimals);
-        if let Some(d) = Decimal::from_scientific(&scientific) {
+        if let Ok(d) = Decimal::from_scientific(&scientific) {
             return d.to_string();
         }
         scientific
