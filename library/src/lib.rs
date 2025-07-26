@@ -1,5 +1,5 @@
 use astro_float::ctx::Context;
-use astro_float::{expr, BigFloat, Consts, Radix, RoundingMode};
+use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
 use rust_decimal::Decimal;
 
 mod evaluation;
@@ -75,72 +75,191 @@ mod formula_short {
     }
 }
 
-#[test]
-fn calculation_workflow() {
-    // ### Precise Calculation Workflow
-    // - read the numbers as Rationals in the format "num/10^digits"
-    // - do the calculations
-    // - convert the result into a numerator/denominator pair
-    // - calculate the result using Decimal
-
-    // ### Imprecise Calculation Workflow
-    // - read the number as BigFloat
-    // - do the calculations
-    // - convert the result to decimal using `convert_to_radix`
-    // - trim the digits to n+1 digits before the decimal point
-    // - round the last digit and apply changes to digits before if rounding up
-    // - convert the result to a string
-    // - print the result
-}
-
-#[test]
-fn test_rationals() {
+mod new_calculation {
+    use astro_float::ctx::Context;
+    use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
     use num_rational::BigRational;
-    let rational = BigRational::new(269.into(), 100.into());
-    let rational2 = BigRational::new(101.into(), 100.into());
-    let result = &rational + &rational2;
-    println!("{}", result);
-    let both = result.into_raw();
-    let mut consts = Consts::new().expect("Constants cache initialized");
-    let mut ctx = Context::new(
-        1024,
-        RoundingMode::ToEven,
-        Consts::new().expect("Constants cache initialized"),
-        -10000,
-        10000,
-    );
-    let float = BigFloat::parse(&both.0.to_string(), Radix::Dec, 1024, RoundingMode::ToEven, &mut consts);
-    let float2 = BigFloat::parse(&both.1.to_string(), Radix::Dec, 1024, RoundingMode::ToEven, &mut consts);
-    let output = float.div(&float2, 1024, RoundingMode::ToEven);
-    println!("Output: {}", output);
-    println!("Exact: {}", !output.inexact());
-}
+    use rust_decimal::Decimal;
+    use rust_decimal::prelude::ToPrimitive;
+    use std::ops::Not;
 
-#[test]
-fn test_decimals() {
-    use rust_decimal::prelude::*;
-    let num1 = 123;
-    let num2 = 25;
-    let num1_ = Decimal::from(num1);
-    let num2_ = Decimal::from(num2);
-    println!("{}", num1_ / num2_);
-}
+    enum Number {
+        Rational(BigRational),
+        Float(BigFloat),
+    }
 
-#[test]
-fn test_floats() {
-    let mut ctx = Context::new(
-        1024,
-        RoundingMode::ToEven,
-        Consts::new().expect("Constants cache initialized"),
-        -10000,
-        10000,
-    );
+    impl Number {
+        fn from_string(str: &str) -> Self {
+            Self::Rational(todo!())
+        }
 
-    let input_num = BigFloat::from(1.4);
-    let result = expr!(0.1 + 0.2, &mut ctx);
+        fn is_exact(&self) -> bool {
+            match self {
+                Number::Rational(_) => true,
+                Number::Float(float) => !float.inexact(),
+            }
+        }
 
-    let mut cc = Consts::new().expect("Constants cache initialized");
+        fn get_rational(&self) -> Option<BigRational> {
+            match self {
+                Number::Rational(r) => r.into(),
+                Number::Float(f) => {
+                    f.inexact().not().then_some(())?;
+                    Some(rational_from_float(f))
+                },
+            }
+        }
 
-    println!("Inexact: {}", result.inexact());
-    println!("Float: {}", result);
+        fn get_float(&self) -> BigFloat {
+            match self {
+                Number::Rational(r) => float_from_rational(r),
+                Number::Float(f) => f.clone(),
+            }
+        }
+
+        fn to_string(&self) -> String {
+            match self {
+                Number::Rational(r) => {
+                    if let Some(d) = decimal_from_rational(r) {
+                        return d.to_string();
+                    }
+                    let float = float_from_rational(r);
+                    float_to_string_with_rounding(&float, 20)
+                },
+                Number::Float(f) => float_to_string_with_rounding(f, 20),
+            }
+        }
+
+        fn neg(&self, ctx: &mut Context) -> Self {
+            match self {
+                Self::Rational(r) => Self::Rational(-r),
+                Self::Float(f) => Self::Float(expr!(-f, ctx)),
+            }
+        }
+
+        fn plus(&self, other: &Self, ctx: &mut Context) -> Self {
+            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
+                Self::Rational(a + b)
+            } else {
+                let (a, b) = (self.get_float(), other.get_float());
+                Self::Float(expr!(a + b, ctx))
+            }
+        }
+
+        fn mul(&self, other: &Self, ctx: &mut Context) -> Self {
+            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
+                Self::Rational(a * b)
+            } else {
+                let (a, b) = (self.get_float(), other.get_float());
+                Self::Float(expr!(a * b, ctx))
+            }
+        }
+
+        fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
+            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational().and_then(|r| r.to_i32())) {
+                return Self::Rational(a.pow(b));
+            }
+            let (a, b) = (self.get_float(), other.get_float());
+            Self::Float(expr!(pow(a, b), ctx))
+        }
+    }
+
+    fn rational_from_string(s: &str) -> BigRational {
+        todo!()
+    }
+
+    fn decimal_from_rational(rational: &BigRational) -> Option<Decimal> {
+        todo!()
+    }
+
+    fn float_from_rational(rational: &BigRational) -> BigFloat {
+        todo!()
+    }
+
+    fn rational_from_float(float: &BigFloat) -> BigRational {
+        todo!()
+    }
+
+    fn float_to_scientific_rounded_to(float: &BigFloat, decimals: usize) -> String {
+        todo!()
+    }
+
+    fn float_to_string_with_rounding(float: &BigFloat, decimals: usize) -> String {
+        let scientific = float_to_scientific_rounded_to(&float, decimals);
+        if let Some(d) = Decimal::from_scientific(&scientific) {
+            return d.to_string();
+        }
+        scientific
+    }
+
+    #[test]
+    fn calculation_workflow() {
+        // ### Precise Calculation Workflow
+        // - read the numbers as Rationals in the format "num/10^digits"
+        // - do the calculations
+        // - convert the result into a numerator/denominator pair
+        // - calculate the result using Decimal
+
+        // ### Imprecise Calculation Workflow
+        // - read the number as BigFloat
+        // - do the calculations
+        // - convert the result to decimal using `convert_to_radix`
+        // - trim the digits to n+1 digits before the decimal point
+        // - round the last digit and apply changes to digits before if rounding up
+        // - convert the result to a string
+        // - print the result
+    }
+
+    #[test]
+    fn test_rationals() {
+        use num_rational::BigRational;
+        let rational = BigRational::new(269.into(), 100.into());
+        let rational2 = BigRational::new(101.into(), 100.into());
+        let result = &rational + &rational2;
+        println!("{}", result);
+        let both = result.into_raw();
+        let mut consts = Consts::new().expect("Constants cache initialized");
+        let mut ctx = Context::new(
+            1024,
+            RoundingMode::ToEven,
+            Consts::new().expect("Constants cache initialized"),
+            -10000,
+            10000,
+        );
+        let float = BigFloat::parse(&both.0.to_string(), Radix::Dec, 1024, RoundingMode::ToEven, &mut consts);
+        let float2 =
+            BigFloat::parse(&both.1.to_string(), Radix::Dec, 1024, RoundingMode::ToEven, &mut consts);
+        let output = float.div(&float2, 1024, RoundingMode::ToEven);
+        println!("Output: {}", output);
+        println!("Exact: {}", !output.inexact());
+    }
+
+    #[test]
+    fn test_decimals() {
+        use rust_decimal::prelude::*;
+        let num1 = 123;
+        let num2 = 25;
+        let num1_ = Decimal::from(num1);
+        let num2_ = Decimal::from(num2);
+        println!("{}", num1_ / num2_);
+    }
+
+    #[test]
+    fn test_floats() {
+        let mut ctx = Context::new(
+            1024,
+            RoundingMode::ToEven,
+            Consts::new().expect("Constants cache initialized"),
+            -10000,
+            10000,
+        );
+
+        let input_num = BigFloat::from(1.4);
+        let result = expr!(0.1 + 0.2, &mut ctx);
+
+        let mut cc = Consts::new().expect("Constants cache initialized");
+
+        println!("Inexact: {}", result.inexact());
+        println!("Float: {}", result);
+    }
 }
