@@ -1,78 +1,14 @@
-use crate::Element;
 use crate::new_calculation::Number;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
+use crate::{Element, FunctionExpression};
+use astro_float::ctx::Context;
+use astro_float::{BigFloat, expr};
 use std::collections::{HashMap, HashSet};
-
-impl InternalFunction {
-    pub fn new_with_one_parameter(definition: fn(f64) -> f64) -> Self {
-        Self::OneParameter(definition)
-    }
-    pub fn new_with_n_parameters(n: usize, definition: fn(Vec<f64>) -> f64) -> Self {
-        Self::NParameters(n, definition)
-    }
-    pub fn new_with_n_or_more_parameters(n: usize, definition: fn(Vec<f64>) -> f64) -> Self {
-        Self::NOrMoreParameters(n, definition)
-    }
-
-    pub fn is_param_count_valid(&self, param_count: usize) -> bool {
-        match self {
-            InternalFunction::OneParameter(_) => param_count == 1,
-            InternalFunction::NParameters(n, _) => param_count == *n,
-            InternalFunction::NOrMoreParameters(n, _) => param_count >= *n,
-        }
-    }
-
-    fn verify_parameter_count(&self, param_count: usize) -> Result<(), String> {
-        self.is_param_count_valid(param_count).then_some(()).ok_or(match self {
-            InternalFunction::OneParameter(_) => {
-                format!("Expected one argument, got {}", param_count)
-            },
-            InternalFunction::NParameters(n, _) => {
-                format!("Expected {} argument{}, got {}", *n, if *n == 1 { "" } else { "s" }, param_count)
-            },
-            InternalFunction::NOrMoreParameters(n, _) => {
-                format!("Expected {} or more arguments, got {}", *n, param_count)
-            },
-        })
-    }
-
-    pub fn call(&self, args: Vec<f64>) -> Result<f64, String> {
-        self.verify_parameter_count(args.len())?;
-        Ok(match self {
-            InternalFunction::OneParameter(fun) => fun(args[0]),
-            InternalFunction::NParameters(_, fun) => fun(args),
-            InternalFunction::NOrMoreParameters(_, fun) => fun(args),
-        })
-    }
-
-    pub fn get_param_count(&self) -> usize {
-        match self {
-            InternalFunction::OneParameter(_) => 1,
-            InternalFunction::NParameters(n, _) | InternalFunction::NOrMoreParameters(n, _) => *n,
-        }
-    }
-
-    pub fn get_signature(&self) -> Signature {
-        match self {
-            InternalFunction::OneParameter(_) => Signature::InternalFunction(ParamCount::Exactly(1)),
-            InternalFunction::NParameters(n, _) => Signature::InternalFunction(ParamCount::Exactly(*n)),
-            InternalFunction::NOrMoreParameters(n, _) => Signature::InternalFunction(ParamCount::AtLeast(*n)),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum InternalFunction {
-    OneParameter(fn(f64) -> f64),
-    NParameters(usize, fn(Vec<f64>) -> f64),
-    NOrMoreParameters(usize, fn(Vec<f64>) -> f64),
-}
 
 pub struct FormulaStore {
     signatures: Signatures,
     formulas: HashMap<String, Element>,
     parameter_mappings: HashMap<String, Option<Vec<String>>>,
-    pub(super) internal_function_definitions: HashMap<String, InternalFunction>,
 }
 
 impl FormulaStore {
@@ -82,85 +18,78 @@ impl FormulaStore {
             .map(|(name, params)| (name, params, self.formulas.get(name).unwrap()))
             .collect::<Vec<_>>()
     }
-}
-
-impl FormulaStore {
-    pub fn define_internal_function(
-        &mut self, name: &str, internal_function: InternalFunction,
-    ) -> Result<(), String> {
-        if self.internal_function_definitions.contains_key(name) {
-            return Err(format!("Internal function definition with key `{}` already exists", name));
-        }
-        if self.formulas.contains_key(name) {
-            return Err(format!("Formula definition with key `{}` already exists", name));
-        }
-        self.internal_function_definitions.insert(name.to_string(), internal_function);
-        Ok(())
-    }
 
     pub fn define_default_internal_functions(&mut self) -> Result<(), String> {
-        self.define_internal_function("sin", InternalFunction::new_with_one_parameter(f64::sin))?;
-        self.define_internal_function("cos", InternalFunction::new_with_one_parameter(f64::cos))?;
-        self.define_internal_function("tan", InternalFunction::new_with_one_parameter(f64::tan))?;
-
-        self.define_internal_function("asin", InternalFunction::new_with_one_parameter(f64::asin))?;
-        self.define_internal_function("acos", InternalFunction::new_with_one_parameter(f64::acos))?;
-        self.define_internal_function("atan", InternalFunction::new_with_one_parameter(f64::atan))?;
-
-        self.define_internal_function("sqrt", InternalFunction::new_with_one_parameter(f64::sqrt))?;
-        self.define_internal_function("abs", InternalFunction::new_with_one_parameter(f64::abs))?;
-        self.define_internal_function("log2", InternalFunction::new_with_one_parameter(f64::log2))?;
-        self.define_internal_function("log10", InternalFunction::new_with_one_parameter(f64::log10))?;
-        self.define_internal_function("ln", InternalFunction::new_with_one_parameter(f64::ln))?;
-        self.define_internal_function("floor", InternalFunction::new_with_one_parameter(f64::floor))?;
-        self.define_internal_function("ceil", InternalFunction::new_with_one_parameter(f64::ceil))?;
-        self.define_internal_function("round", InternalFunction::new_with_one_parameter(f64::round))?;
-
-        self.define_internal_function(
-            "avg",
-            InternalFunction::new_with_n_or_more_parameters(1, |args| {
-                args.iter().sum::<f64>() / args.len() as f64
-            }),
-        )?;
-        self.define_internal_function(
-            "max",
-            InternalFunction::new_with_n_or_more_parameters(1, |args| {
-                args.iter().copied().max_by(|a, b| a.total_cmp(b)).unwrap_or(0.0)
-            }),
-        )?;
-        self.define_internal_function(
-            "min",
-            InternalFunction::new_with_n_or_more_parameters(1, |args| {
-                args.iter().copied().min_by(|a, b| a.total_cmp(b)).unwrap_or(0.0)
-            }),
-        )?;
-        self.define_internal_function(
-            "sum",
-            InternalFunction::new_with_n_or_more_parameters(0, |args| args.iter().sum::<f64>()),
-        )?;
         Ok(())
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
-        self.add_variable_with_value("pi", std::f64::consts::PI, false)?;
-        self.add_variable_with_value("e", std::f64::consts::E, false)?;
+        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?; // todo check whether const_pi is marked as inexact
+        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?; // todo check whether const_e is marked as inexact
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
+
+        macro_rules! define_fun_single_arg {
+            ($op:ident) => {
+                self.add_expression_fun_single_arg(stringify!($op), Number::$op)?
+            };
+        }
+
+        define_fun_single_arg!(sin);
+        define_fun_single_arg!(cos);
+        define_fun_single_arg!(tan);
+        define_fun_single_arg!(asin);
+        define_fun_single_arg!(acos);
+        define_fun_single_arg!(atan);
+        define_fun_single_arg!(sqrt);
+        define_fun_single_arg!(abs);
+        define_fun_single_arg!(log2);
+        define_fun_single_arg!(log10);
+        define_fun_single_arg!(ln);
+        define_fun_single_arg!(floor);
+        define_fun_single_arg!(ceil);
+        define_fun_single_arg!(round);
+
+        self.add_expression_fun_multiple_args(
+            "avg",
+            ParamCount::AtLeast(1),
+            |ctx: &mut Context, args: Vec<Number>| {
+                let num_args = args.len();
+                args.into_iter()
+                    .reduce(|a, b| a.plus(&b, ctx))
+                    .unwrap_or(Number::error())
+                    .div(&Number::from(num_args), ctx)
+            },
+        )?;
+        self.add_expression_fun_multiple_args(
+            "max",
+            ParamCount::AtLeast(1),
+            |ctx: &mut Context, args: Vec<Number>| {
+                args.into_iter().reduce(|a, b| a.max(&b, ctx)).unwrap_or(Number::error())
+            },
+        )?;
+        self.add_expression_fun_multiple_args(
+            "min",
+            ParamCount::AtLeast(1),
+            |ctx: &mut Context, args: Vec<Number>| {
+                args.into_iter().reduce(|a, b| a.min(&b, ctx)).unwrap_or(Number::error())
+            },
+        )?;
+        self.add_expression_fun_multiple_args(
+            "sum",
+            ParamCount::AtLeast(0),
+            |ctx: &mut Context, args: Vec<Number>| {
+                args.into_iter().fold(Number::from(0), |a, b| a.plus(&b, ctx))
+            },
+        )?;
         Ok(())
     }
-}
 
-fn expect_one_or_more_arguments(got: usize) -> Result<(), String> {
-    if got > 0 { Ok(()) } else { Err("Expected one or more arguments, got 0".to_owned()) }
-}
-
-impl FormulaStore {
     pub fn new_empty() -> Self {
         FormulaStore {
             signatures: Signatures::new_empty(),
             formulas: HashMap::new(),
             parameter_mappings: HashMap::new(),
-            internal_function_definitions: HashMap::new(),
         }
     }
 
@@ -177,16 +106,9 @@ impl FormulaStore {
     ) -> Result<String, String> {
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 
-        if self.internal_function_definitions.contains_key(symbol_name_and_args.get_name()) {
-            return Err(format!(
-                "Internal function definition with key `{}` already exists",
-                symbol_name_and_args.get_name()
-            ));
-        }
         match self.signatures.add_symbol_from_function_signature_and_definition(
             symbol_name_and_args,
             def.clone(),
-            &self.internal_function_definitions,
             dry_run,
         ) {
             Ok((name, arg_names)) => {
@@ -202,7 +124,7 @@ impl FormulaStore {
     }
 
     pub fn add_variable_with_value(
-        &mut self, name: &str, value: f64, dry_run: bool,
+        &mut self, name: &str, value: String, dry_run: bool,
     ) -> Result<String, String> {
         let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
@@ -213,20 +135,58 @@ impl FormulaStore {
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
 
-    pub fn add_expression_var(&mut self, name: impl ToString, expression: fn() -> Number) {
+    pub fn add_expression_var(
+        &mut self, name: impl ToString, expression: fn(&mut Context) -> Number,
+    ) -> Result<(), String> {
         todo!()
     }
 
-    pub fn add_expression_fun(
-        &mut self, name: impl ToString, param_count: ParamCount, expression: fn(Vec<Number>) -> Number,
-    ) {
-        todo!()
+    pub fn add_expression_fun_multiple_args(
+        &mut self, name: impl ToString, param_count: ParamCount,
+        expression: fn(&mut Context, Vec<Number>) -> Number,
+    ) -> Result<(), String> {
+        let name = name.to_string();
+        if self.formulas.contains_key(&name) {
+            return Err(format!("Formula definition with key `{}` already exists", name));
+        }
+        self.signatures.insert(
+            name.clone(),
+            match param_count {
+                ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
+                ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
+            },
+        );
+        self.formulas.insert(
+            name,
+            Element::FunctionWithExpression {
+                arguments: vec![],
+                expression: FunctionExpression::MultipleArguments(expression),
+            },
+        );
+        Ok(())
+    }
+    pub fn add_expression_fun_single_arg(
+        &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number,
+    ) -> Result<(), String> {
+        let name = name.to_string();
+        if self.formulas.contains_key(&name) {
+            return Err(format!("Formula definition with key `{}` already exists", name));
+        }
+        self.signatures.insert(name.clone(), Signature::Function(vec![Signature::Number]));
+        self.formulas.insert(
+            name,
+            Element::FunctionWithExpression {
+                arguments: vec![],
+                expression: FunctionExpression::SingleArgument(expression),
+            },
+        );
+        Ok(())
     }
 
     pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
         Some(InsertionElement {
             name: name.to_string(),
-            arguments: self.parameter_mappings.get(name)?.clone(),
+            parameters: self.parameter_mappings.get(name)?.clone(),
             formula: self.formulas.get(name)?.clone(),
         })
     }
@@ -240,13 +200,17 @@ impl FormulaStore {
         let params_hashset = HashSet::from_iter(arguments.iter().flatten().cloned());
         self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
 
-        Ok(InsertionElement { name: name.to_string(), arguments, formula })
+        Ok(InsertionElement { name: name.to_string(), parameters: arguments, formula })
     }
 
     #[cfg(test)]
     pub(crate) fn get_signatures(&self) -> &Signatures {
         &self.signatures
     }
+}
+
+fn expect_one_or_more_arguments(got: usize) -> Result<(), String> {
+    if got > 0 { Ok(()) } else { Err("Expected one or more arguments, got 0".to_owned()) }
 }
 
 #[test]
@@ -267,7 +231,7 @@ pub fn test_insert_formula() {
     store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)", false).unwrap();
     let insert = store.get_insertion_element_expanded("fun2", &HashSet::new()).unwrap();
     assert_eq!(insert.name, "fun2");
-    assert_eq!(insert.arguments, Some(vec!["x".to_string(), "y".to_string()]));
+    assert_eq!(insert.parameters, Some(vec!["x".to_string(), "y".to_string()]));
     assert_eq!(insert.formula, plus([var("x"), var("y")]));
     dbg!(insert);
 }
@@ -275,27 +239,27 @@ pub fn test_insert_formula() {
 #[derive(Debug)]
 pub struct InsertionElement {
     name: String,
-    arguments: Option<Vec<String>>,
+    parameters: Option<Vec<String>>,
     formula: Element,
 }
 
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
-        if let Some(insert_args) = &self.arguments {
+        if let Some(insert_args) = &self.parameters {
             let self_arguments = param_values;
             if insert_args.len() != self_arguments.len() {
                 dbg!(insert_args);
                 dbg!(self_arguments);
                 return Err(
-                    "The function used in the formula and the supplied function have different parameter counts"
-                        .to_owned(),
-                );
+					"The function used in the formula and the supplied function have different parameter counts"
+						.to_owned(),
+				);
             }
             let mut new_formula = self.formula.clone();
             for (in_arg, val) in insert_args.iter().zip(self_arguments) {
                 new_formula.insert_symbol(&InsertionElement {
                     name: in_arg.clone(),
-                    arguments: None,
+                    parameters: None,
                     formula: val.clone(),
                 })?
             }
@@ -311,7 +275,8 @@ impl Element {
             Element::Brackets(elements)
             | Element::Plus(elements)
             | Element::Multiply(elements)
-            | Element::Function { arguments: elements, .. } => {
+            | Element::Function { arguments: elements, .. }
+            | Element::FunctionWithExpression { arguments: elements, .. } => {
                 for e in elements {
                     e.insert_symbol(insert)?;
                 }
@@ -322,36 +287,40 @@ impl Element {
             },
             Element::Negate(x) => x.insert_symbol(insert)?,
             Element::Number(_)
+            | Element::NumberWithExpression(_)
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
             | Element::String(_) => {},
         }
         if self.get_name().is_some_and(|n| n == insert.name) {
             // this is going to be the new logic
-            match (&mut *self, &insert.arguments, &insert.formula) {
-                (Element::Function { name, arguments }, params, insert_formula) => {
-                    match (params, insert_formula) {
-                        (None, Element::VariableOrFunction(new_name)) => {
-                            *name = new_name.clone();
-                        },
-                        (Some(_), _) => {
-                            *self = insert.insert_param_values(arguments.clone())?;
-                        },
-                        (..) => {
-                            return Err(format!(
-                                "Insertion element and formula don't match (self: {:?}, insert: {:?})",
-                                self, insert
-                            ));
-                        },
-                    }
+            match (&mut *self, &insert.parameters, &insert.formula) {
+                (
+                    Element::Function { name: self_name, arguments: self_arguments },
+                    insert_params,
+                    insert_formula,
+                ) => match (insert_params, insert_formula) {
+                    (None, Element::VariableOrFunction(new_name)) => {
+                        *self_name = new_name.clone();
+                    },
+                    (Some(_), _) => {
+                        *self = insert.insert_param_values(self_arguments.clone())?;
+                    },
+                    (..) => {
+                        return Err(format!(
+                            "Insertion element and formula don't match (self: {:?}, insert: {:?})",
+                            self, insert
+                        ));
+                    },
                 },
-                (Element::Variable(name), None, _) => {
+                (Element::Variable(_), None, _) => {
                     *self = insert.formula.clone();
                 },
                 (Element::VariableOrFunction(name), params, _) => {
                     if params.is_some() {
                         println!("Skipping this because there is no call yet");
                     } else {
+                        // insertion element is either a variable or also a variable_or_function
                         *self = insert.formula.clone();
                     }
                 },
@@ -414,8 +383,12 @@ impl Element {
             | Element::String(_)
             | Element::Number(_)
             | Element::Variable(_)
-            | Element::VariableOrFunction(_) => {},
-            Element::Plus(elements) | Element::Multiply(elements) => {
+            | Element::VariableOrFunction(_)
+            | Element::NumberWithExpression(_)
+            | Element::Function { .. } => {},
+            Element::Plus(elements)
+            | Element::Multiply(elements)
+            | Element::FunctionWithExpression { arguments: elements, .. } => {
                 for e in elements {
                     if let Element::VariableOrFunction(name) = e {
                         *e = Element::Variable(name.clone());
@@ -435,7 +408,6 @@ impl Element {
                     **a = Element::Variable(name.clone());
                 }
             },
-            Element::Function { .. } => {},
         }
         Ok(())
     }
@@ -452,7 +424,7 @@ fn test_insert_symbols() {
     formula
         .insert_symbol(&InsertionElement {
             name: "f".to_owned(),
-            arguments: Some(vec!["x".to_owned(), "y".to_owned()]),
+            parameters: Some(vec!["x".to_owned(), "y".to_owned()]),
             formula: fun,
         })
         .unwrap();

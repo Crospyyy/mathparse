@@ -831,7 +831,6 @@ pub mod testing {
 
 pub mod signature {
     use crate::Element;
-    use crate::storing::InternalFunction;
     use std::cmp::PartialEq;
     use std::collections::{HashMap, HashSet};
     use std::ops::{Deref, DerefMut};
@@ -842,7 +841,7 @@ pub mod signature {
         Number,
         Function(Vec<Signature>),
         /// This Function only takes numbers as parameters
-        InternalFunction(ParamCount),
+        FunctionNOrMoreParams(usize),
         Conflicting,
     }
 
@@ -878,8 +877,8 @@ pub mod signature {
                         *self = Signature::Conflicting;
                     }
                 },
-                (Signature::Function(args_old), Signature::InternalFunction(param_count)) => {
-                    if !param_count.number_would_be_valid(args_old.len()) {
+                (Signature::Function(args_old), Signature::FunctionNOrMoreParams(at_least)) => {
+                    if args_old.len() < at_least {
                         *self = Signature::Conflicting;
                         return;
                     }
@@ -888,10 +887,10 @@ pub mod signature {
                         *self = Signature::Conflicting;
                         return;
                     }
-                    *self = Signature::InternalFunction(param_count);
+                    *self = Signature::FunctionNOrMoreParams(at_least)
                 },
-                (Signature::InternalFunction(param_count), Signature::Function(params)) => {
-                    if !param_count.number_would_be_valid(params.len())
+                (Signature::FunctionNOrMoreParams(at_least), Signature::Function(params)) => {
+                    if params.len() < *at_least
                         || !params
                             .iter()
                             .all(|p| matches!(p, Signature::Number | Signature::NumberOrFunction))
@@ -899,12 +898,15 @@ pub mod signature {
                         *self = Signature::Conflicting;
                     }
                 },
-                (Signature::InternalFunction(count_old), Signature::InternalFunction(count_new)) => {
-                    if *count_old != count_new {
+                (
+                    Signature::FunctionNOrMoreParams(at_least_old),
+                    Signature::FunctionNOrMoreParams(at_least_new),
+                ) => {
+                    if *at_least_old != at_least_new {
                         *self = Signature::Conflicting;
                     }
                 },
-                (this, other) => {
+                (_, _) => {
                     *self = Signature::Conflicting;
                 },
             }
@@ -944,14 +946,12 @@ pub mod signature {
             Signatures(map)
         }
 
-        pub fn generate_needed_elements_of_formula(
-            formula: &Element, internally_defined: &HashMap<String, InternalFunction>,
-        ) -> Signatures {
+        pub fn generate_needed_elements_of_formula(formula: &Element) -> Signatures {
             let mut all_undefined = Signatures::new_from_map(
                 internally_defined.iter().map(|item| (item.0.clone(), item.1.get_signature())).collect(),
             );
             all_undefined.add_all_undefined_symbols_of_formula(formula);
-            all_undefined.retain(|_, sig| !matches!(sig, Signature::InternalFunction(_))); // remove the internal functions again
+            all_undefined.retain(|_, sig| !matches!(sig, Signature::FunctionVariableInputCount(_))); // remove the internal functions again
             // todo update all of the signatures based on them having relationships with other symbols (use `update_signature` method for every entry in `all_undefined`)
             all_undefined
         }
@@ -1005,22 +1005,19 @@ pub mod signature {
         }
 
         pub(crate) fn add_symbol_from_function_signature_and_definition(
-            &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element,
-            internally_defined: &HashMap<String, InternalFunction>, dry_run: bool,
+            &mut self, mut symbol_name_and_args: SymbolDeclarationData, content: Element, dry_run: bool,
         ) -> Result<(String, Option<Vec<String>>), String> {
             if self.contains_key(&symbol_name_and_args.name) {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
-            let mut required_signatures =
-                Signatures::generate_needed_elements_of_formula(&content, internally_defined);
+            let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
 
             Self::refine_signature_and_undefined(
                 &mut symbol_name_and_args,
                 &mut required_signatures,
                 &content,
                 self,
-                internally_defined,
             )?;
 
             if !required_signatures.is_empty() {
@@ -1045,7 +1042,6 @@ pub mod signature {
         fn refine_signature_and_undefined(
             symbol_name_and_args: &mut SymbolDeclarationData, undefined_signatures: &mut Signatures,
             formula: &Element, already_defined: &Signatures,
-            internally_defined: &HashMap<String, InternalFunction>,
         ) -> Result<(), String> {
             let parameter_names = symbol_name_and_args
                 .function_args

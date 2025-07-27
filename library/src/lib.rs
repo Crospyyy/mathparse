@@ -4,6 +4,7 @@ use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
 use rust_decimal::Decimal;
 
 mod evaluation;
+mod operations;
 pub mod parsing;
 mod printing;
 pub mod storing;
@@ -26,9 +27,9 @@ pub enum Element {
 
     // Expanded formula elements
     /// A function with a stored evaluation expression
-    FunctionWithExpression { arguments: Vec<Element>, expression: fn(Vec<Number>) -> Number },
+    FunctionWithExpression { arguments: Vec<Element>, expression: FunctionExpression },
     /// A number defined by an expression
-    NumberWithExpression(fn() -> Number),
+    NumberWithExpression(fn(&mut Context) -> Number),
     /// List of elements to add together
     Plus(Vec<Element>),
     /// List of elements to multiply together
@@ -38,15 +39,21 @@ pub enum Element {
     /// Negation of an element (e.g., -x)
     Negate(Box<Element>),
     /// A number
-    Number(f64),
+    Number(String),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FunctionExpression {
+    SingleArgument(fn(&Number, &mut Context) -> Number),
+    MultipleArguments(fn(&mut Context, Vec<Number>) -> Number),
 }
 
 #[allow(unused)]
 mod formula_short {
     use crate::Element;
 
-    pub fn num(num: impl Into<f64>) -> Element {
-        Element::Number(num.into())
+    pub fn num(num: impl ToString) -> Element {
+        Element::Number(num.to_string())
     }
 
     pub fn var_or_fun(name: &str) -> Element {
@@ -88,9 +95,10 @@ mod new_calculation {
     use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
     use num_rational::BigRational;
     use rust_decimal::Decimal;
-    use rust_decimal::prelude::ToPrimitive;
+    use rust_decimal::prelude::{Signed, ToPrimitive};
     use std::ops::Not;
 
+    #[derive(Clone)]
     pub enum Number {
         Rational(BigRational),
         Float(BigFloat),
@@ -98,18 +106,18 @@ mod new_calculation {
 
     #[allow(unused)]
     impl Number {
-        fn from_string(str: &str) -> Self {
+        pub fn from_string(str: &str) -> Self {
             Self::Rational(rational_from_string(str))
         }
 
-        fn is_exact(&self) -> bool {
+        pub fn is_exact(&self) -> bool {
             match self {
                 Number::Rational(_) => true,
                 Number::Float(float) => !float.inexact(),
             }
         }
 
-        fn get_rational(&self) -> Option<BigRational> {
+        pub fn get_rational(&self) -> Option<BigRational> {
             match self {
                 Number::Rational(r) => Some(r.clone()),
                 Number::Float(f) => {
@@ -119,14 +127,14 @@ mod new_calculation {
             }
         }
 
-        fn get_float(&self) -> BigFloat {
+        pub(crate) fn get_float(&self) -> BigFloat {
             match self {
                 Number::Rational(r) => float_from_rational(r),
                 Number::Float(f) => f.clone(),
             }
         }
 
-        fn to_string(&self) -> String {
+        pub fn to_string(&self) -> String {
             match self {
                 Number::Rational(r) => {
                     if let Some(d) = decimal_from_rational(r) {
@@ -137,39 +145,6 @@ mod new_calculation {
                 },
                 Number::Float(f) => float_to_string_with_rounding(f, 20),
             }
-        }
-
-        fn neg(&self, ctx: &mut Context) -> Self {
-            match self {
-                Self::Rational(r) => Self::Rational(-r),
-                Self::Float(f) => Self::Float(expr!(-f, &mut *ctx)),
-            }
-        }
-
-        fn plus(&self, other: &Self, ctx: &mut Context) -> Self {
-            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
-                Self::Rational(a + b)
-            } else {
-                let (a, b) = (self.get_float(), other.get_float());
-                Self::Float(expr!(a + b, &mut *ctx))
-            }
-        }
-
-        fn mul(&self, other: &Self, ctx: &mut Context) -> Self {
-            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
-                Self::Rational(a * b)
-            } else {
-                let (a, b) = (self.get_float(), other.get_float());
-                Self::Float(expr!(a * b, &mut *ctx))
-            }
-        }
-
-        fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
-            if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational().and_then(|r| r.to_i32())) {
-                return Self::Rational(a.pow(b));
-            }
-            let (a, b) = (self.get_float(), other.get_float());
-            Self::Float(expr!(pow(a, b), &mut *ctx))
         }
     }
 
