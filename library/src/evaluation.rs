@@ -1,6 +1,9 @@
-use crate::Element;
-use crate::storing::{FormulaStore, InternalFunction};
-use std::collections::{HashMap, HashSet};
+use crate::new_calculation::Number;
+use crate::storing::FormulaStore;
+use crate::{Element, FunctionExpression};
+use astro_float::ctx::Context;
+use std::collections::HashSet;
+use astro_float::{Consts, RoundingMode};
 
 #[derive(Debug, PartialEq)]
 pub struct EvaluationResult {
@@ -31,165 +34,173 @@ impl EvaluationResult {
 }
 
 impl Element {
-    pub fn eval(&self) -> Option<f64> {
+    pub fn eval(&self, ctx: &mut Context) -> Option<Number> {
         match self {
             Element::Brackets(_)
             | Element::String(_)
             | Element::Variable(_)
             | Element::Function { .. }
             | Element::VariableOrFunction(_) => None,
-
             Element::Plus(elements) => {
-                let mut sum = 0.0;
+                let mut sum = Number::from(0);
                 for n in elements {
-                    sum += n.eval()?;
+                    sum = sum.plus(&n.eval(ctx)?, ctx);
                 }
                 Some(sum)
             },
-
             Element::Multiply(elements) => {
-                let mut product = 1.0;
+                let mut product = Number::from(1);
                 for n in elements {
-                    product *= n.eval()?;
+                    product = product.mul(&n.eval(ctx)?, ctx);
                 }
                 Some(product)
             },
-
-            Element::Negate(e) => e.eval().map(|n| -n),
-            Element::Number(n) => Some(*n),
-            Element::Pow(b, e) => Some(b.eval()?.powf(e.eval()?)),
-        }
-    }
-    pub fn eval_with_formulas(&self, formulas: &HashMap<String, InternalFunction>) -> Result<f64, String> {
-        match self {
-            Element::Function { name, arguments } => {
-                let Some(formula) = formulas.get(name) else {
-                    return Err(format!("Function '{}' not defined", name));
-                };
-                let arguments_evaluated = arguments
-                    .iter()
-                    .map(|a| a.eval_with_formulas(formulas))
-                    .collect::<Result<Vec<_>, String>>()?;
-                formula
-                    .call(arguments_evaluated)
-                    .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
-            },
-
-            Element::Brackets(_)
-            | Element::String(_)
-            | Element::Variable(_)
-            | Element::VariableOrFunction(_) => {
-                Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
-            },
-
-            Element::Plus(elements) => {
-                let mut sum = 0.0;
-                for n in elements {
-                    sum += n.eval_with_formulas(formulas)?;
-                }
-                Ok(sum)
-            },
-
-            Element::Multiply(elements) => {
-                let mut product = 1.0;
-                for n in elements {
-                    product *= n.eval_with_formulas(formulas)?;
-                }
-                Ok(product)
-            },
-
-            Element::Negate(e) => e.eval_with_formulas(formulas).map(|n| -n),
-            Element::Number(n) => Ok(*n),
-            Element::Pow(b, e) => Ok(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?)),
-        }
-    }
-    pub fn safe_eval_with_formulas(
-        &self, formulas: &HashMap<String, InternalFunction>,
-    ) -> Result<EvaluationResult, String> {
-        let mut data_loss = false;
-        match self {
-            Element::Function { name, arguments } => {
-                let Some(formula) = formulas.get(name) else {
-                    return Err(format!("Function '{}' not defined", name));
-                };
-                let arguments_evaluated = arguments
-                    .iter()
-                    .map(|a| a.safe_eval_with_formulas(formulas))
-                    .collect::<Result<Vec<_>, String>>()?;
-                formula
-                    .call(arguments_evaluated.iter().map(|r| r.value()).collect())
-                    .map(|r| EvaluationResult::new(r, true))
-                    .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
-            },
-
-            Element::Brackets(_)
-            | Element::String(_)
-            | Element::Variable(_)
-            | Element::VariableOrFunction(_) => {
-                Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
-            },
-
-            Element::Plus(elements) => {
-                let mut sum = 0.0;
-                for n in elements {
-                    let prev = sum;
-                    let e_result = n.safe_eval_with_formulas(formulas)?;
-                    sum += e_result.value;
-                    if e_result.possible_data_loss || sum - prev != e_result.value {
-                        data_loss = true;
+            Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
+            Element::Number(n) => Some(n.clone()),
+            Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
+            Element::NumberWithExpression(fun) => Some(fun(ctx)),
+            Element::FunctionWithExpression { arguments, expression } => match expression {
+                FunctionExpression::SingleArgument(fun) => {
+                    if arguments.len() != 1 {
+                        return None;
                     }
-                }
-                Ok(EvaluationResult::new(sum, data_loss))
-            },
-
-            Element::Multiply(elements) => {
-                let mut product = 1.0;
-                for n in elements {
-                    let prev = product;
-                    let e_result = n.safe_eval_with_formulas(formulas)?;
-                    product *= e_result.value;
-                    if e_result.possible_data_loss || product / prev != e_result.value {
-                        data_loss = true;
-                    }
-                }
-                Ok(EvaluationResult::new(product, data_loss))
-            },
-
-            Element::Negate(e) => e
-                .safe_eval_with_formulas(formulas)
-                .map(|n| EvaluationResult::new(-n.value, n.possible_data_loss)),
-            Element::Number(n) => Ok(EvaluationResult::new(*n, data_loss)),
-            Element::Pow(b, e) => {
-                let res_1 = b.safe_eval_with_formulas(formulas)?;
-                let res_2 = e.safe_eval_with_formulas(formulas)?;
-                data_loss = res_1.possible_data_loss | res_2.possible_data_loss;
-
-                let calc_result = res_1.value.powf(res_2.value);
-                Ok(EvaluationResult::new(
-                    calc_result,
-                    data_loss || (calc_result.powf(1.0 / res_2.value) != res_1.value),
-                ))
+                    Some(fun(&arguments[0].eval(ctx)?, ctx))
+                },
+                FunctionExpression::MultipleArguments(fun) => {
+                    let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
+                    Some(fun(ctx, args))
+                },
             },
         }
     }
+    // pub fn eval_with_formulas(&self, formulas: &HashMap<String, InternalFunction>) -> Result<f64, String> {
+    //     match self {
+    //         Element::Function { name, arguments } => {
+    //             let Some(formula) = formulas.get(name) else {
+    //                 return Err(format!("Function '{}' not defined", name));
+    //             };
+    //             let arguments_evaluated = arguments
+    //                 .iter()
+    //                 .map(|a| a.eval_with_formulas(formulas))
+    //                 .collect::<Result<Vec<_>, String>>()?;
+    //             formula
+    //                 .call(arguments_evaluated)
+    //                 .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
+    //         },
+    //
+    //         Element::Brackets(_)
+    //         | Element::String(_)
+    //         | Element::Variable(_)
+    //         | Element::VariableOrFunction(_) => {
+    //             Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
+    //         },
+    //
+    //         Element::Plus(elements) => {
+    //             let mut sum = 0.0;
+    //             for n in elements {
+    //                 sum += n.eval_with_formulas(formulas)?;
+    //             }
+    //             Ok(sum)
+    //         },
+    //
+    //         Element::Multiply(elements) => {
+    //             let mut product = 1.0;
+    //             for n in elements {
+    //                 product *= n.eval_with_formulas(formulas)?;
+    //             }
+    //             Ok(product)
+    //         },
+    //
+    //         Element::Negate(e) => e.eval_with_formulas(formulas).map(|n| -n),
+    //         Element::Number(n) => Ok(*n),
+    //         Element::Pow(b, e) => Ok(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?)),
+    //     }
+    // }
+    // pub fn safe_eval_with_formulas(
+    //     &self, formulas: &HashMap<String, InternalFunction>,
+    // ) -> Result<EvaluationResult, String> {
+    //     let mut data_loss = false;
+    //     match self {
+    //         Element::Function { name, arguments } => {
+    //             let Some(formula) = formulas.get(name) else {
+    //                 return Err(format!("Function '{}' not defined", name));
+    //             };
+    //             let arguments_evaluated = arguments
+    //                 .iter()
+    //                 .map(|a| a.safe_eval_with_formulas(formulas))
+    //                 .collect::<Result<Vec<_>, String>>()?;
+    //             formula
+    //                 .call(arguments_evaluated.iter().map(|r| r.value()).collect())
+    //                 .map(|r| EvaluationResult::new(r, true))
+    //                 .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
+    //         },
+    //
+    //         Element::Brackets(_)
+    //         | Element::String(_)
+    //         | Element::Variable(_)
+    //         | Element::VariableOrFunction(_) => {
+    //             Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
+    //         },
+    //
+    //         Element::Plus(elements) => {
+    //             let mut sum = 0.0;
+    //             for n in elements {
+    //                 let prev = sum;
+    //                 let e_result = n.safe_eval_with_formulas(formulas)?;
+    //                 sum += e_result.value;
+    //                 if e_result.possible_data_loss || sum - prev != e_result.value {
+    //                     data_loss = true;
+    //                 }
+    //             }
+    //             Ok(EvaluationResult::new(sum, data_loss))
+    //         },
+    //
+    //         Element::Multiply(elements) => {
+    //             let mut product = 1.0;
+    //             for n in elements {
+    //                 let prev = product;
+    //                 let e_result = n.safe_eval_with_formulas(formulas)?;
+    //                 product *= e_result.value;
+    //                 if e_result.possible_data_loss || product / prev != e_result.value {
+    //                     data_loss = true;
+    //                 }
+    //             }
+    //             Ok(EvaluationResult::new(product, data_loss))
+    //         },
+    //
+    //         Element::Negate(e) => e
+    //             .safe_eval_with_formulas(formulas)
+    //             .map(|n| EvaluationResult::new(-n.value, n.possible_data_loss)),
+    //         Element::Number(n) => Ok(EvaluationResult::new(*n, data_loss)),
+    //         Element::Pow(b, e) => {
+    //             let res_1 = b.safe_eval_with_formulas(formulas)?;
+    //             let res_2 = e.safe_eval_with_formulas(formulas)?;
+    //             data_loss = res_1.possible_data_loss | res_2.possible_data_loss;
+    //
+    //             let calc_result = res_1.value.powf(res_2.value);
+    //             Ok(EvaluationResult::new(
+    //                 calc_result,
+    //                 data_loss || (calc_result.powf(1.0 / res_2.value) != res_1.value),
+    //             ))
+    //         },
+    //     }
+    // }
 }
 
 impl FormulaStore {
-    pub fn eval(&self, name: &str) -> Result<f64, String> {
-        dbg!("Parsing formula: {}", &name);
-        let mut formula = Element::parse(name).map_err(|err| format!("Could not parse formula: {err}"))?;
+    pub fn eval(&self, formula_str: &str) -> Result<Number, String> {
+        dbg!("Parsing formula: {}", &formula_str);
+        let mut formula = Element::parse(formula_str).map_err(|err| format!("Could not parse formula: {err}"))?;
         dbg!("Parsed formula: {:?}", &formula);
-        let dont_expand = self.internal_function_definitions.keys().cloned().collect();
-        dbg!("Expanding formula with internal functions: {:?}", &dont_expand);
-        self.expand_formula(&mut formula, &dont_expand)?;
+        self.expand_formula(&mut formula, &HashSet::new())?;
         dbg!("Expanded formula: {:?}", &formula);
-        dbg!("Evaluating formula with internal functions: {:?}", &self.internal_function_definitions);
-        formula.eval_with_formulas(&self.internal_function_definitions)
-    }
-    pub fn safe_eval(&self, name: &str) -> Result<EvaluationResult, String> {
-        let mut formula = Element::parse(name).map_err(|err| format!("Could not parse formula: {err}"))?;
-        self.expand_formula(&mut formula, &self.internal_function_definitions.keys().cloned().collect())?;
-        formula.safe_eval_with_formulas(&self.internal_function_definitions)
+        let mut ctx = Context::new(
+            1024,
+            RoundingMode::ToEven,
+            Consts::new().unwrap(),
+            -100000, 100000
+        );
+        formula.eval(&mut ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))
     }
 
     pub(crate) fn expand_formula(

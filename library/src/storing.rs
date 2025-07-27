@@ -451,18 +451,18 @@ fn test_storing() {
     assert!(matches!(store.add_symbol_from_string("f3=f2()", false), Err(_)));
 
     let result = store.eval("f");
-    assert_eq!(result, Ok(123.0));
+    assert_eq!(result, Ok(Number::from(123)));
     assert!(matches!(store.eval("f()"), Err(_)));
     assert!(matches!(store.eval("g()"), Err(_)));
-    assert_eq!(store.eval("g(2)"), Ok(4.0));
-    assert_eq!(store.eval("f2(2)"), Ok(6.0));
+    assert_eq!(store.eval("g(2)"), Ok(Number::from(4)));
+    assert_eq!(store.eval("f2(2)"), Ok(Number::from(6)));
 
     assert_eq!(store.add_symbol_from_string("add(a,b)=a+b", false), Ok("add".to_owned()));
     assert_eq!(store.add_symbol_from_string("mul(a,b)=a*b", false), Ok("mul".to_owned()));
     assert_eq!(store.add_symbol_from_string("div(a,b)=a/b", false), Ok("div".to_owned()));
-    assert!(matches!(store.eval("add(1,2)"), Ok(3.0)));
+    assert_eq!(store.eval("add(1,2)"), Ok(Number::from(3)));
     assert_eq!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)", false), Ok("run".to_owned()));
-    assert_eq!(store.eval("run(1, 2, add)"), Ok(3.0));
-    assert_eq!(store.eval("run(1, 2, mul)"), Ok(2.0));
-    assert_eq!(store.eval("run(1, 2, div)"), Ok(0.5));
+    assert_eq!(store.eval("run(1, 2, add)"), Ok(Number::from(3)));
+    assert_eq!(store.eval("run(1, 2, mul)"), Ok(Number::from(2)));
+    assert_eq!(store.eval("run(1, 2, div)"), Ok(Number::from_string("0.5").unwrap()));
 }

@@ -1095,16 +1095,6 @@ pub mod signature {
                 if parameter_names.contains(&name) {
                     continue;
                 }
-                if let Some(internal_fun) = internally_defined.get(&name) {
-                    if !undefined_signatures.0[&name].could_be(&internal_fun.get_signature()) {
-                        return Err(format!(
-                            "The signature of {} is not compatible with the internal function: undefined: {:?} vs internal: {:?}",
-                            name, undefined_signatures.0[&name], internal_fun
-                        ));
-                    }
-                    undefined_signatures.update_signature(&formula, &name, internal_fun.get_signature());
-                    continue;
-                }
                 if let Some(already_defined_sig) = already_defined.get(&name) {
                     if !undefined_signatures.0[&name].could_be(already_defined_sig)
                         && !already_defined_sig.could_be(&undefined_signatures.0[&name])
@@ -1125,7 +1115,6 @@ pub mod signature {
                 }
             }
             undefined_signatures.retain(|n, _| !parameter_names.contains(n));
-            undefined_signatures.retain(|n, _| !internally_defined.contains_key(n));
             undefined_signatures.retain(|n, _| !already_defined.contains_key(n));
             Ok(())
         }
@@ -1183,7 +1172,8 @@ pub mod signature {
             }
         }
 
-        /// Returns a set of Function names and indices, which parameter is equal to the ```name```
+        /// Returns a set of Function names and indices, which parameter is equal to the ```name```.
+        /// This is used to find all functions that take an Element with the given name as an argument.
         fn list_all_functions_with_argument_variable(&self, name: &str, list: &mut HashSet<(String, usize)>) {
             match self {
                 Element::Function { arguments, name: this_name } => {
@@ -1203,6 +1193,8 @@ pub mod signature {
                 Element::Brackets(_)
                 | Element::String(_)
                 | Element::Number(_)
+                | Element::NumberWithExpression(_)
+                | Element::FunctionWithExpression { .. }
                 | Element::Variable(_)
                 | Element::VariableOrFunction(_) => {},
             }
@@ -1243,6 +1235,8 @@ pub mod signature {
                 | Element::String(_)
                 | Element::Number(_)
                 | Element::Variable(_)
+                |Element::NumberWithExpression(_)
+                | Element::FunctionWithExpression { .. } // todo I'm not sure if it is correct to ignore this
                 | Element::VariableOrFunction(_) => {},
             }
         }
