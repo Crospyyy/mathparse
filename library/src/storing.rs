@@ -125,14 +125,16 @@ impl FormulaStore {
 
     pub fn add_variable_with_value(
         &mut self, name: &str, value: String, dry_run: bool,
-    ) -> Result<String, String> {
+    ) -> Result<(), String> {
         let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
             return Err("Signature must be a variable".to_owned());
         }
-        let def = Element::Number(value);
+        let number = Number::from_string(&value).ok_or(format!("Invalid number: {}", value))?;
+        let def = Element::Number(number);
 
-        self.add_symbol_from_sig_and_def(sig, def, dry_run)
+        self.add_symbol_from_sig_and_def(sig, def, dry_run)?;
+        Ok(())
     }
 
     pub fn add_expression_var(

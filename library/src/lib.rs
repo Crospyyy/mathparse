@@ -39,7 +39,7 @@ pub enum Element {
     /// Negation of an element (e.g., -x)
     Negate(Box<Element>),
     /// A number
-    Number(String),
+    Number(Number),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,9 +51,10 @@ pub enum FunctionExpression {
 #[allow(unused)]
 mod formula_short {
     use crate::Element;
+    use crate::new_calculation::Number;
 
-    pub fn num(num: impl ToString) -> Element {
-        Element::Number(num.to_string())
+    pub fn num(num: &str) -> Element {
+        Element::Number(Number::from_string(num.to_owned()).unwrap())
     }
 
     pub fn var_or_fun(name: &str) -> Element {
@@ -86,7 +87,7 @@ mod formula_short {
 
     /// = element^-1
     pub fn inv(element: Element) -> Element {
-        pow(element, neg(num(1.0)))
+        pow(element, neg(num("1")))
     }
 }
 
@@ -98,7 +99,7 @@ mod new_calculation {
     use rust_decimal::prelude::{Signed, ToPrimitive};
     use std::ops::Not;
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug, PartialEq)]
     pub enum Number {
         Rational(BigRational),
         Float(BigFloat),
@@ -106,8 +107,8 @@ mod new_calculation {
 
     #[allow(unused)]
     impl Number {
-        pub fn from_string(str: &str) -> Self {
-            Self::Rational(rational_from_string(str))
+        pub fn from_string(str: impl ToString) -> Option<Self> {
+            Some(Self::Rational(rational_from_string(&str.to_string())?))
         }
 
         pub fn is_exact(&self) -> bool {
@@ -148,7 +149,7 @@ mod new_calculation {
         }
     }
 
-    fn rational_from_string(s: &str) -> BigRational {
+    fn rational_from_string(s: &str) -> Option<BigRational> {
         todo!()
     }
 

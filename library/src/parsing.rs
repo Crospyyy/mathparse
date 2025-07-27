@@ -1,5 +1,6 @@
 pub mod implementation {
     use crate::Element;
+    use crate::new_calculation::Number;
     use regex::Regex;
     use std::mem;
 
@@ -159,6 +160,8 @@ pub mod implementation {
                 | Element::Variable(_)
                 | Element::VariableOrFunction(_)
                 | Element::Number(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_)
                 | Element::Pow(_, _) => {},
             }
         }
@@ -208,7 +211,11 @@ pub mod implementation {
                     e.process_minus();
                 },
                 Element::Function { arguments, .. } => arguments.iter_mut().for_each(Element::process_minus),
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
+                Element::Variable(_)
+                | Element::Number(_)
+                | Element::VariableOrFunction(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => {},
             }
         }
 
@@ -237,7 +244,9 @@ pub mod implementation {
                 | Element::Variable(_)
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
-                | Element::Pow(_, _) => {},
+                | Element::Pow(_, _)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => {},
             }
         }
 
@@ -283,7 +292,11 @@ pub mod implementation {
                     a.process_divide();
                     b.process_divide();
                 },
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
+                Element::Variable(_)
+                | Element::Number(_)
+                | Element::VariableOrFunction(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => {},
             }
         }
 
@@ -333,7 +346,11 @@ pub mod implementation {
                 Element::Function { arguments, .. } => {
                     arguments.iter_mut().map(Element::process_pow).collect()
                 },
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => Ok(()),
+                Element::Variable(_)
+                | Element::Number(_)
+                | Element::VariableOrFunction(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => Ok(()),
             }
         }
 
@@ -341,7 +358,7 @@ pub mod implementation {
         pub(crate) fn process_numbers_and_variables(&mut self) {
             match self {
                 Element::String(s) => {
-                    if let Ok(num) = s.parse::<f64>() {
+                    if let Some(num) = Number::from_string(&s) {
                         *self = Element::Number(num);
                     } else if s.chars().all(is_valid_char_for_function_name) {
                         // If parsing fails, we assume it's a variable or function
@@ -359,7 +376,7 @@ pub mod implementation {
                 Element::Function { arguments, .. } => {
                     arguments.iter_mut().for_each(|e| {
                         if let Element::String(s) = e {
-                            if let Ok(num) = s.parse::<f64>() {
+                            if let Some(num) = Number::from_string(&s) {
                                 *e = Element::Number(num);
                             } else {
                                 *e = Element::VariableOrFunction(s.clone());
@@ -369,7 +386,11 @@ pub mod implementation {
                         }
                     });
                 },
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => {},
+                Element::Variable(_)
+                | Element::Number(_)
+                | Element::VariableOrFunction(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => {},
             }
         }
 
@@ -396,7 +417,9 @@ pub mod implementation {
                 Element::Variable(_)
                 | Element::Number(_)
                 | Element::String(_)
-                | Element::VariableOrFunction(_) => {},
+                | Element::VariableOrFunction(_)
+                | Element::FunctionWithExpression { .. }
+                | Element::NumberWithExpression(_) => {},
             }
         }
 
@@ -427,7 +450,17 @@ pub mod implementation {
                         x.convert_to_variables_where_possible();
                     }
                 },
-                Element::Variable(_) | Element::VariableOrFunction(_) | Element::Number(_) => {},
+                Element::FunctionWithExpression { arguments, .. } => {
+                    arguments.iter_mut().for_each(|e| {
+                        if !e.try_convert_to_variable() {
+                            e.convert_to_variables_where_possible();
+                        }
+                    });
+                },
+                Element::Variable(_)
+                | Element::NumberWithExpression(_)
+                | Element::VariableOrFunction(_)
+                | Element::Number(_) => {},
             }
         }
 
@@ -445,12 +478,16 @@ pub mod implementation {
                 Element::Brackets(_) | Element::String(_) => true,
                 Element::Plus(elements)
                 | Element::Multiply(elements)
-                | Element::Function { arguments: elements, .. } => {
+                | Element::Function { arguments: elements, .. }
+                | Element::FunctionWithExpression { arguments: elements, .. } => {
                     elements.iter().any(Element::anything_unparsed)
                 },
                 Element::Pow(base, exponent) => base.anything_unparsed() || exponent.anything_unparsed(),
                 Element::Negate(element) => element.anything_unparsed(),
-                Element::Variable(_) | Element::Number(_) | Element::VariableOrFunction(_) => false,
+                Element::Variable(_)
+                | Element::Number(_)
+                | Element::VariableOrFunction(_)
+                | Element::NumberWithExpression(_) => false,
             }
         }
     }
@@ -596,18 +633,21 @@ pub mod testing {
             ),
             ("x/x/x/x", Some(mul([var("x"), inv(var("x")), inv(var("x")), inv(var("x"))]))),
             ("x/x-x", Some(plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]))),
-            ("123", Some(num(123.0))),
+            ("123", Some(num("123"))),
             ("x", Some(var_or_fun("x"))),
-            ("1+((2))", Some(plus([num(1.0), num(2.0)]))),
+            ("1+((2))", Some(plus([num("1"), num("2")]))),
             ("a,b,c", None),
             ("a(a,c)", Some(fun("a", [var_or_fun("a"), var_or_fun("c")]))),
             ("a(a+c)", Some(fun("a", [plus([var("a"), var("c")])]))),
             ("m+a(a,b+c)", Some(plus([var("m"), fun("a", [var_or_fun("a"), plus([var("b"), var("c")])])]))),
             ("fun3(some_fun)", Some(fun("fun3", [var_or_fun("some_fun")]))),
-            ("fun(12, fun(1, 2))", Some(fun("fun", [num(12.0), fun("fun", [num(1.0), num(2.0)])]))),
+            ("fun(12, fun(1, 2))", Some(fun("fun", [num("12"), fun("fun", [num("1"), num("2")])]))),
             ("fun()", Some(fun("fun", []))),
             ("fun()-fun()", Some(plus([fun("fun", []), neg(fun("fun", []))]))),
-            ("1+2*3-4/2", Some(plus([num(1), mul([num(2), num(3)]), neg(mul([num(4), inv(num(2))]))]))),
+            (
+                "1+2*3-4/2",
+                Some(plus([num("1"), mul([num("2"), num("3")]), neg(mul([num("4"), inv(num("2"))]))])),
+            ),
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(|(i, o)| test_formula_parsing(i, o));
@@ -947,18 +987,16 @@ pub mod signature {
         }
 
         pub fn generate_needed_elements_of_formula(formula: &Element) -> Signatures {
-            let mut all_undefined = Signatures::new_from_map(
-                internally_defined.iter().map(|item| (item.0.clone(), item.1.get_signature())).collect(),
-            );
+            let mut all_undefined = Signatures::new_empty();
             all_undefined.add_all_undefined_symbols_of_formula(formula);
-            all_undefined.retain(|_, sig| !matches!(sig, Signature::FunctionVariableInputCount(_))); // remove the internal functions again
-            // todo update all of the signatures based on them having relationships with other symbols (use `update_signature` method for every entry in `all_undefined`)
             all_undefined
         }
 
         fn add_all_undefined_symbols_of_formula(&mut self, element: &Element) {
             match element {
-                Element::Brackets(elements) | Element::Plus(elements) | Element::Multiply(elements) => {
+                Element::Plus(elements)
+                | Element::Multiply(elements)
+                | Element::FunctionWithExpression { arguments: elements, .. } => {
                     elements.iter().for_each(|e| self.add_all_undefined_symbols_of_formula(e))
                 },
                 Element::Pow(base, exponent) => {
@@ -991,8 +1029,10 @@ pub mod signature {
                 Element::VariableOrFunction(name) => {
                     self.insert_or_replace_symbol(name, Signature::NumberOrFunction)
                 },
-                Element::Number(_) => {},
-                Element::String(_) => {},
+                Element::Number(_)
+                | Element::NumberWithExpression(_)
+                | Element::Brackets(_)
+                | Element::String(_) => {},
             }
         }
 
