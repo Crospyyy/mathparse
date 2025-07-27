@@ -1,3 +1,4 @@
+use crate::new_calculation::Number;
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
 use rust_decimal::Decimal;
@@ -9,11 +10,25 @@ pub mod storing;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
+    // Unparsed elements
     /// Unparsed group of elements
     Brackets(Vec<Element>),
     /// Unparsed string
     String(String),
 
+    // Unexpanded formula elements
+    /// A function with a name and arguments
+    Function { name: String, arguments: Vec<Element> },
+    /// A variable with a name
+    Variable(String),
+    /// A variable, which could either be a number or a function
+    VariableOrFunction(String),
+
+    // Expanded formula elements
+    /// A function with a stored evaluation expression
+    FunctionWithExpression { arguments: Vec<Element>, expression: fn(Vec<Number>) -> Number },
+    /// A number defined by an expression
+    NumberWithExpression(fn() -> Number),
     /// List of elements to add together
     Plus(Vec<Element>),
     /// List of elements to multiply together
@@ -22,15 +37,8 @@ pub enum Element {
     Pow(Box<Element>, Box<Element>),
     /// Negation of an element (e.g., -x)
     Negate(Box<Element>),
-
     /// A number
     Number(f64),
-    /// A function with a name and arguments
-    Function { name: String, arguments: Vec<Element> },
-    /// A variable with a name
-    Variable(String),
-    /// A variable, which could either be a number or a function
-    VariableOrFunction(String),
 }
 
 #[allow(unused)]
@@ -83,7 +91,7 @@ mod new_calculation {
     use rust_decimal::prelude::ToPrimitive;
     use std::ops::Not;
 
-    enum Number {
+    pub enum Number {
         Rational(BigRational),
         Float(BigFloat),
     }

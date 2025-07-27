@@ -1,4 +1,5 @@
 use crate::Element;
+use crate::new_calculation::Number;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use std::collections::{HashMap, HashSet};
 
@@ -171,18 +172,6 @@ impl FormulaStore {
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
 
-    pub fn add_variable_with_value(
-        &mut self, name: &str, value: f64, dry_run: bool,
-    ) -> Result<String, String> {
-        let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
-        if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
-            return Err("Signature must be a variable".to_owned());
-        }
-        let def = Element::Number(value);
-
-        self.add_symbol_from_sig_and_def(sig, def, dry_run)
-    }
-
     fn add_symbol_from_sig_and_def(
         &mut self, sig: Element, def: Element, dry_run: bool,
     ) -> Result<String, String> {
@@ -210,6 +199,28 @@ impl FormulaStore {
             },
             Err(err) => Err(format!("Could not add symbol: {}", err)),
         }
+    }
+
+    pub fn add_variable_with_value(
+        &mut self, name: &str, value: f64, dry_run: bool,
+    ) -> Result<String, String> {
+        let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
+        if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
+            return Err("Signature must be a variable".to_owned());
+        }
+        let def = Element::Number(value);
+
+        self.add_symbol_from_sig_and_def(sig, def, dry_run)
+    }
+
+    pub fn add_expression_var(&mut self, name: impl ToString, expression: fn() -> Number) {
+        todo!()
+    }
+
+    pub fn add_expression_fun(
+        &mut self, name: impl ToString, param_count: ParamCount, expression: fn(Vec<Number>) -> Number,
+    ) {
+        todo!()
     }
 
     pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
