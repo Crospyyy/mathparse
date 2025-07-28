@@ -107,6 +107,7 @@ mod new_calculation {
     use rust_decimal::Decimal;
     use rust_decimal::prelude::Signed;
     use std::ops::Not;
+    use std::str::FromStr;
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum Number {
@@ -137,20 +138,20 @@ mod new_calculation {
             }
         }
 
-        pub(crate) fn get_float(&self) -> BigFloat {
+        pub(crate) fn get_float(&self, ctx: &mut Context) -> BigFloat {
             match self {
-                Number::Rational(r) => float_from_rational(r),
+                Number::Rational(r) => float_from_rational(r, ctx),
                 Number::Float(f) => f.clone(),
             }
         }
 
-        pub fn to_string(&self) -> String {
+        pub fn to_string(&self, ctx: &mut Context) -> String {
             match self {
                 Number::Rational(r) => {
                     if let Some(d) = decimal_from_rational(r) {
                         return d.to_string();
                     }
-                    let float = float_from_rational(r);
+                    let float = float_from_rational(r, ctx);
                     float_to_string_with_rounding(&float, 20)
                 },
                 Number::Float(f) => float_to_string_with_rounding(f, 20),
@@ -166,15 +167,18 @@ mod new_calculation {
     }
 
     fn rational_from_string(s: &str) -> Option<BigRational> {
-        todo!()
+        BigRational::from_str(s).ok()
     }
 
     fn decimal_from_rational(rational: &BigRational) -> Option<Decimal> {
         todo!()
     }
 
-    fn float_from_rational(rational: &BigRational) -> BigFloat {
-        todo!()
+    fn float_from_rational(rational: &BigRational, ctx: &mut Context) -> BigFloat {
+        let (a, b) = rational.clone().into_raw();
+        let a_float = BigFloat::from_str(&a.to_str_radix(10)).unwrap();
+        let b_float = BigFloat::from_str(&b.to_str_radix(10)).unwrap();
+        expr!(a_float / b_float, &mut *ctx)
     }
 
     fn rational_from_float(float: &BigFloat) -> BigRational {

@@ -562,6 +562,7 @@ pub mod testing {
     use crate::formula_short::*;
     use crate::storing::FormulaStore;
     use crate::{Element, create_default_context};
+    use astro_float::ctx::Context;
 
     #[test]
     fn test_symbols() {
@@ -603,12 +604,12 @@ pub mod testing {
             println!();
             println!("Parsed formula");
             print!("= ");
-            element.print();
+            println!("{}", element.get_string(&mut ctx));
             print!("= ");
             println!("{}", element.get_debug_string());
             println!();
             if let Some(num) = element.eval(&mut ctx) {
-                println!("Calculated Result: {}", num.to_string());
+                println!("Calculated Result: {}", num.to_string(&mut ctx));
             } else {
                 println!("Calculated Result: Could not evaluate the formula.");
             }
@@ -656,6 +657,7 @@ pub mod testing {
     }
 
     fn test_formula_parsing(input: &str, expected_output: Option<Element>) {
+        let mut ctx = create_default_context();
         let expected_output = expected_output;
         let cow = Element::preprocess_string_minus(&input);
 
@@ -671,40 +673,48 @@ pub mod testing {
         let mut start = 0;
         let mut brackets = Element::resolve_brackets(&chars, &mut start);
 
-        brackets.print();
+        println!("{}", brackets.get_string(&mut ctx));
         println!("{}", brackets.get_debug_string());
         let mut result = Ok(());
         'processing: {
-            debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions);
-            debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus);
-            debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus);
-            debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply);
-            debug_print_step("4. Processing '/'", &mut brackets, Element::process_divide);
-            debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus);
-            debug_print_step("6. Processing '^'", &mut brackets, |e| {
-                let output = e.process_pow();
-                if output.is_err() {
-                    result = output;
-                }
-            });
+            debug_print_step("0,5. Resolve functions", &mut brackets, Element::resolve_functions, &mut ctx);
+            debug_print_step("1. Processing '+'", &mut brackets, Element::process_plus, &mut ctx);
+            debug_print_step("2. Processing '-'", &mut brackets, Element::process_minus, &mut ctx);
+            debug_print_step("3. Processing '*'", &mut brackets, Element::process_multiply, &mut ctx);
+            debug_print_step("4. Processing '/'", &mut brackets, Element::process_divide, &mut ctx);
+            debug_print_step("5. Processing '-' again", &mut brackets, Element::process_minus, &mut ctx);
+            debug_print_step(
+                "6. Processing '^'",
+                &mut brackets,
+                |e| {
+                    let output = e.process_pow();
+                    if output.is_err() {
+                        result = output;
+                    }
+                },
+                &mut ctx,
+            );
             if result.is_err() {
                 break 'processing;
             }
-            debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus);
+            debug_print_step("7. Processing '-' again", &mut brackets, Element::process_minus, &mut ctx);
             debug_print_step(
                 "8. Convert to numbers and variables",
                 &mut brackets,
                 Element::process_numbers_and_variables,
+                &mut ctx,
             );
             debug_print_step(
                 "9. Removing unneeded outer brackets",
                 &mut brackets,
                 Element::remove_unneeded_outer_brackets,
+                &mut ctx,
             );
             debug_print_step(
                 "10. Convert ambiguous symbols to variables where possible",
                 &mut brackets,
                 Element::convert_to_variables_where_possible,
+                &mut ctx,
             );
         }
 
@@ -717,10 +727,12 @@ pub mod testing {
         assert_eq!(output.ok(), expected_output);
     }
 
-    fn debug_print_step(step: &str, element: &mut Element, operation: impl FnOnce(&mut Element)) {
+    fn debug_print_step(
+        step: &str, element: &mut Element, operation: impl FnOnce(&mut Element), ctx: &mut Context,
+    ) {
         print_heading(step);
         operation(element);
-        element.print();
+        println!("{}", element.get_string(ctx));
         println!("{}", element.get_debug_string());
     }
 

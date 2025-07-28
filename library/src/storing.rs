@@ -421,7 +421,7 @@ fn test_insert_symbols() {
     let fun = Element::parse("x+y").unwrap();
 
     let mut formula = Element::parse("f(12, f(1, 2))").unwrap();
-    formula.print_debug();
+    println!("{}", formula.get_debug_string());
     formula
         .insert_symbol(&InsertionElement {
             name: "f".to_owned(),
@@ -429,7 +429,7 @@ fn test_insert_symbols() {
             formula: fun,
         })
         .unwrap();
-    formula.print_debug();
+    println!("{}", formula.get_debug_string());
 }
 
 #[test]

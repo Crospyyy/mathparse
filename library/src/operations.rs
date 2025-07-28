@@ -10,7 +10,7 @@ impl Number {
         if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
             Self::Rational(a + b)
         } else {
-            let (a, b) = (self.get_float(), other.get_float());
+            let (a, b) = (self.get_float(ctx), other.get_float(ctx));
             Self::Float(expr!(a + b, &mut *ctx))
         }
     }
@@ -19,7 +19,7 @@ impl Number {
         if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
             Self::Rational(a * b)
         } else {
-            let (a, b) = (self.get_float(), other.get_float());
+            let (a, b) = (self.get_float(ctx), other.get_float(ctx));
             Self::Float(expr!(a * b, &mut *ctx))
         }
     }
@@ -31,7 +31,7 @@ impl Number {
             }
             return Self::Rational(a / b);
         }
-        let (a, b) = (self.get_float(), other.get_float());
+        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         if b.is_zero() {
             return Self::error(); // handle division by zero
         }
@@ -42,22 +42,22 @@ impl Number {
         if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational().and_then(|r| r.to_i32())) {
             return Self::Rational(a.pow(b));
         }
-        let (a, b) = (self.get_float(), other.get_float());
+        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::Float(expr!(pow(a, b), &mut *ctx)) // todo check whether this still stores is_inexact
     }
 
-    pub fn max(&self, other: &Self, _ctx: &mut Context) -> Self {
+    pub fn max(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
             return Self::Rational(a.max(b));
         }
-        let (a, b) = (self.get_float(), other.get_float());
+        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::Float(a.max(&b)) // todo check whether this still stores is_inexact
     }
-    pub fn min(&self, other: &Self, _ctx: &mut Context) -> Self {
+    pub fn min(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_rational(), other.get_rational()) {
             return Self::Rational(a.min(b));
         }
-        let (a, b) = (self.get_float(), other.get_float());
+        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::Float(a.min(&b)) // todo check whether this still stores is_inexact
     }
 }
@@ -71,34 +71,34 @@ impl Number {
         }
     }
 
-    pub fn abs(&self, _ctx: &mut Context) -> Self {
+    pub fn abs(&self, ctx: &mut Context) -> Self {
         if let Some(r) = self.get_rational() {
             Self::Rational(r.abs())
         } else {
-            Self::Float(self.get_float().abs()) // todo check whether this still stores is_inexact
+            Self::Float(self.get_float(ctx).abs()) // todo check whether this still stores is_inexact
         }
     }
 
-    pub fn floor(&self, _ctx: &mut Context) -> Self {
+    pub fn floor(&self, ctx: &mut Context) -> Self {
         if let Some(r) = self.get_rational() {
             Self::Rational(r.floor())
         } else {
-            Self::Float(self.get_float().floor())
+            Self::Float(self.get_float(ctx).floor())
         }
     }
 
-    pub fn ceil(&self, _ctx: &mut Context) -> Self {
+    pub fn ceil(&self, ctx: &mut Context) -> Self {
         if let Some(r) = self.get_rational() {
             Self::Rational(r.ceil())
         } else {
-            Self::Float(self.get_float().ceil())
+            Self::Float(self.get_float(ctx).ceil())
         }
     }
     pub fn round(&self, ctx: &mut Context) -> Self {
         if let Some(r) = self.get_rational() {
             Self::Rational(r.round())
         } else {
-            let float = self.get_float();
+            let float = self.get_float(ctx);
             Self::Float(float.round(ctx.precision(), ctx.rounding_mode()))
         }
     }
@@ -107,7 +107,7 @@ impl Number {
 macro_rules! float_op {
     ($op:ident) => {
         pub fn $op(&self, ctx: &mut Context) -> Self {
-            let float = self.get_float();
+            let float = self.get_float(ctx);
             Self::Float(expr!($op(float), &mut *ctx))
         }
     };
