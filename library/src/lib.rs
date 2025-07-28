@@ -1,7 +1,6 @@
 use crate::new_calculation::Number;
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
-use rust_decimal::Decimal;
+use astro_float::{Consts, RoundingMode};
 
 mod evaluation;
 mod operations;
@@ -106,7 +105,7 @@ mod new_calculation {
     use astro_float::{BigFloat, Consts, Radix, RoundingMode, expr};
     use num_rational::BigRational;
     use rust_decimal::Decimal;
-    use rust_decimal::prelude::{Signed, ToPrimitive};
+    use rust_decimal::prelude::Signed;
     use std::ops::Not;
 
     #[derive(Clone, Debug, PartialEq)]
@@ -155,6 +154,13 @@ mod new_calculation {
                     float_to_string_with_rounding(&float, 20)
                 },
                 Number::Float(f) => float_to_string_with_rounding(f, 20),
+            }
+        }
+
+        pub fn get_debug_string(&self) -> String {
+            match self {
+                Number::Rational(r) => format!("rat({})", r),
+                Number::Float(f) => format!("flt({})", f),
             }
         }
     }

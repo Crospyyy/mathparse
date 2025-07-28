@@ -1,4 +1,4 @@
-use crate::Element;
+use crate::{Element, FunctionExpression};
 use colored::Colorize;
 use std::fmt::Display;
 
@@ -91,7 +91,7 @@ impl Element {
             Element::Pow(a, b) => format!("pow({}, {})", a.get_debug_string(), b.get_debug_string()),
             Element::String(s) => format!("\"{s}\""),
             Element::Negate(e) => format!("neg({})", e.get_debug_string()),
-            Element::Number(n) => format!("num({})", n),
+            Element::Number(n) => format!("num({})", n.get_debug_string()),
             Element::Function { name, arguments } => {
                 format!(
                     "fun({name}, [{}])",
@@ -101,6 +101,21 @@ impl Element {
             Element::Variable(name) => format!("var({})", name),
             Element::VariableOrFunction(name) => {
                 format!("var_or_fun({})", name)
+            },
+            Element::FunctionWithExpression { arguments, expression } => {
+                let name_str = if matches!(expression, FunctionExpression::SingleArgument(_)) {
+                    "one argument"
+                } else {
+                    "n arguments"
+                };
+                format!(
+                    "fun_with_expr({}, [{}])",
+                    name_str,
+                    arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
+                )
+            },
+            Element::NumberWithExpression(_) => {
+                format!("num_with_expr({})", self.get_debug_string())
             },
         }
     }
@@ -143,6 +158,14 @@ impl Element {
                 "fun",
                 output,
             ),
+            Element::FunctionWithExpression { arguments, .. } => print_in_brackets(
+                Inner::Multiple { delimiter: ",", elements: arguments },
+                show_brackets,
+                Some("fun_with_expr"),
+                show_types,
+                "fun_with_expr",
+                output,
+            ),
             Element::Pow(base, exponent) => {
                 print_in_brackets(
                     Inner::Multiple { delimiter: "^", elements: [base.as_ref(), exponent] },
@@ -157,10 +180,11 @@ impl Element {
                 add_element_string(show_types, "neg", "-", output);
                 element.add_to_string(true, show_types, output);
             },
-            Element::Number(num) => add_element_string(show_types, "num", num, output),
+            Element::Number(num) => add_element_string(show_types, "num", num.to_string(), output),
             Element::Variable(name) => add_element_string(show_types, "var", name, output),
             Element::VariableOrFunction(name) => add_element_string(show_types, "var or fun", name, output),
             Element::String(s) => add_element_string(show_types, "str", mark_string_red(s, true), output),
+            Element::NumberWithExpression(_) => output.push_str("num_with_expr"),
         }
     }
 }

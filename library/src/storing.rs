@@ -2,7 +2,6 @@ use crate::new_calculation::Number;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use crate::{Element, FunctionExpression};
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, expr};
 use std::collections::{HashMap, HashSet};
 
 pub struct FormulaStore {
@@ -438,6 +437,7 @@ fn test_storing() {
     println!("### Test storing formulas ###");
 
     let mut store = FormulaStore::new_empty();
+    let mut ctx = crate::create_default_context();
     assert_eq!(store.add_symbol_from_string("f=123", false), Ok("f".to_owned()));
     assert!(matches!(store.add_symbol_from_string("1=1", false), Err(_)));
     assert!(matches!(store.add_symbol_from_string("f=1", false), Err(_)));
@@ -450,19 +450,19 @@ fn test_storing() {
     assert_eq!(store.add_symbol_from_string("f2(f)=f*3", false), Ok("f2".to_owned()));
     assert!(matches!(store.add_symbol_from_string("f3=f2()", false), Err(_)));
 
-    let result = store.eval("f");
-    assert_eq!(result, Ok(Number::from(123)));
-    assert!(matches!(store.eval("f()"), Err(_)));
-    assert!(matches!(store.eval("g()"), Err(_)));
-    assert_eq!(store.eval("g(2)"), Ok(Number::from(4)));
-    assert_eq!(store.eval("f2(2)"), Ok(Number::from(6)));
+    let result = store.eval("f", &mut ctx);
+    assert_eq!(result, Ok(123.into()));
+    assert!(matches!(store.eval("f()", &mut ctx), Err(_)));
+    assert!(matches!(store.eval("g()", &mut ctx), Err(_)));
+    assert_eq!(store.eval("g(2)", &mut ctx), Ok(4.into()));
+    assert_eq!(store.eval("f2(2)", &mut ctx), Ok(6.into()));
 
     assert_eq!(store.add_symbol_from_string("add(a,b)=a+b", false), Ok("add".to_owned()));
     assert_eq!(store.add_symbol_from_string("mul(a,b)=a*b", false), Ok("mul".to_owned()));
     assert_eq!(store.add_symbol_from_string("div(a,b)=a/b", false), Ok("div".to_owned()));
-    assert_eq!(store.eval("add(1,2)"), Ok(Number::from(3)));
+    assert_eq!(store.eval("add(1,2)", &mut ctx), Ok(3.into()));
     assert_eq!(store.add_symbol_from_string("run(a, b, fun)=fun(a, b)", false), Ok("run".to_owned()));
-    assert_eq!(store.eval("run(1, 2, add)"), Ok(Number::from(3)));
-    assert_eq!(store.eval("run(1, 2, mul)"), Ok(Number::from(2)));
-    assert_eq!(store.eval("run(1, 2, div)"), Ok(Number::from_string("0.5").unwrap()));
+    assert_eq!(store.eval("run(1, 2, add)", &mut ctx), Ok(3.into()));
+    assert_eq!(store.eval("run(1, 2, mul)", &mut ctx), Ok(2.into()));
+    assert_eq!(store.eval("run(1, 2, div)", &mut ctx), Ok(Number::from_string("0.5").unwrap()));
 }

@@ -1,6 +1,6 @@
 use crate::new_calculation::Number;
 use astro_float::ctx::Context;
-use astro_float::{expr, BigFloat, Error};
+use astro_float::{BigFloat, expr};
 use num_rational::BigRational;
 use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
 

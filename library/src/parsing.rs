@@ -559,9 +559,9 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::Element;
     use crate::formula_short::*;
     use crate::storing::FormulaStore;
+    use crate::{Element, create_default_context};
 
     #[test]
     fn test_symbols() {
@@ -581,6 +581,8 @@ pub mod testing {
     pub fn test_with_user_input() {
         use std::io::Write;
         use std::io::stdin;
+
+        let mut ctx = create_default_context();
 
         loop {
             print!("Enter a formula to parse (or '' to quit):\n> ");
@@ -603,10 +605,10 @@ pub mod testing {
             print!("= ");
             element.print();
             print!("= ");
-            element.print_debug();
+            println!("{}", element.get_debug_string());
             println!();
-            if let Some(num) = element.eval() {
-                println!("Calculated Result: {}", num);
+            if let Some(num) = element.eval(&mut ctx) {
+                println!("Calculated Result: {}", num.to_string());
             } else {
                 println!("Calculated Result: Could not evaluate the formula.");
             }
