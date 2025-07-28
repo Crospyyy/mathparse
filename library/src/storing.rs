@@ -118,8 +118,9 @@ impl FormulaStore {
     }
 
     pub fn add_variable_with_value(
-        &mut self, name: &str, value: String, dry_run: bool,
+        &mut self, name: &str, value: impl ToString, dry_run: bool,
     ) -> Result<(), String> {
+        let value = value.to_string();
         let sig = Element::parse(name).map_err(|err| format!("First formula could not be parsed: {err}"))?;
         if !matches!(sig, Element::VariableOrFunction(_) | Element::Variable(_)) {
             return Err("Signature must be a variable".to_owned());

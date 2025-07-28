@@ -4,7 +4,7 @@ use astro_float::ctx::Context;
 use num_rational::BigRational;
 
 mod evaluation;
-mod operations;
+pub mod operations;
 pub mod parsing;
 mod printing;
 pub mod storing;

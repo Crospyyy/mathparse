@@ -1,7 +1,7 @@
-use crate::Number;
 use crate::operations::helper_functions::float_to_exact_rational;
+use crate::Number;
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Consts, RoundingMode, expr};
+use astro_float::{expr, BigFloat, Consts, RoundingMode};
 use num_rational::BigRational;
 use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
 
@@ -17,7 +17,7 @@ pub fn create_default_context() -> Context {
 
 mod helper_functions {
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Consts, RoundingMode, Word, expr};
+    use astro_float::{expr, BigFloat, Word};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use rust_decimal::Decimal;

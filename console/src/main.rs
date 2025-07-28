@@ -1,14 +1,15 @@
 fn main() {
     println!("Hello, world!");
 }
+use library::operations::create_default_context;
+use library::storing::FormulaStore;
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
-use library::storing::FormulaStore;
 
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();
-    store.define_default_internal_functions().unwrap();
     store.define_default_symbols().unwrap();
+    let ctx = &mut create_default_context();
 
     loop {
         println!("\nInput a formula:");
@@ -23,13 +24,13 @@ pub fn run_formula_evaluator() {
                 Err(s) => println!("Error: {}", s),
             }
         } else {
-            let result1 = store.safe_eval(&line);
+            let result1 = store.eval(&line, ctx);
             match result1 {
                 Ok(result) => {
-                    if result.is_lossy() {
-                        println!("~= {}", convert_num_to_string(result.value()));
+                    if result.is_exact() {
+                        println!("= {}", result.to_string(ctx));
                     } else {
-                        println!("= {}", convert_num_to_string(result.value()));
+                        println!("~= {}", result.to_string(ctx));
                     }
                 },
                 Err(s) => {

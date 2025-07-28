@@ -30,6 +30,7 @@ mod controller {
         CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
         TextEdit, Ui,
     };
+    use library::operations::create_default_context;
     use library::parsing::implementation::get_fun_name_end_of_string;
     use library::storing::FormulaStore;
 
@@ -41,17 +42,17 @@ mod controller {
     impl Window {
         pub(crate) fn new(_cc: &CreationContext) -> Self {
             let mut store = FormulaStore::new_empty();
-            store.define_default_internal_functions().unwrap();
             store.define_default_symbols().unwrap();
-            store.add_variable_with_value("speed_of_sound_mps", 343.0, false).unwrap();
-            store.add_variable_with_value("speed_of_light_mps", 299_792_458.0, false).unwrap();
-            store.add_variable_with_value("kw_to_ps", 1.35962, false).unwrap();
-            store.add_variable_with_value("km_to_miles", 0.6214, false).unwrap();
-            store.add_variable_with_value("liter_to_gallons", 0.264172, false).unwrap();
+            store.add_variable_with_value("speed_of_sound_mps", "343", false).unwrap();
+            store.add_variable_with_value("speed_of_light_mps", "299_792_458", false).unwrap();
+            store.add_variable_with_value("kw_to_ps", "1.35962", false).unwrap();
+            store.add_variable_with_value("km_to_miles", "0.6214", false).unwrap();
+            store.add_variable_with_value("liter_to_gallons", "0.264172", false).unwrap();
             Self { formula_store: store, ui_state: UiState::new() }
         }
 
         fn update_calculation_result(&mut self) {
+            let ctx = &mut create_default_context();
             let input = self.ui_state.top_user_input.trim();
             if input.is_empty() {
                 self.ui_state.calculation_result = Ok("".to_string());
@@ -66,12 +67,13 @@ mod controller {
             } else {
                 self.ui_state.calculation_result = self
                     .formula_store
-                    .safe_eval(input)
+                    .eval(input, ctx)
                     .map(|result| {
-                        if result.is_lossy() {
-                            format!("~= {}", result.value())
+                        let result_str = result.to_string(ctx);
+                        if result.is_exact() {
+                            format!("= {}", result_str)
                         } else {
-                            format!("= {}", result.value())
+                            format!("~= {}", result_str)
                         }
                     })
                     .map_err(|s| format!("Error: {}", s));
@@ -162,7 +164,7 @@ mod controller {
                             text.push_str(&format!("({})", params.join(", ")));
                         }
                         text.push_str(" = ");
-                        text.push_str(&value.to_string());
+                        text.push_str(&value.get_string(&mut create_default_context()));
                         ui.label(RichText::new(text).size(17.0));
                     });
                 });
