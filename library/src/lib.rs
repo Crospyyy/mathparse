@@ -194,7 +194,7 @@ mod new_calculation {
             if sign_positive { IntSign::Plus } else { IntSign::Minus },
             &bytes,
         ));
-        let exp_adj = exponent - mantissa.len() as i32 * (size_of::<Word>() as i32 * 8);
+        let exp_adj = exponent - (mantissa.len() * size_of::<Word>() * 8) as i32;
         let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
         Some(ratio)
     }
@@ -210,10 +210,12 @@ mod new_calculation {
             ("3.5", Some(creat_rational(7, 2))),
             (
                 "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
-                Some(BigRational::from_str(
-                    "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
-                )
-                    .unwrap()),
+                Some(
+                    BigRational::from_str(
+                        "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
+                    )
+                    .unwrap(),
+                ),
             ),
             ("1.125", Some(creat_rational(9, 8))),
             ("inf", None),
