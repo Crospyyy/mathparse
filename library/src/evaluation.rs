@@ -58,7 +58,7 @@ impl Element {
             Element::Number(n) => Some(n.clone()),
             Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
             Element::NumberWithExpression(fun) => Some(fun(ctx)),
-            Element::FunctionWithExpression { arguments, expression } => match expression {
+            Element::FunctionWithExpression { arguments, expression, param_count } => match expression {
                 FunctionExpression::SingleArgument(fun) => {
                     if arguments.len() != 1 {
                         return None;
@@ -66,6 +66,9 @@ impl Element {
                     Some(fun(&arguments[0].eval(ctx)?, ctx))
                 },
                 FunctionExpression::MultipleArguments(fun) => {
+                    if !param_count.number_would_be_valid(arguments.len()) {
+                        return None;
+                    }
                     let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
                     Some(fun(ctx, args))
                 },
@@ -254,7 +257,7 @@ impl Element {
 mod tests {
     use crate::new_calculation::Number;
     use crate::storing::FormulaStore;
-    use crate::{create_default_context, Element};
+    use crate::{Element, create_default_context};
     use astro_float::ctx::Context;
     use astro_float::expr;
 
@@ -344,8 +347,8 @@ mod tests {
         let mut store = FormulaStore::new_empty();
         let mut ctx = create_default_context();
 
-        store.define_default_internal_functions().unwrap();
-        assert!(matches!(store.add_symbol_from_string("sin(x)=x", false), Err(_)));
+        store.define_default_symbols().unwrap();
+        assert!(store.add_symbol_from_string("sin(x)=x", false).is_err());
 
         assert_eq!(store.eval("sin(123)", &mut ctx), Ok(Number::Float(expr!(sin(123), &mut ctx))));
         assert_eq!(store.eval("cos(123)", &mut ctx), Ok(Number::Float(expr!(cos(123), &mut ctx))));
@@ -390,19 +393,22 @@ mod tests {
     #[test]
     fn test_define_functions_with_internal_function_definitions() {
         let mut store = FormulaStore::new_empty();
-        let mut ctx = create_default_context();
-        store.define_default_internal_functions().unwrap();
+        let ctx = &mut create_default_context();
+        store.define_default_symbols().unwrap();
 
         store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
         assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
         store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
 
-        assert_eq!(store.eval("f(0)", &mut ctx).unwrap(), Number::Float(expr!(sin(0), &mut ctx)));
-        assert_eq!(store.eval("g(0)", &mut ctx).unwrap(), Number::Float(expr!(sin(0) + cos(0), &mut ctx)));
+        assert_eq!(store.eval("f(0)", ctx).unwrap(), Number::from_string("0").unwrap().sin(ctx));
+        assert_eq!(
+            store.eval("g(0)", ctx).unwrap(),
+            Number::from_string("0").unwrap().sin(ctx).plus(&Number::from_string("0").unwrap().cos(ctx), ctx)
+        );
 
         store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
-        assert_eq!(store.eval("good_sum(1,2)", &mut ctx).unwrap(), (1 + 2 + 1 + 2).into());
+        assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), (1 + 2 + 1 + 2).into());
         store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
-        assert_eq!(store.eval("weird_sum(1,2)", &mut ctx).unwrap(), (1 + 2 + 1 + 2 + 1).into());
+        assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), (1 + 2 + 1 + 2 + 1).into());
     }
 }

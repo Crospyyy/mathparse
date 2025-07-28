@@ -18,10 +18,6 @@ impl FormulaStore {
             .collect::<Vec<_>>()
     }
 
-    pub fn define_default_internal_functions(&mut self) -> Result<(), String> {
-        Ok(())
-    }
-
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
         self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?; // todo check whether const_pi is marked as inexact
         self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?; // todo check whether const_e is marked as inexact
@@ -143,6 +139,7 @@ impl FormulaStore {
         if self.formulas.contains_key(&name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
+        self.parameter_mappings.insert(name.clone(), None);
         self.signatures.insert(name.clone(), Signature::Number);
         self.formulas.insert(name, Element::NumberWithExpression(expression));
         Ok(())
@@ -156,6 +153,7 @@ impl FormulaStore {
         if self.formulas.contains_key(&name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
+        self.parameter_mappings.insert(name.clone(), Some(vec![])); // add a mock parameter list
         self.signatures.insert(
             name.clone(),
             match param_count {
@@ -167,6 +165,7 @@ impl FormulaStore {
             name,
             Element::FunctionWithExpression {
                 arguments: vec![],
+                param_count,
                 expression: FunctionExpression::MultipleArguments(expression),
             },
         );
@@ -179,11 +178,13 @@ impl FormulaStore {
         if self.formulas.contains_key(&name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
+        self.parameter_mappings.insert(name.clone(), Some(vec![])); // add a mock parameter list
         self.signatures.insert(name.clone(), Signature::Function(vec![Signature::Number]));
         self.formulas.insert(
             name,
             Element::FunctionWithExpression {
                 arguments: vec![],
+                param_count: ParamCount::Exactly(1),
                 expression: FunctionExpression::SingleArgument(expression),
             },
         );
@@ -253,6 +254,21 @@ pub struct InsertionElement {
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
+            if let Element::FunctionWithExpression { expression, param_count, ..} = &self.formula {
+                if !param_count.number_would_be_valid(param_values.len()) {
+                    return Err(format!(
+                        "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
+                        self.name,
+                        param_count,
+                        param_values.len()
+                    ));
+                }
+                return Ok(Element::FunctionWithExpression {
+                    arguments: param_values,
+                    param_count: *param_count,
+                    expression: expression.clone(),
+                });
+            }
             let self_arguments = param_values;
             if insert_args.len() != self_arguments.len() {
                 dbg!(insert_args);
@@ -313,6 +329,9 @@ impl Element {
                     (Some(_), _) => {
                         *self = insert.insert_param_values(self_arguments.clone())?;
                     },
+                    (None, Element::FunctionWithExpression {..})=>{
+                        *self = insert.insert_param_values(self_arguments.clone())?;
+                    }
                     (..) => {
                         return Err(format!(
                             "Insertion element and formula don't match (self: {:?}, insert: {:?})",

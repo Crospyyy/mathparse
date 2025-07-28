@@ -1,6 +1,7 @@
 use crate::new_calculation::Number;
 use astro_float::ctx::Context;
 use astro_float::{Consts, RoundingMode};
+use crate::parsing::signature::ParamCount;
 
 mod evaluation;
 mod operations;
@@ -26,7 +27,7 @@ pub enum Element {
 
     // Expanded formula elements
     /// A function with a stored evaluation expression
-    FunctionWithExpression { arguments: Vec<Element>, expression: FunctionExpression },
+    FunctionWithExpression { arguments: Vec<Element>, param_count: ParamCount, expression: FunctionExpression },
     /// A number defined by an expression
     NumberWithExpression(fn(&mut Context) -> Number),
     /// List of elements to add together

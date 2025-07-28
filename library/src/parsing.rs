@@ -899,7 +899,7 @@ pub mod signature {
         Conflicting,
     }
 
-    #[derive(Clone, Debug, PartialEq)]
+    #[derive(Copy, Clone, Debug, PartialEq)]
     pub enum ParamCount {
         Exactly(usize),
         AtLeast(usize),
@@ -915,6 +915,15 @@ pub mod signature {
     }
 
     impl Signature {
+        pub(crate) fn accepts_param_count(&self, count: usize) -> bool {
+            match self {
+                Signature::NumberOrFunction => false,
+                Signature::Number => false,
+                Signature::Function(params) => params.len() == count,
+                Signature::FunctionNOrMoreParams(n) => count >= *n,
+                Signature::Conflicting => false,
+            }
+        }
         fn refine_with(&mut self, new: Self) {
             match (&mut *self, new) {
                 (Signature::NumberOrFunction, new) => *self = new,
@@ -1000,12 +1009,6 @@ pub mod signature {
             Signatures(map)
         }
 
-        pub fn generate_needed_elements_of_formula(formula: &Element) -> Signatures {
-            let mut all_undefined = Signatures::new_empty();
-            all_undefined.add_all_undefined_symbols_of_formula(formula);
-            all_undefined
-        }
-
         fn add_all_undefined_symbols_of_formula(&mut self, element: &Element) {
             match element {
                 Element::Plus(elements)
@@ -1065,7 +1068,13 @@ pub mod signature {
                 return Err(format!("The formula {} is already defined", symbol_name_and_args.name));
             }
 
-            let mut required_signatures = Signatures::generate_needed_elements_of_formula(&content);
+            let mut required_signatures = Signatures::new_from_map(
+                self.iter()
+                    .filter(|sig| matches!(sig.1, Signature::FunctionNOrMoreParams(_)))
+                    .map(|t| (t.0.clone(), t.1.clone()))
+                    .collect(),
+            );
+            required_signatures.add_all_undefined_symbols_of_formula(&content);
 
             Self::refine_signature_and_undefined(
                 &mut symbol_name_and_args,
@@ -1114,7 +1123,7 @@ pub mod signature {
                         && !already_defined_sig.could_be(&undefined_signatures.0[&name])
                     {
                         return Err(format!(
-                            "The signature of {} is not compatible with the already defined signature: undefined: {:?} vs defined {:?}",
+                            "The signature of {} is not compatible with the already defined signature: undefined: {:?} vs defined: {:?}",
                             name, undefined_signatures.0[&name], already_defined_sig
                         ));
                     }

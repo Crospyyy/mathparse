@@ -1,3 +1,4 @@
+use crate::parsing::signature::ParamCount;
 use crate::{Element, FunctionExpression};
 use astro_float::ctx::Context;
 use colored::Colorize;
@@ -42,8 +43,7 @@ where
 
 fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
     inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>, show_types: bool,
-    type_string: &str, output: &mut String,
-    ctx: &mut Context,
+    type_string: &str, output: &mut String, ctx: &mut Context,
 ) {
     add_type_string(show_types, type_string, output);
     if !show_brackets {
@@ -76,7 +76,7 @@ impl Element {
         self.add_to_string(false, false, &mut output, ctx);
         output
     }
-    
+
     pub fn get_debug_string(&self) -> String {
         match self {
             Element::Brackets(e) => {
@@ -102,14 +102,19 @@ impl Element {
             Element::VariableOrFunction(name) => {
                 format!("var_or_fun({})", name)
             },
-            Element::FunctionWithExpression { arguments, expression } => {
+            Element::FunctionWithExpression { arguments, expression, param_count } => {
+                let param_count_str = match param_count {
+                    ParamCount::Exactly(n) => format!("={n} params"),
+                    ParamCount::AtLeast(n) => format!(">={n} params"),
+                };
                 let name_str = if matches!(expression, FunctionExpression::SingleArgument(_)) {
                     "one argument"
                 } else {
                     "n arguments"
                 };
                 format!(
-                    "fun_with_expr({}, [{}])",
+                    "fun_with_expr({}, {}, [{}])",
+                    param_count_str,
                     name_str,
                     arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
                 )
