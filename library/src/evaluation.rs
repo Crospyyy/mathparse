@@ -1,6 +1,5 @@
-use crate::new_calculation::Number;
 use crate::storing::FormulaStore;
-use crate::{Element, FunctionExpression};
+use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -75,118 +74,31 @@ impl Element {
             },
         }
     }
-    // pub fn eval_with_formulas(&self, formulas: &HashMap<String, InternalFunction>) -> Result<f64, String> {
-    //     match self {
-    //         Element::Function { name, arguments } => {
-    //             let Some(formula) = formulas.get(name) else {
-    //                 return Err(format!("Function '{}' not defined", name));
-    //             };
-    //             let arguments_evaluated = arguments
-    //                 .iter()
-    //                 .map(|a| a.eval_with_formulas(formulas))
-    //                 .collect::<Result<Vec<_>, String>>()?;
-    //             formula
-    //                 .call(arguments_evaluated)
-    //                 .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
-    //         },
-    //
-    //         Element::Brackets(_)
-    //         | Element::String(_)
-    //         | Element::Variable(_)
-    //         | Element::VariableOrFunction(_) => {
-    //             Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
-    //         },
-    //
-    //         Element::Plus(elements) => {
-    //             let mut sum = 0.0;
-    //             for n in elements {
-    //                 sum += n.eval_with_formulas(formulas)?;
-    //             }
-    //             Ok(sum)
-    //         },
-    //
-    //         Element::Multiply(elements) => {
-    //             let mut product = 1.0;
-    //             for n in elements {
-    //                 product *= n.eval_with_formulas(formulas)?;
-    //             }
-    //             Ok(product)
-    //         },
-    //
-    //         Element::Negate(e) => e.eval_with_formulas(formulas).map(|n| -n),
-    //         Element::Number(n) => Ok(*n),
-    //         Element::Pow(b, e) => Ok(b.eval_with_formulas(formulas)?.powf(e.eval_with_formulas(formulas)?)),
-    //     }
-    // }
-    // pub fn safe_eval_with_formulas(
-    //     &self, formulas: &HashMap<String, InternalFunction>,
-    // ) -> Result<EvaluationResult, String> {
-    //     let mut data_loss = false;
-    //     match self {
-    //         Element::Function { name, arguments } => {
-    //             let Some(formula) = formulas.get(name) else {
-    //                 return Err(format!("Function '{}' not defined", name));
-    //             };
-    //             let arguments_evaluated = arguments
-    //                 .iter()
-    //                 .map(|a| a.safe_eval_with_formulas(formulas))
-    //                 .collect::<Result<Vec<_>, String>>()?;
-    //             formula
-    //                 .call(arguments_evaluated.iter().map(|r| r.value()).collect())
-    //                 .map(|r| EvaluationResult::new(r, true))
-    //                 .map_err(|e| format!("Error evaluating function '{}': {}", name, e))
-    //         },
-    //
-    //         Element::Brackets(_)
-    //         | Element::String(_)
-    //         | Element::Variable(_)
-    //         | Element::VariableOrFunction(_) => {
-    //             Err("Cannot evaluate brackets, strings or undefined variables".to_owned())
-    //         },
-    //
-    //         Element::Plus(elements) => {
-    //             let mut sum = 0.0;
-    //             for n in elements {
-    //                 let prev = sum;
-    //                 let e_result = n.safe_eval_with_formulas(formulas)?;
-    //                 sum += e_result.value;
-    //                 if e_result.possible_data_loss || sum - prev != e_result.value {
-    //                     data_loss = true;
-    //                 }
-    //             }
-    //             Ok(EvaluationResult::new(sum, data_loss))
-    //         },
-    //
-    //         Element::Multiply(elements) => {
-    //             let mut product = 1.0;
-    //             for n in elements {
-    //                 let prev = product;
-    //                 let e_result = n.safe_eval_with_formulas(formulas)?;
-    //                 product *= e_result.value;
-    //                 if e_result.possible_data_loss || product / prev != e_result.value {
-    //                     data_loss = true;
-    //                 }
-    //             }
-    //             Ok(EvaluationResult::new(product, data_loss))
-    //         },
-    //
-    //         Element::Negate(e) => e
-    //             .safe_eval_with_formulas(formulas)
-    //             .map(|n| EvaluationResult::new(-n.value, n.possible_data_loss)),
-    //         Element::Number(n) => Ok(EvaluationResult::new(*n, data_loss)),
-    //         Element::Pow(b, e) => {
-    //             let res_1 = b.safe_eval_with_formulas(formulas)?;
-    //             let res_2 = e.safe_eval_with_formulas(formulas)?;
-    //             data_loss = res_1.possible_data_loss | res_2.possible_data_loss;
-    //
-    //             let calc_result = res_1.value.powf(res_2.value);
-    //             Ok(EvaluationResult::new(
-    //                 calc_result,
-    //                 data_loss || (calc_result.powf(1.0 / res_2.value) != res_1.value),
-    //             ))
-    //         },
-    //     }
-    // }
+
+    pub(crate) fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
+        match self {
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Number(_)
+            | Element::NumberWithExpression(_)
+            | Element::FunctionWithExpression { .. } => {},
+            Element::Plus(e) | Element::Multiply(e) => {
+                e.iter().for_each(|el| el.get_all_unexpanded_names(names));
+            },
+            Element::Pow(a, b) => {
+                a.get_all_unexpanded_names(names);
+                b.get_all_unexpanded_names(names);
+            },
+            Element::Negate(x) => x.get_all_unexpanded_names(names),
+            Element::Function { name, arguments } => {
+                names.insert(name.to_owned());
+                arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
+            },
+            Element::Variable(name) | Element::VariableOrFunction(name) => {
+                names.insert(name.to_owned());
+            },
+        }
+    }
 }
 
 impl FormulaStore {
@@ -226,38 +138,11 @@ impl FormulaStore {
     }
 }
 
-impl Element {
-    pub(crate) fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
-        match self {
-            Element::Brackets(_)
-            | Element::String(_)
-            | Element::Number(_)
-            | Element::NumberWithExpression(_)
-            | Element::FunctionWithExpression { .. } => {},
-            Element::Plus(e) | Element::Multiply(e) => {
-                e.iter().for_each(|el| el.get_all_unexpanded_names(names));
-            },
-            Element::Pow(a, b) => {
-                a.get_all_unexpanded_names(names);
-                b.get_all_unexpanded_names(names);
-            },
-            Element::Negate(x) => x.get_all_unexpanded_names(names),
-            Element::Function { name, arguments } => {
-                names.insert(name.to_owned());
-                arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
-            },
-            Element::Variable(name) | Element::VariableOrFunction(name) => {
-                names.insert(name.to_owned());
-            },
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::new_calculation::Number;
+    use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
-    use crate::{Element, create_default_context};
+    use crate::{Element, Number};
     use astro_float::ctx::Context;
     use astro_float::expr;
 

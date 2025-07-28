@@ -1,6 +1,5 @@
-use crate::new_calculation::Number;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
-use crate::{Element, FunctionExpression};
+use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
 
@@ -217,10 +216,6 @@ impl FormulaStore {
     }
 }
 
-fn expect_one_or_more_arguments(got: usize) -> Result<(), String> {
-    if got > 0 { Ok(()) } else { Err("Expected one or more arguments, got 0".to_owned()) }
-}
-
 #[test]
 pub fn test_get_insertion_element_expanded() {
     let mut store = FormulaStore::new_empty();
@@ -254,7 +249,7 @@ pub struct InsertionElement {
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
-            if let Element::FunctionWithExpression { expression, param_count, ..} = &self.formula {
+            if let Element::FunctionWithExpression { expression, param_count, .. } = &self.formula {
                 if !param_count.number_would_be_valid(param_values.len()) {
                     return Err(format!(
                         "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
@@ -329,9 +324,9 @@ impl Element {
                     (Some(_), _) => {
                         *self = insert.insert_param_values(self_arguments.clone())?;
                     },
-                    (None, Element::FunctionWithExpression {..})=>{
+                    (None, Element::FunctionWithExpression { .. }) => {
                         *self = insert.insert_param_values(self_arguments.clone())?;
-                    }
+                    },
                     (..) => {
                         return Err(format!(
                             "Insertion element and formula don't match (self: {:?}, insert: {:?})",
@@ -459,10 +454,12 @@ fn test_insert_symbols() {
 
 #[test]
 fn test_storing() {
+    use crate::operations::create_default_context;
+
     println!("### Test storing formulas ###");
 
     let mut store = FormulaStore::new_empty();
-    let mut ctx = crate::create_default_context();
+    let mut ctx = create_default_context();
     assert_eq!(store.add_symbol_from_string("f=123", false), Ok("f".to_owned()));
     assert!(matches!(store.add_symbol_from_string("1=1", false), Err(_)));
     assert!(matches!(store.add_symbol_from_string("f=1", false), Err(_)));

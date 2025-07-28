@@ -1,6 +1,5 @@
 pub mod implementation {
-    use crate::Element;
-    use crate::new_calculation::Number;
+    use crate::{Element, Number};
     use regex::Regex;
     use std::mem;
 
@@ -559,9 +558,10 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
+    use crate::Element;
     use crate::formula_short::*;
+    use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
-    use crate::{Element, create_default_context};
     use astro_float::ctx::Context;
 
     #[test]

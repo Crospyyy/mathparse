@@ -62,14 +62,6 @@ fn mark_string_red(str: impl ToString, apply_color: bool) -> String {
     if apply_color { str.to_string().red().to_string() } else { str.to_string() }
 }
 
-// impl Display for Element {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         let mut string = String::new();
-//         self.add_to_string(false, false, &mut string);
-//         write!(f, "{}", string)
-//     }
-// }
-
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
         let mut output = String::new();
@@ -124,10 +116,6 @@ impl Element {
             },
         }
     }
-
-    // pub fn print(&self) {
-    //     println!("{}", self);
-    // }
 
     fn add_to_string(&self, show_brackets: bool, show_types: bool, output: &mut String, ctx: &mut Context) {
         match self {
@@ -200,9 +188,7 @@ impl Element {
     }
 }
 
-fn add_element_string(
-    show_types: bool, type_string: &str, content: impl std::fmt::Display, output: &mut String,
-) {
+fn add_element_string(show_types: bool, type_string: &str, content: impl Display, output: &mut String) {
     add_type_string(show_types, type_string, output);
     output.push_str(content.to_string().as_str());
 }
