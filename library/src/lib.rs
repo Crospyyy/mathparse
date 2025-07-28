@@ -133,10 +133,7 @@ mod new_calculation {
         pub fn get_rational(&self) -> Option<BigRational> {
             match self {
                 Number::Rational(r) => Some(r.clone()),
-                Number::Float(f) => {
-                    f.inexact().not().then_some(())?;
-                    Some(rational_from_float(f)?)
-                },
+                Number::Float(f) => f.inexact().not().then_some(rational_from_float(f)?),
             }
         }
 
@@ -227,16 +224,69 @@ mod new_calculation {
         }
     }
 
-    fn float_to_scientific_rounded_to(float: &BigFloat, decimals: usize) -> String {
-        todo!()
+    fn round_scientific(str: &str, decimals: usize) -> Option<String> {
+        let (a, b) = str.split_once("e")?;
+        let mut b: i64 = b.parse().ok()?;
+        if a.find(".") != Some(1) {
+            if a.len() == 1 && a.chars().next().unwrap().is_digit(10) {
+                return Some(str.to_string());
+            }
+            return None;
+        }
+        let mut numbers: Vec<_> =
+            a.replace(".", "").chars().map(|c| c.to_digit(10)).collect::<Option<_>>()?;
+        if decimals + 1 > numbers.len() {
+            return Some(str.to_owned());
+        }
+        if numbers[decimals] >= 5 {
+            for i in (0..decimals).rev() {
+                if numbers[i] == 9 {
+                    numbers[i] = 0;
+                    if i == 0 {
+                        numbers.insert(0, 1);
+                        b += 1;
+                    }
+                } else {
+                    numbers[i] += 1;
+                    break;
+                }
+            }
+        }
+
+        let mut rounded = numbers[..decimals].to_vec();
+        while rounded.len() > 1 && rounded.last() == Some(&0) {
+            rounded.pop();
+        }
+        let mut string = rounded.iter().map(|n| n.to_string()).reduce(|a, b| a + &b).unwrap_or("".to_owned());
+
+        if string.len() > 1 {
+            string.insert(1, '.');
+        }
+
+        Some(format!("{}e{}", string, b))
     }
 
     fn float_to_string_with_rounding(float: &BigFloat, decimals: usize) -> String {
-        let scientific = float_to_scientific_rounded_to(&float, decimals);
-        if let Ok(d) = Decimal::from_scientific(&scientific) {
-            return d.to_string();
+        let float_string = float.to_string();
+        let scientific = round_scientific(&float_string, decimals).unwrap_or(float_string);
+        let Ok(d) = Decimal::from_scientific(&scientific) else { return scientific };
+        d.to_string()
+    }
+
+    #[test]
+    fn test_round_scientific() {
+        let inputs_and_expected = [
+            ("1.23e10", 2, Some("1.2e10")),
+            ("9.99e10", 2, Some("1e11")),
+            ("1.19e10", 2, Some("1.2e10")),
+            ("1.9999e10", 4, Some("2e10")),
+            ("1.9999e10", 4, Some("2e10")),
+            ("1e10", 4, Some("1e10")),
+            ("11e10", 4, None), // there is no decimal point between the first and second digit
+        ];
+        for (input, decimals, expected) in inputs_and_expected {
+            assert_eq!(round_scientific(input, decimals), expected.map(ToOwned::to_owned));
         }
-        scientific
     }
 
     #[test]
