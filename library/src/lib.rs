@@ -101,15 +101,15 @@ mod formula_short {
 }
 
 mod new_calculation {
+    use crate::create_default_context;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Word, expr, RoundingMode, Radix, Consts};
+    use astro_float::{BigFloat, Consts, Radix, RoundingMode, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use rust_decimal::Decimal;
     use rust_decimal::prelude::FromPrimitive;
     use std::ops::Not;
     use std::str::FromStr;
-    use crate::create_default_context;
 
     #[derive(Clone, Debug, PartialEq)]
     pub enum Number {
@@ -195,65 +195,34 @@ mod new_calculation {
             &bytes,
         ));
         let exp_adj = exponent - mantissa.len() as i32 * (size_of::<Word>() as i32 * 8);
-        let ratio = numerator * BigRational::from_u8(2)?.pow(exp_adj);
+        let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
         Some(ratio)
     }
 
-    #[test]
-    fn test_float_to_string_new() {
-        let input = 3.5;
-        let float = BigFloat::from(input);
-        let sign_positive = float.sign().unwrap().is_positive();
-        let exponent = float.exponent().unwrap();
-        dbg!(exponent);
-        let mantissa = float.mantissa_digits().unwrap();
-        let base = 2;
-        dbg!(base);
-        let bytes = mantissa.iter().rev().map(|v| v.to_be_bytes().into_iter()).flatten().collect::<Vec<_>>();
-        let bytes_string = bytes.iter().map(|b| format!("{:08b}", b)).reduce(|a, b| a + &b).unwrap();
-        dbg!(bytes_string);
-        let exp_adj = exponent - mantissa.len() as i32 * (size_of::<Word>() as i32 * 8);
-        dbg!(exp_adj);
-        let numerator = BigRational::from_integer(BigInt::from_bytes_be(
-            if sign_positive { num_bigint::Sign::Plus } else { num_bigint::Sign::Minus },
-            &bytes,
-        ));
-        println!("numerator: {}", numerator);
-        let denum = BigRational::from_integer(BigInt::from(base)).pow(-exp_adj);
-        println!("denum: {}", denum);
-        let ratio = numerator / denum;
-        println!("ratio: {}", ratio);
-        let back = float_from_rational(&ratio, &mut create_default_context());
-        println!("back: {}", back);
-        println!("original float: {}", float);
+    #[cfg(test)]
+    fn creat_rational(a: impl Into<BigInt>, b: impl Into<BigInt>) -> BigRational {
+        BigRational::new(a.into(), b.into())
     }
+
     #[test]
-    fn test_float_to_string() {
-        let float = BigFloat::from_str("3.5").unwrap();
-        let mut ctx = create_default_context();
-        let (sign, bits, exp) =
-            float.convert_to_radix(Radix::Hex, RoundingMode::ToEven, ctx.consts()).unwrap();
-        dbg!(&sign);
-        dbg!(&bits);
-        dbg!(&exp);
-        let exp_adj = exp - bits.len() as i32;
-        dbg!(exp_adj);
-        let numerator = BigRational::from_integer(
-            BigInt::from_radix_be(
-                if sign.is_positive() { num_bigint::Sign::Plus } else { num_bigint::Sign::Minus },
-                &bits,
-                16,
-            )
-            .unwrap(),
-        );
-        let denum = BigRational::from_integer(BigInt::from(16)).pow(-exp_adj);
-        let ratio = numerator / denum;
-        println!("{}", ratio);
-        let converted_again = float_from_rational(&ratio, &mut ctx);
-        println!("float: {}", float);
-        println!("converted again: {}", converted_again);
-        let equal = float == converted_again;
-        println!("equal: {}", equal);
+    fn test_rational_from_float() {
+        let inputs_and_expected = [
+            ("3.5", Some(creat_rational(7, 2))),
+            (
+                "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
+                Some(BigRational::from_str(
+                    "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
+                )
+                    .unwrap()),
+            ),
+            ("1.125", Some(creat_rational(9, 8))),
+            ("inf", None),
+            ("-inf", None),
+        ];
+        for (i, o) in inputs_and_expected {
+            let float = BigFloat::from_str(i).unwrap();
+            assert_eq!(rational_from_float(&float), o);
+        }
     }
 
     fn float_to_scientific_rounded_to(float: &BigFloat, decimals: usize) -> String {
