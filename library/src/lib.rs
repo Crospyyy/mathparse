@@ -146,10 +146,10 @@ mod new_calculation {
             }
         }
 
-        pub fn get_rational(&self) -> Option<BigRational> {
+        pub fn get_exact_rational(&self) -> Option<BigRational> {
             match self {
                 Number::Rational(r) => Some(r.clone()),
-                Number::Float(f) => f.inexact().not().then_some(rational_from_float(f)?),
+                Number::Float(f) => float_to_exact_rational(f),
             }
         }
 
@@ -179,6 +179,15 @@ mod new_calculation {
                 Number::Float(f) => format!("flt({})", f),
             }
         }
+    }
+    
+    /// Converts a `BigFloat` to a `BigRational` if it is exact.
+    /// Returns `None` if the float is inexact or cannot be converted.
+    pub fn float_to_exact_rational(float: &BigFloat) -> Option<BigRational> {
+        if float.inexact() {
+            return None;
+        }
+        rational_from_float(float)
     }
 
     fn rational_from_string(s: &str) -> Option<BigRational> {
