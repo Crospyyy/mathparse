@@ -120,7 +120,22 @@ mod new_calculation {
     #[allow(unused)]
     impl Number {
         pub fn from_string(str: impl ToString) -> Option<Self> {
-            Some(Self::Rational(rational_from_string(&str.to_string())?))
+            let string = str.to_string();
+            if string.chars().any(|c| !c.is_digit(10) && c != '.') {
+                return None; // only digits and dot are allowed
+            }
+            if string.chars().filter(|c| *c == '.').count() > 1 {
+                return None; // only one dot is allowed
+            }
+            println!("passed initial checks for string: {}", string);
+            if let Some(dot_index) = string.find('.').map(|i| string.len() - 1 - i) {
+                let just_numbers = string.replace(".", "");
+                let rational = rational_from_string(&just_numbers)?;
+                let factor = BigRational::from_integer(10.into()).pow(dot_index as i32);
+                Some(Self::Rational(rational / factor))
+            } else {
+                Some(Self::Rational(rational_from_string(&string)?))
+            }
         }
 
         pub fn is_exact(&self) -> bool {

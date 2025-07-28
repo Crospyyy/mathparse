@@ -254,7 +254,7 @@ impl Element {
 mod tests {
     use crate::new_calculation::Number;
     use crate::storing::FormulaStore;
-    use crate::{Element, create_default_context};
+    use crate::{create_default_context, Element};
     use astro_float::ctx::Context;
     use astro_float::expr;
 
