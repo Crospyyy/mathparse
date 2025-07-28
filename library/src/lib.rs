@@ -42,6 +42,16 @@ pub enum Element {
     Number(Number),
 }
 
+pub fn create_default_context() -> Context {
+    Context::new(
+        1024,
+        RoundingMode::ToEven,
+        Consts::new().expect("Constants cache initialized"),
+        -100000,
+        100000,
+    )
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum FunctionExpression {
     SingleArgument(fn(&Number, &mut Context) -> Number),

@@ -139,3 +139,9 @@ impl From<usize> for Number {
         Self::Rational(BigRational::from_integer(value.into()))
     }
 }
+
+impl From<i32> for Number {
+    fn from(value: i32) -> Self {
+        Self::Rational(BigRational::from_integer(value.into()))
+    }
+}

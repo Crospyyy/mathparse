@@ -3,7 +3,6 @@ use crate::storing::FormulaStore;
 use crate::{Element, FunctionExpression};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
-use astro_float::{Consts, RoundingMode};
 
 #[derive(Debug, PartialEq)]
 pub struct EvaluationResult {
@@ -188,19 +187,14 @@ impl Element {
 }
 
 impl FormulaStore {
-    pub fn eval(&self, formula_str: &str) -> Result<Number, String> {
+    pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number, String> {
         dbg!("Parsing formula: {}", &formula_str);
-        let mut formula = Element::parse(formula_str).map_err(|err| format!("Could not parse formula: {err}"))?;
+        let mut formula =
+            Element::parse(formula_str).map_err(|err| format!("Could not parse formula: {err}"))?;
         dbg!("Parsed formula: {:?}", &formula);
         self.expand_formula(&mut formula, &HashSet::new())?;
         dbg!("Expanded formula: {:?}", &formula);
-        let mut ctx = Context::new(
-            1024,
-            RoundingMode::ToEven,
-            Consts::new().unwrap(),
-            -100000, 100000
-        );
-        formula.eval(&mut ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))
+        formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))
     }
 
     pub(crate) fn expand_formula(
@@ -211,7 +205,7 @@ impl FormulaStore {
         loop {
             let before = all_names.clone();
             all_names.clear();
-            formula.get_all_names(&mut all_names);
+            formula.get_all_unexpanded_names(&mut all_names);
             all_names = all_names.difference(ignore_names).cloned().collect();
 
             if all_names.is_empty() {
@@ -230,20 +224,24 @@ impl FormulaStore {
 }
 
 impl Element {
-    pub(crate) fn get_all_names(&self, names: &mut HashSet<String>) {
+    pub(crate) fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
         match self {
-            Element::Brackets(_) | Element::String(_) | Element::Number(_) => {},
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Number(_)
+            | Element::NumberWithExpression(_)
+            | Element::FunctionWithExpression { .. } => {},
             Element::Plus(e) | Element::Multiply(e) => {
-                e.iter().for_each(|el| el.get_all_names(names));
+                e.iter().for_each(|el| el.get_all_unexpanded_names(names));
             },
             Element::Pow(a, b) => {
-                a.get_all_names(names);
-                b.get_all_names(names);
+                a.get_all_unexpanded_names(names);
+                b.get_all_unexpanded_names(names);
             },
-            Element::Negate(x) => x.get_all_names(names),
+            Element::Negate(x) => x.get_all_unexpanded_names(names),
             Element::Function { name, arguments } => {
                 names.insert(name.to_owned());
-                arguments.iter().for_each(|arg| arg.get_all_names(names));
+                arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
             },
             Element::Variable(name) | Element::VariableOrFunction(name) => {
                 names.insert(name.to_owned());
@@ -254,48 +252,63 @@ impl Element {
 
 #[cfg(test)]
 mod tests {
-    use crate::Element;
-    use crate::evaluation::EvaluationResult;
+    use crate::new_calculation::Number;
     use crate::storing::FormulaStore;
+    use crate::{Element, create_default_context};
+    use astro_float::ctx::Context;
+    use astro_float::expr;
 
     #[test]
     pub fn test_evaluation() {
-        let inputs = [
-            ("1+2", Some(3.0)),
-            ("1+2*3", Some(7.0)),
-            ("1+2*3-4/2", Some(5.0)),
-            ("(1+2)*3", Some(9.0)),
-            ("(1+2)*(3-4)", Some(-3.0)),
+        let mut ctx = create_default_context();
+        let inputs: [(&str, Option<Number>); 30] = [
+            ("1+2", Some(3.into())),
+            ("1+2*3", Some(7.into())),
+            ("1+2*3-4/2", Some(5.into())),
+            ("(1+2)*3", Some(9.into())),
+            ("(1+2)*(3-4)", Some((-3).into())),
             ("x/x-x", None),
             // Potenzierungen
-            ("2^3", Some(8.0)),
-            ("2^3^2", Some(512.0)), // 2^(3^2) = 2^9
-            ("(2^3)^2", Some(64.0)),
-            ("-2^2", Some(-4.0)), // -(2^2)
-            ("(-2)^2", Some(4.0)),
+            ("2^3", Some(8.into())),
+            ("2^3^2", Some(512.into())), // 2^(3^2) = 2^9
+            ("(2^3)^2", Some(64.into())),
+            ("-2^2", Some((-4).into())), // -(2^2)
+            ("(-2)^2", Some(4.into())),
             // Negation
-            ("-1", Some(-1.0)),
-            ("--1", Some(1.0)),
-            ("-(1+2)", Some(-3.0)),
+            ("-1", Some((-1).into())),
+            ("--1", Some(1.into())),
+            ("-(1+2)", Some((-3).into())),
             // Komplexere Ausdrücke
-            ("1+2*3+4", Some(11.0)),
-            ("(1+2)*(3+4)", Some(21.0)),
-            ("2*3+4*5", Some(26.0)),
-            ("2*(3+4)*5", Some(70.0)),
+            ("1+2*3+4", Some(11.into())),
+            ("(1+2)*(3+4)", Some(21.into())),
+            ("2*3+4*5", Some(26.into())),
+            ("2*(3+4)*5", Some(70.into())),
             // Division
-            ("8/2", Some(4.0)),
-            ("8/2/2", Some(2.0)),
-            ("8/(2*2)", Some(2.0)),
-            ("1/2+1/3", Some(1.0 / 2.0 + 1.0 / 3.0)),
+            ("8/2", Some(4.into())),
+            ("8/2/2", Some(2.into())),
+            ("8/(2*2)", Some(2.into())),
+            (
+                "1/2+1/3",
+                Some(
+                    Number::from(1)
+                        .div(&Number::from(2), &mut ctx)
+                        .plus(&Number::from(1).div(&Number::from(3), &mut ctx), &mut ctx),
+                ),
+            ),
             // Nullwerte
-            ("0+0", Some(0.0)),
-            ("0*5", Some(0.0)),
-            ("5*0", Some(0.0)),
-            ("0^2", Some(0.0)),
+            ("0+0", Some(0.into())),
+            ("0*5", Some(0.into())),
+            ("5*0", Some(0.into())),
+            ("0^2", Some(0.into())),
             // Dezimalzahlen
-            ("1.5+2.5", Some(4.0)),
-            ("3.14*2", Some(6.28)),
-            ("10.5/2.5", Some(4.2)),
+            ("1.5+2.5", Some(4.into())),
+            ("3.14*2", Some(Number::from_string("3.14").unwrap().mul(&Number::from(2), &mut ctx))),
+            (
+                "10.5/2.5",
+                Some(
+                    Number::from_string("10.5").unwrap().div(&Number::from_string("2.5").unwrap(), &mut ctx),
+                ),
+            ),
             // Fehlerfälle
             ("", None),
         ];
@@ -303,84 +316,93 @@ mod tests {
         inputs.into_iter().for_each(|(i, o)| test_formula_evaluation(i, o));
     }
 
-    fn test_formula_evaluation(input: &str, expected_output: Option<f64>) {
+    fn test_formula_evaluation(input: &str, expected_output: Option<Number>) {
         println!("Testing formula evaluation for input: {}", input);
-        let output = Element::parse(input).ok().as_ref().and_then(Element::eval);
+        let mut ctx = Context::new(
+            1024,
+            astro_float::RoundingMode::ToEven,
+            astro_float::Consts::new().unwrap(),
+            -100000,
+            100000,
+        );
+        let output = Element::parse(input).ok().as_ref().and_then(|e| e.eval(&mut ctx));
         assert_eq!(output, expected_output);
     }
 
     #[test]
     fn test_eval_formula_store() {
         let mut store = FormulaStore::new_empty();
+        let mut ctx = create_default_context();
         store.add_symbol_from_string("f(x)=x^2", false).unwrap();
         store.add_symbol_from_string("a=4", false).unwrap();
-        assert_eq!(store.eval("f(a)").unwrap(), 16.0);
-        assert!(store.eval("f").is_err());
+        assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16.into());
+        assert!(store.eval("f", &mut ctx).is_err());
     }
 
     #[test]
     fn test_internal_function_definitions() {
         let mut store = FormulaStore::new_empty();
+        let mut ctx = create_default_context();
+
         store.define_default_internal_functions().unwrap();
         assert!(matches!(store.add_symbol_from_string("sin(x)=x", false), Err(_)));
 
-        assert_eq!(store.eval("sin(123)"), Ok(123f64.sin()));
-        assert_eq!(store.safe_eval("sin(123)"), Ok(EvaluationResult::with_loss(123f64.sin())));
-        assert_eq!(store.eval("cos(123)"), Ok(123f64.cos()));
-        assert_eq!(store.eval("tan(123)"), Ok(123f64.tan()));
-        assert_eq!(store.eval("sqrt(123)"), Ok(123f64.sqrt()));
-        assert_eq!(store.eval("abs(123)"), Ok(123f64.abs()));
-        assert_eq!(store.eval("log2(123)"), Ok(123f64.log2()));
-        assert_eq!(store.safe_eval("log2(123)"), Ok(EvaluationResult::with_loss(123f64.log2())));
-        assert_eq!(store.eval("avg(1,2,3)"), Ok((1.0 + 2.0 + 3.0) / 3.0));
-        assert_eq!(store.eval("max(1,2,3)"), Ok(3.0));
-        assert_eq!(store.eval("min(1,2,3)"), Ok(1.0));
-        assert_eq!(store.eval("sum(1,2,3)"), Ok(1.0 + 2.0 + 3.0));
+        assert_eq!(store.eval("sin(123)", &mut ctx), Ok(Number::Float(expr!(sin(123), &mut ctx))));
+        assert_eq!(store.eval("cos(123)", &mut ctx), Ok(Number::Float(expr!(cos(123), &mut ctx))));
+        assert_eq!(store.eval("tan(123)", &mut ctx), Ok(Number::Float(expr!(tan(123), &mut ctx))));
+        assert_eq!(store.eval("sqrt(123)", &mut ctx), Ok(Number::Float(expr!(sqrt(123), &mut ctx))));
+        assert_eq!(store.eval("abs(-123)", &mut ctx), Ok(123.into()));
+        assert_eq!(store.eval("log2(123)", &mut ctx), Ok(Number::Float(expr!(log2(123), &mut ctx))));
+        assert_eq!(store.eval("avg(1,2,3)", &mut ctx), Ok(2.into()));
+        assert_eq!(store.eval("max(1,2,3)", &mut ctx), Ok(3.into()));
+        assert_eq!(store.eval("min(1,2,3)", &mut ctx), Ok(1.into()));
+        assert_eq!(store.eval("sum(1,2,3)", &mut ctx), Ok(6.into()));
 
         let functions_that_take_one_argument =
             ["sin", "cos", "tan", "sqrt", "abs", "log2", "floor", "ceil", "round"];
         for function in functions_that_take_one_argument {
-            assert!(store.eval(&format!("{}(0)", function)).is_ok());
-            assert!(store.eval(&format!("{}(0, 0)", function)).is_err());
+            assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
+            assert!(store.eval(&format!("{}(0, 0)", function), &mut ctx).is_err());
         }
         let functions_that_take_one_or_more_arguments = ["avg", "max", "min"];
         for function in functions_that_take_one_or_more_arguments {
-            assert!(store.eval(&format!("{}()", function)).is_err());
-            assert!(store.eval(&format!("{}(0)", function)).is_ok());
-            assert!(store.eval(&format!("{}(0,0)", function)).is_ok());
+            assert!(store.eval(&format!("{}()", function), &mut ctx).is_err());
+            assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
+            assert!(store.eval(&format!("{}(0,0)", function), &mut ctx).is_ok());
         }
-        assert_eq!(store.eval("sum()"), Ok(0.0));
+        assert_eq!(store.eval("sum()", &mut ctx), Ok(0.into()));
 
         // Test für floor
-        assert_eq!(store.eval("floor(123.456)").unwrap(), 123.0);
-        assert_eq!(store.eval("floor(-123.456)").unwrap(), -124.0);
+        assert_eq!(store.eval("floor(123.456)", &mut ctx).unwrap(), 123.into());
+        assert_eq!(store.eval("floor(-123.456)", &mut ctx).unwrap(), Number::from(-124));
 
         // Test für ceil
-        assert_eq!(store.eval("ceil(123.456)").unwrap(), 124.0);
-        assert_eq!(store.eval("ceil(-123.456)").unwrap(), -123.0);
+        assert_eq!(store.eval("ceil(123.456)", &mut ctx).unwrap(), Number::from(124));
+        assert_eq!(store.eval("ceil(-123.456)", &mut ctx).unwrap(), Number::from(-123));
 
         // Test für round
-        assert_eq!(store.eval("round(123.456)").unwrap(), 123.0);
-        assert_eq!(store.eval("round(123.789)").unwrap(), 124.0);
-        assert_eq!(store.eval("round(-123.456)").unwrap(), -123.0);
-        assert_eq!(store.eval("round(-123.789)").unwrap(), -124.0);
+        assert_eq!(store.eval("round(123.456)", &mut ctx).unwrap(), Number::from(123));
+        assert_eq!(store.eval("round(123.789)", &mut ctx).unwrap(), Number::from(124));
+        assert_eq!(store.eval("round(-123.456)", &mut ctx).unwrap(), Number::from(-123));
+        assert_eq!(store.eval("round(-123.789)", &mut ctx).unwrap(), Number::from(-124));
     }
 
     #[test]
     fn test_define_functions_with_internal_function_definitions() {
         let mut store = FormulaStore::new_empty();
+        let mut ctx = create_default_context();
         store.define_default_internal_functions().unwrap();
 
         store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
         assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
         store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
 
-        assert_eq!(store.eval("f(0)").unwrap(), 0f64.sin());
-        assert_eq!(store.eval("g(0)").unwrap(), 0f64.cos());
+        assert_eq!(store.eval("f(0)", &mut ctx).unwrap(), Number::Float(expr!(sin(0), &mut ctx)));
+        assert_eq!(store.eval("g(0)", &mut ctx).unwrap(), Number::Float(expr!(sin(0) + cos(0), &mut ctx)));
 
         store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
-        assert_eq!(store.eval("good_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0);
+        assert_eq!(store.eval("good_sum(1,2)", &mut ctx).unwrap(), (1 + 2 + 1 + 2).into());
         store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
-        assert_eq!(store.eval("weird_sum(1,2)").unwrap(), 1.0 + 2.0 + 1.0 + 2.0 + 1.0);
+        assert_eq!(store.eval("weird_sum(1,2)", &mut ctx).unwrap(), (1 + 2 + 1 + 2 + 1).into());
     }
 }
