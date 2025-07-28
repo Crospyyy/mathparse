@@ -139,7 +139,13 @@ impl FormulaStore {
     pub fn add_expression_var(
         &mut self, name: impl ToString, expression: fn(&mut Context) -> Number,
     ) -> Result<(), String> {
-        todo!()
+        let name = name.to_string();
+        if self.formulas.contains_key(&name) {
+            return Err(format!("Formula definition with key `{}` already exists", name));
+        }
+        self.signatures.insert(name.clone(), Signature::Number);
+        self.formulas.insert(name, Element::NumberWithExpression(expression));
+        Ok(())
     }
 
     pub fn add_expression_fun_multiple_args(
