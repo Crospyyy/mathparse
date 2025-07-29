@@ -35,22 +35,15 @@ impl FormulaStore {
             ($op:ident) => {
                 self.add_expression_fun_single_arg(stringify!($op), Number::$op)?
             };
+            ($x:ident, $($y:ident),+) => {
+                define_fun_single_arg!($x);
+                define_fun_single_arg!($($y),+)
+            }
         }
 
-        define_fun_single_arg!(sin);
-        define_fun_single_arg!(cos);
-        define_fun_single_arg!(tan);
-        define_fun_single_arg!(asin);
-        define_fun_single_arg!(acos);
-        define_fun_single_arg!(atan);
-        define_fun_single_arg!(sqrt);
-        define_fun_single_arg!(abs);
-        define_fun_single_arg!(log2);
-        define_fun_single_arg!(log10);
-        define_fun_single_arg!(ln);
-        define_fun_single_arg!(floor);
-        define_fun_single_arg!(ceil);
-        define_fun_single_arg!(round);
+        define_fun_single_arg!(
+            sin, cos, tan, asin, acos, atan, sqrt, abs, log2, log10, ln, floor, ceil, round
+        );
 
         self.add_expression_fun_multiple_args(
             "avg",
