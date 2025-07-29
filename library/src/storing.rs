@@ -1,3 +1,4 @@
+use crate::operations::create_default_context;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
@@ -7,6 +8,13 @@ pub struct FormulaStore {
     signatures: Signatures,
     formulas: HashMap<String, Element>,
     parameter_mappings: HashMap<String, Option<Vec<String>>>,
+}
+
+#[test]
+fn test_float_consts() {
+    let ctx = &mut create_default_context();
+    assert_eq!(ctx.const_pi().inexact(), true);
+    assert_eq!(ctx.const_e().inexact(), true);
 }
 
 impl FormulaStore {
