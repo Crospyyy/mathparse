@@ -48,7 +48,7 @@ pub mod implementation {
         /// Step 0
         pub(crate) fn preprocess_string_minus(input: &str) -> String {
             let without_whitespace = input.replace(" ", "");
-            Regex::new(r"([\w)])-([\w(])").unwrap().replace_all(&without_whitespace, "$1+-$2").to_string()
+            Regex::new(r"([\w)])-([\w(-])").unwrap().replace_all(&without_whitespace, "$1+-$2").to_string()
         }
 
         /// Step 1
@@ -637,6 +637,8 @@ pub mod testing {
             ("x/x/x/x", Some(mul([var("x"), inv(var("x")), inv(var("x")), inv(var("x"))]))),
             ("x/x-x", Some(plus([mul([var("x"), inv(var("x"))]), neg(var("x"))]))),
             ("123", Some(num("123"))),
+            ("123-1", Some(plus([num("123"), neg(num("1"))]))),
+            ("123--1", Some(plus([num("123"), neg(neg(num("1")))]))),
             ("x", Some(var_or_fun("x"))),
             ("1+((2))", Some(plus([num("1"), num("2")]))),
             ("a,b,c", None),
