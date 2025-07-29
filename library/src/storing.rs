@@ -12,9 +12,11 @@ pub struct FormulaStore {
 
 #[test]
 fn test_float_consts() {
+    use astro_float::BigFloat;
     let ctx = &mut create_default_context();
     assert_eq!(ctx.const_pi().inexact(), true);
     assert_eq!(ctx.const_e().inexact(), true);
+    assert_eq!(BigFloat::nan(None).inexact(), false);
 }
 
 impl FormulaStore {
@@ -26,8 +28,8 @@ impl FormulaStore {
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
-        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?; // todo check whether const_pi is marked as inexact
-        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?; // todo check whether const_e is marked as inexact
+        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?;
+        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?;
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
 
@@ -52,7 +54,7 @@ impl FormulaStore {
                 let num_args = args.len();
                 args.into_iter()
                     .reduce(|a, b| a.plus(&b, ctx))
-                    .unwrap_or(Number::error())
+                    .unwrap_or(Number::nan())
                     .div(&Number::from(num_args), ctx)
             },
         )?;
@@ -60,14 +62,14 @@ impl FormulaStore {
             "max",
             ParamCount::AtLeast(1),
             |ctx: &mut Context, args: Vec<Number>| {
-                args.into_iter().reduce(|a, b| a.max(&b, ctx)).unwrap_or(Number::error())
+                args.into_iter().reduce(|a, b| a.max(&b, ctx)).unwrap_or(Number::nan())
             },
         )?;
         self.add_expression_fun_multiple_args(
             "min",
             ParamCount::AtLeast(1),
             |ctx: &mut Context, args: Vec<Number>| {
-                args.into_iter().reduce(|a, b| a.min(&b, ctx)).unwrap_or(Number::error())
+                args.into_iter().reduce(|a, b| a.min(&b, ctx)).unwrap_or(Number::nan())
             },
         )?;
         self.add_expression_fun_multiple_args(

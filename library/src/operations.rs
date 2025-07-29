@@ -211,8 +211,9 @@ impl Number {
         }
     }
 
-    pub fn error() -> Self {
-        Self::Float(BigFloat::nan(None)) // todo check if this is marked as inexact
+    // This is not marked as inexact
+    pub fn nan() -> Self {
+        Self::Float(BigFloat::nan(None))
     }
 }
 
@@ -256,13 +257,13 @@ impl Number {
     pub fn div(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             if b.is_zero() {
-                return Self::error(); // handle division by zero
+                return Self::nan(); // handle division by zero
             }
             return Self::from(a / b);
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         if b.is_zero() {
-            return Self::error(); // handle division by zero
+            return Self::nan(); // handle division by zero
         }
         Self::from(inexact_if_needed!(expr!(a / b, &mut *ctx), a, b))
     }
