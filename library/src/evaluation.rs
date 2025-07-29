@@ -3,34 +3,6 @@ use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
-#[derive(Debug, PartialEq)]
-pub struct EvaluationResult {
-    value: f64,
-    possible_data_loss: bool,
-}
-
-impl EvaluationResult {
-    pub fn new(value: f64, calculation_data_loss: bool) -> Self {
-        EvaluationResult { value, possible_data_loss: calculation_data_loss }
-    }
-
-    pub fn no_loss(value: f64) -> Self {
-        EvaluationResult { value, possible_data_loss: false }
-    }
-
-    pub fn with_loss(value: f64) -> Self {
-        EvaluationResult { value, possible_data_loss: true }
-    }
-
-    pub fn is_lossy(&self) -> bool {
-        self.possible_data_loss
-    }
-
-    pub fn value(&self) -> f64 {
-        self.value
-    }
-}
-
 impl Element {
     pub fn eval(&self, ctx: &mut Context) -> Option<Number> {
         match self {
