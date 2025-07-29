@@ -112,6 +112,7 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::formula_short::num;
     use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
@@ -119,7 +120,7 @@ mod tests {
     use astro_float::expr;
 
     #[test]
-    pub fn test_evaluation() {
+    fn test_formula_evaluation() {
         let mut ctx = create_default_context();
         let inputs: [(&str, Option<Number>); 30] = [
             ("1+2", Some(3.into())),
@@ -173,20 +174,18 @@ mod tests {
             ("", None),
         ];
         println!("Starting formula evaluation tests");
-        inputs.into_iter().for_each(|(i, o)| test_formula_evaluation(i, o));
-    }
-
-    fn test_formula_evaluation(input: &str, expected_output: Option<Number>) {
-        println!("Testing formula evaluation for input: {}", input);
-        let mut ctx = Context::new(
-            1024,
-            astro_float::RoundingMode::ToEven,
-            astro_float::Consts::new().unwrap(),
-            -100000,
-            100000,
-        );
-        let output = Element::parse(input).ok().as_ref().and_then(|e| e.eval(&mut ctx));
-        assert_eq!(output, expected_output);
+        inputs.into_iter().for_each(|(i, o)| {
+            println!("Testing formula evaluation for input: {}", i);
+            let mut ctx1 = Context::new(
+                1024,
+                astro_float::RoundingMode::ToEven,
+                astro_float::Consts::new().unwrap(),
+                -100000,
+                100000,
+            );
+            let output = Element::parse(i).ok().as_ref().and_then(|e| e.eval(&mut ctx1));
+            assert_eq!(output, o);
+        });
     }
 
     #[test]
@@ -200,7 +199,7 @@ mod tests {
     }
 
     #[test]
-    fn test_internal_function_definitions() {
+    fn test_expression_function_definitions() {
         let mut store = FormulaStore::new_empty();
         let mut ctx = create_default_context();
 
@@ -217,6 +216,12 @@ mod tests {
         assert_eq!(store.eval("max(1,2,3)", &mut ctx), Ok(3.into()));
         assert_eq!(store.eval("min(1,2,3)", &mut ctx), Ok(1.into()));
         assert_eq!(store.eval("sum(1,2,3)", &mut ctx), Ok(6.into()));
+        assert_eq!(store.eval("median(1,2,3)", &mut ctx), Ok(2.into()));
+        assert_eq!(store.eval("median(1,2,3,4)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
+        assert_eq!(store.eval("median(2,3,4,1)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
+        assert_eq!(store.eval("median(3,4,1,2)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
+        assert_eq!(store.eval("median(4,1,2,3)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
+        assert_eq!(store.eval("median(4,1,2,3)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
 
         let functions_that_take_one_argument =
             ["sin", "cos", "tan", "sqrt", "abs", "log2", "floor", "ceil", "round"];
@@ -224,13 +229,16 @@ mod tests {
             assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
             assert!(store.eval(&format!("{}(0, 0)", function), &mut ctx).is_err());
         }
-        let functions_that_take_one_or_more_arguments = ["avg", "max", "min"];
+        let functions_that_take_one_or_more_arguments = ["avg", "max", "min", "median"];
         for function in functions_that_take_one_or_more_arguments {
             assert!(store.eval(&format!("{}()", function), &mut ctx).is_err());
             assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
             assert!(store.eval(&format!("{}(0,0)", function), &mut ctx).is_ok());
+            assert!(store.eval(&format!("{}(0,0,0)", function), &mut ctx).is_ok());
         }
         assert_eq!(store.eval("sum()", &mut ctx), Ok(0.into()));
+        assert_eq!(store.eval("sum(0)", &mut ctx), Ok(0.into()));
+        assert_eq!(store.eval("sum(0,0)", &mut ctx), Ok(0.into()));
 
         // Test für floor
         assert_eq!(store.eval("floor(123.456)", &mut ctx).unwrap(), 123.into());
@@ -248,7 +256,7 @@ mod tests {
     }
 
     #[test]
-    fn test_define_functions_with_internal_function_definitions() {
+    fn test_define_functions_with_expression_function_definitions() {
         let mut store = FormulaStore::new_empty();
         let ctx = &mut create_default_context();
         store.define_default_symbols().unwrap();

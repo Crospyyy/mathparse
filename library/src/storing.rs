@@ -51,33 +51,54 @@ impl FormulaStore {
             "avg",
             ParamCount::AtLeast(1),
             |ctx: &mut Context, args: Vec<Number>| {
-                let num_args = args.len();
-                args.into_iter()
-                    .reduce(|a, b| a.plus(&b, ctx))
-                    .unwrap_or(Number::nan())
-                    .div(&Number::from(num_args), ctx)
+                if let Some(average) = Number::average(&args, ctx) {
+                    average
+                } else {
+                    eprintln!("Somehow average was called with zero numbers");
+                    Number::nan()
+                }
+            },
+        )?;
+        self.add_expression_fun_multiple_args(
+            "median",
+            ParamCount::AtLeast(1),
+            |ctx: &mut Context, args: Vec<Number>| {
+                if let Some(median) = Number::median(&args, ctx) {
+                    median
+                } else {
+                    eprintln!("Somehow median was called with zero numbers");
+                    Number::nan()
+                }
             },
         )?;
         self.add_expression_fun_multiple_args(
             "max",
             ParamCount::AtLeast(1),
             |ctx: &mut Context, args: Vec<Number>| {
-                args.into_iter().reduce(|a, b| a.max(&b, ctx)).unwrap_or(Number::nan())
+                if let Some(max) = Number::max_of_several(&args, ctx) {
+                    max
+                } else {
+                    eprintln!("Somehow max was called with zero numbers");
+                    Number::nan()
+                }
             },
         )?;
         self.add_expression_fun_multiple_args(
             "min",
             ParamCount::AtLeast(1),
             |ctx: &mut Context, args: Vec<Number>| {
-                args.into_iter().reduce(|a, b| a.min(&b, ctx)).unwrap_or(Number::nan())
+                if let Some(min) = Number::min_of_several(&args, ctx) {
+                    min
+                } else {
+                    eprintln!("Somehow min was called with zero numbers");
+                    Number::nan()
+                }
             },
         )?;
         self.add_expression_fun_multiple_args(
             "sum",
             ParamCount::AtLeast(0),
-            |ctx: &mut Context, args: Vec<Number>| {
-                args.into_iter().fold(Number::from(0), |a, b| a.plus(&b, ctx))
-            },
+            |ctx: &mut Context, args: Vec<Number>| Number::sum(&args, ctx),
         )?;
         Ok(())
     }

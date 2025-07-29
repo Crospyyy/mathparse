@@ -4,6 +4,7 @@ use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, RoundingMode, expr};
 use num_rational::BigRational;
 use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
+use std::cmp::Ordering;
 
 pub fn create_default_context() -> Context {
     Context::new(
@@ -215,6 +216,22 @@ impl Number {
     pub fn nan() -> Self {
         Self::Float(BigFloat::nan(None))
     }
+
+    pub fn is_nan(&self) -> bool {
+        match self {
+            Number::Rational(_) => false,
+            Number::Float(f) => f.is_nan(),
+        }
+    }
+
+    /// Returns `None` when one of the arguments is NaN
+    pub fn cmp(&self, other: &Self, ctx: &mut Context) -> Option<Ordering> {
+        if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
+            Some(a.cmp(&b))
+        } else {
+            self.get_float(ctx).partial_cmp(&other.get_float(ctx))
+        }
+    }
 }
 
 macro_rules! inexact_if_needed {
@@ -234,7 +251,69 @@ macro_rules! inexact_if_needed {
     }};
 }
 
-// implement operations where there are several numbers as parameters
+// implement operations where there is a list of numbers as a parameter
+impl Number {
+    pub fn sum(numbers: &[Self], ctx: &mut Context) -> Self {
+        numbers.iter().fold(Number::from(0), |a, b| a.plus(&b, ctx))
+    }
+
+    pub fn average(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
+        match numbers.len() {
+            0 => return None,
+            1 => return Some(numbers[0].clone()),
+            _ => {},
+        }
+        Some(Self::sum(numbers, ctx).div(&Number::from(numbers.len()), ctx))
+    }
+
+    /// Returns `None` if numbers is an empty array
+    pub fn median(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
+        let num_args = numbers.len();
+        match num_args {
+            0 => return None,
+            1 => return Some(numbers[0].clone()),
+            _ => {},
+        }
+        if numbers.iter().any(|num| num.is_nan()) {
+            return Some(Self::nan());
+        }
+        let mut sorted = numbers.to_vec();
+        sorted.sort_by(|a, b| a.cmp(b, ctx).unwrap());
+        let middle = num_args / 2;
+        Some(if num_args % 2 == 1 {
+            sorted[middle].clone()
+        } else {
+            sorted[middle - 1].plus(&sorted[middle], ctx).div(&Number::from_string("2").unwrap(), ctx)
+        })
+    }
+
+    pub fn max_of_several(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
+        let num_args = numbers.len();
+        match num_args {
+            0 => return None,
+            1 => return Some(numbers[0].clone()),
+            _ => {},
+        }
+        if numbers.iter().any(|num| num.is_nan()) {
+            return Some(Self::nan());
+        }
+        Some(numbers.iter().max_by(|a, b| a.cmp(b, ctx).unwrap()).unwrap().clone())
+    }
+    pub fn min_of_several(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
+        let num_args = numbers.len();
+        match num_args {
+            0 => return None,
+            1 => return Some(numbers[0].clone()),
+            _ => {},
+        }
+        if numbers.iter().any(|num| num.is_nan()) {
+            return Some(Self::nan());
+        }
+        Some(numbers.iter().min_by(|a, b| a.cmp(b, ctx).unwrap()).unwrap().clone())
+    }
+}
+
+// implement operations where there are two numbers as parameters
 impl Number {
     pub fn plus(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
@@ -279,18 +358,13 @@ impl Number {
     }
 
     pub fn max(&self, other: &Self, ctx: &mut Context) -> Self {
-        if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
-            return Self::from(a.max(b));
-        }
-        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-        Self::from(if a > b { a } else { b })
+        let Some(comp) = self.cmp(other, ctx) else { return Self::nan() };
+        if comp.is_ge() { self.clone() } else { other.clone() }
     }
+
     pub fn min(&self, other: &Self, ctx: &mut Context) -> Self {
-        if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
-            return Self::from(a.min(b));
-        }
-        let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-        Self::from(if a < b { a } else { b })
+        let Some(comp) = self.cmp(other, ctx) else { return Self::nan() };
+        if comp.is_le() { self.clone() } else { other.clone() }
     }
 }
 
@@ -379,17 +453,12 @@ mod tests {
     }
 
     #[test]
-    fn test_rational_from_float() {
+    fn test_convert_float_to_rational() {
         let inputs_and_expected = [
             ("3.5", Some(creat_rational(7, 2))),
             (
-                "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
-                Some(
-                    BigRational::from_str(
-                        "1000000000000000000000000000000000000000000000000000000000000000000000000000021",
-                    )
-                    .unwrap(),
-                ),
+                &format!("1{}21", "0".repeat(100)),
+                BigRational::from_str(&format!("1{}21", "0".repeat(100))).unwrap().into(),
             ),
             ("1.125", Some(creat_rational(9, 8))),
             ("inf", None),
@@ -422,7 +491,7 @@ mod tests {
     }
 
     #[test]
-    fn test_is_exact() {
+    fn test_calculation_result_is_exact() {
         let ctx = &mut create_default_context();
         macro_rules! exact_check {
             ($calc:expr, $expected:expr) => {
@@ -438,7 +507,7 @@ mod tests {
     // `find_min!` will calculate the minimum of any number of arguments.
 
     #[test]
-    fn test_output() {
+    fn test_calculation_string_output() {
         let ctx = &mut create_default_context();
 
         macro_rules! short_assert_eq {
