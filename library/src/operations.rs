@@ -1,7 +1,7 @@
-use crate::operations::helper_functions::float_to_exact_rational;
 use crate::Number;
+use crate::operations::helper_functions::float_to_exact_rational;
 use astro_float::ctx::Context;
-use astro_float::{expr, BigFloat, Consts, RoundingMode};
+use astro_float::{BigFloat, Consts, RoundingMode, expr};
 use num_rational::BigRational;
 use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
 
@@ -17,7 +17,7 @@ pub fn create_default_context() -> Context {
 
 mod helper_functions {
     use astro_float::ctx::Context;
-    use astro_float::{expr, BigFloat, Word};
+    use astro_float::{BigFloat, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use rust_decimal::Decimal;
@@ -145,13 +145,12 @@ impl From<i32> for Number {
 impl Number {
     pub fn from_string(str: impl ToString) -> Option<Self> {
         let string = str.to_string();
-        if string.chars().any(|c| !c.is_digit(10) && c != '.') {
+        if string.chars().any(|c| !matches!(c, '0'..='9' | '.' | '-')) {
             return None; // only digits and dot are allowed
         }
         if string.chars().filter(|c| *c == '.').count() > 1 {
             return None; // only one dot is allowed
         }
-        println!("passed initial checks for string: {}", string);
         if let Some(dot_index) = string.find('.').map(|i| string.len() - 1 - i) {
             let just_numbers = string.replace(".", "");
             let rational = helper_functions::rational_from_string(&just_numbers)?;
@@ -183,16 +182,25 @@ impl Number {
         }
     }
 
-    pub fn to_string(&self, ctx: &mut Context) -> String {
+    pub fn to_string_default_rounding(&self, ctx: &mut Context) -> String {
+        self.to_string(20, ctx)
+    }
+    pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
         match self {
             Number::Rational(r) => {
-                if let Some(d) = helper_functions::decimal_from_rational(r) {
-                    return d.to_string();
+                if let Some(d) = helper_functions::decimal_from_rational(r)
+                    .and_then(|d| d.round_sf(rounding_digits as u32))
+                {
+                    let mut string = d.to_string();
+                    while string.len() > 1 && matches!(string.chars().last(), Some('0' | '.')) {
+                        string.pop();
+                    }
+                    return string;
                 }
                 let float = helper_functions::float_from_rational(r, ctx);
-                helper_functions::float_to_string_with_rounding(&float, 20)
+                helper_functions::float_to_string_with_rounding(&float, rounding_digits)
             },
-            Number::Float(f) => helper_functions::float_to_string_with_rounding(f, 20),
+            Number::Float(f) => helper_functions::float_to_string_with_rounding(f, rounding_digits),
         }
     }
 
@@ -208,6 +216,23 @@ impl Number {
     }
 }
 
+macro_rules! inexact_if_needed {
+    ($expr:expr, $item:ident) => {{
+        let mut result = $expr;
+        if $item.inexact() {
+            result.set_inexact(true);
+        }
+        result
+    }};
+    ($expr:expr, $item:ident, $item2:ident) => {{
+        let mut result = $expr;
+        if $item.inexact() || $item2.inexact() {
+            result.set_inexact(true);
+        }
+        result
+    }};
+}
+
 // implement operations where there are several numbers as parameters
 impl Number {
     pub fn plus(&self, other: &Self, ctx: &mut Context) -> Self {
@@ -215,7 +240,7 @@ impl Number {
             Self::from(a + b)
         } else {
             let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-            Self::from(expr!(a + b, &mut *ctx))
+            Self::from(inexact_if_needed!(expr!(a + b, &mut *ctx), a, b))
         }
     }
 
@@ -224,7 +249,7 @@ impl Number {
             Self::from(a * b)
         } else {
             let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-            Self::from(expr!(a * b, &mut *ctx))
+            Self::from(inexact_if_needed!(expr!(a * b, &mut *ctx), a, b))
         }
     }
 
@@ -239,7 +264,7 @@ impl Number {
         if b.is_zero() {
             return Self::error(); // handle division by zero
         }
-        Self::from(expr!(a / b, &mut *ctx)) // todo check whether this still stores is_inexact
+        Self::from(inexact_if_needed!(expr!(a / b, &mut *ctx), a, b))
     }
 
     pub fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
@@ -249,7 +274,7 @@ impl Number {
             return Self::from(a.pow(b));
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-        Self::from(expr!(pow(a, b), &mut *ctx)) // todo check whether this still stores is_inexact
+        Self::from(inexact_if_needed!(expr!(pow(a, b), &mut *ctx), a, b))
     }
 
     pub fn max(&self, other: &Self, ctx: &mut Context) -> Self {
@@ -257,14 +282,14 @@ impl Number {
             return Self::from(a.max(b));
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-        Self::from(a.max(&b)) // todo check whether this still stores is_inexact
+        Self::from(if a > b { a } else { b })
     }
     pub fn min(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             return Self::from(a.min(b));
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-        Self::from(a.min(&b)) // todo check whether this still stores is_inexact
+        Self::from(if a < b { a } else { b })
     }
 }
 
@@ -273,7 +298,7 @@ impl Number {
     pub fn neg(&self, ctx: &mut Context) -> Self {
         match self {
             Self::Rational(r) => Self::from(-r),
-            Self::Float(f) => Self::from(expr!(-f, &mut *ctx)),
+            Self::Float(f) => Self::from(inexact_if_needed!(f.neg(), f)),
         }
     }
 
@@ -281,7 +306,8 @@ impl Number {
         if let Some(r) = self.get_exact_rational() {
             Self::from(r.abs())
         } else {
-            Self::from(self.get_float(ctx).abs()) // todo check whether this still stores is_inexact
+            let float = self.get_float(ctx);
+            Self::from(inexact_if_needed!(float.abs(), float))
         }
     }
 
@@ -289,7 +315,8 @@ impl Number {
         if let Some(r) = self.get_exact_rational() {
             Self::from(r.floor())
         } else {
-            Self::from(self.get_float(ctx).floor())
+            let float = self.get_float(ctx);
+            Self::from(inexact_if_needed!(float.floor(), float))
         }
     }
 
@@ -297,7 +324,8 @@ impl Number {
         if let Some(r) = self.get_exact_rational() {
             Self::from(r.ceil())
         } else {
-            Self::from(self.get_float(ctx).ceil())
+            let float = self.get_float(ctx);
+            Self::from(inexact_if_needed!(float.ceil(), float))
         }
     }
     pub fn round(&self, ctx: &mut Context) -> Self {
@@ -305,7 +333,7 @@ impl Number {
             Self::from(r.round())
         } else {
             let float = self.get_float(ctx);
-            Self::from(float.round(ctx.precision(), ctx.rounding_mode()))
+            Self::from(inexact_if_needed!(float.round(ctx.precision(), ctx.rounding_mode()), float))
         }
     }
 }
@@ -315,7 +343,7 @@ macro_rules! float_op {
     ($op:ident) => {
         pub fn $op(&self, ctx: &mut Context) -> Self {
             let float = self.get_float(ctx);
-            Number::from(expr!($op(float), &mut *ctx))
+            Number::from(inexact_if_needed!(expr!($op(float), &mut *ctx), float))
         }
     };
 }
@@ -335,13 +363,16 @@ impl Number {
     float_op!(ln);
 }
 
+#[cfg(test)]
 mod tests {
+    use crate::Number;
+    use crate::operations::create_default_context;
+    use crate::operations::helper_functions::{rational_from_float, round_scientific};
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use std::str::FromStr;
 
-    #[cfg(test)]
     fn creat_rational(a: impl Into<BigInt>, b: impl Into<BigInt>) -> BigRational {
         BigRational::new(a.into(), b.into())
     }
@@ -365,7 +396,7 @@ mod tests {
         ];
         for (i, o) in inputs_and_expected {
             let float = BigFloat::from_str(i).unwrap();
-            assert_eq!(crate::operations::helper_functions::rational_from_float(&float), o);
+            assert_eq!(rational_from_float(&float), o);
         }
     }
 
@@ -381,10 +412,61 @@ mod tests {
             ("11e10", 4, None), // there is no decimal point between the first and second digit
         ];
         for (input, decimals, expected) in inputs_and_expected {
-            assert_eq!(
-                crate::operations::helper_functions::round_scientific(input, decimals),
-                expected.map(ToOwned::to_owned)
-            );
+            assert_eq!(round_scientific(input, decimals), expected.map(ToOwned::to_owned));
         }
+    }
+
+    fn num(str: impl ToString) -> Number {
+        Number::from_string(str).unwrap()
+    }
+
+    #[test]
+    fn test_is_exact() {
+        let ctx = &mut create_default_context();
+        macro_rules! exact_check {
+            ($calc:expr, $expected:expr) => {
+                println!("Test case {} == {}", stringify!($calc), $expected);
+                assert_eq!($calc.is_exact(), $expected);
+            };
+        }
+        exact_check!(num(1), true);
+        exact_check!(num(1).sin(ctx), false);
+        exact_check!(num(1).sin(ctx).plus(&num(0), ctx), false);
+        exact_check!(num(1).sin(ctx).plus(&num(0), ctx).mul(&num(2), ctx), false);
+    }
+    // `find_min!` will calculate the minimum of any number of arguments.
+
+    #[test]
+    fn test_output() {
+        let ctx = &mut create_default_context();
+
+        macro_rules! short_assert_eq {
+            // Base case:
+            (($calc:expr, $expected:expr, $rounding:expr)) => (
+                println!("Checking: {} == {} with rounding {}", stringify!($calc), $expected, $rounding);
+                assert_eq!($calc.to_string($rounding, ctx), $expected)
+            );
+            // `$x` followed by at least one `$y,`
+            (($calc:expr, $expected:expr, $rounding:expr), $(($a:expr, $b:expr, $c:expr)), + ) => (
+                short_assert_eq!(($calc, $expected, $rounding));
+                short_assert_eq!($(($a, $b, $c)),+)
+            )
+        }
+
+        short_assert_eq!(
+            (num("1"), "1", 20),
+            (num("-1"), "-1", 20),
+            (num("1.2"), "1.2", 20),
+            (num("-1.2"), "-1.2", 20),
+            (num("1.23"), "1.23", 20),
+            (num("1.234"), "1.234", 20),
+            (num("0.2").plus(&num("0.1"), ctx), "0.3", 20),
+            (num("-0.2").plus(&num("-0.1"), ctx), "-0.3", 20),
+            (num("0.2").plus(&num("0.1"), ctx).div(&num("3"), ctx), "0.1", 20),
+            (num("-0.2").plus(&num("-0.1"), ctx).div(&num("3"), ctx), "-0.1", 20),
+            (num("1").asin(ctx).mul(&num("2"), ctx), "3.1416", 5),
+            (num("1").asin(ctx).mul(&num("2"), ctx), "3.14159", 6),
+            (num("1").asin(ctx).mul(&num("2"), ctx), "3.14159265", 9)
+        );
     }
 }

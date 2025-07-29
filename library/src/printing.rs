@@ -179,7 +179,7 @@ impl Element {
                 add_element_string(show_types, "neg", "-", output);
                 element.add_to_string(true, show_types, output, ctx);
             },
-            Element::Number(num) => add_element_string(show_types, "num", num.to_string(ctx), output),
+            Element::Number(num) => add_element_string(show_types, "num", num.to_string_default_rounding(ctx), output),
             Element::Variable(name) => add_element_string(show_types, "var", name, output),
             Element::VariableOrFunction(name) => add_element_string(show_types, "var or fun", name, output),
             Element::String(s) => add_element_string(show_types, "str", mark_string_red(s, true), output),

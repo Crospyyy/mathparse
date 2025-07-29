@@ -28,9 +28,9 @@ pub fn run_formula_evaluator() {
             match result1 {
                 Ok(result) => {
                     if result.is_exact() {
-                        println!("= {}", result.to_string(ctx));
+                        println!("= {}", result.to_string_default_rounding(ctx));
                     } else {
-                        println!("~= {}", result.to_string(ctx));
+                        println!("~= {}", result.to_string_default_rounding(ctx));
                     }
                 },
                 Err(s) => {

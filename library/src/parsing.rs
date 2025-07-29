@@ -609,7 +609,7 @@ pub mod testing {
             println!("{}", element.get_debug_string());
             println!();
             if let Some(num) = element.eval(&mut ctx) {
-                println!("Calculated Result: {}", num.to_string(&mut ctx));
+                println!("Calculated Result: {}", num.to_string_default_rounding(&mut ctx));
             } else {
                 println!("Calculated Result: Could not evaluate the formula.");
             }

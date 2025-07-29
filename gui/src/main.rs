@@ -69,7 +69,7 @@ mod controller {
                     .formula_store
                     .eval(input, ctx)
                     .map(|result| {
-                        let result_str = result.to_string(ctx);
+                        let result_str = result.to_string_default_rounding(ctx);
                         if result.is_exact() {
                             format!("= {}", result_str)
                         } else {
