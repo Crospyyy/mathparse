@@ -7,14 +7,21 @@ pub fn main() {
 }
 
 mod ui {
+    use library::Number;
+
     pub(super) struct UiState {
         pub(super) top_user_input: String,
         pub(super) calculation_result: Result<String, String>,
+        pub(super) output_digits: usize,
     }
 
     impl UiState {
         pub(super) fn new() -> Self {
-            Self { top_user_input: "".to_string(), calculation_result: Ok("".to_string()) }
+            Self {
+                top_user_input: "".to_string(),
+                calculation_result: Ok("".to_string()),
+                output_digits: Number::DEFAULT_ROUNDING_DIGITS,
+            }
         }
     }
 }
@@ -27,8 +34,8 @@ mod controller {
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange};
     use egui::{
-        CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
-        TextEdit, Ui,
+        CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
+        ScrollArea, TextEdit, Ui, Widget,
     };
     use library::Number;
     use library::operations::create_default_context;
@@ -70,7 +77,7 @@ mod controller {
                     .formula_store
                     .eval(input, ctx)
                     .map(|result| {
-                        let result_str = result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx);
+                        let result_str = result.to_string(self.ui_state.output_digits, ctx);
                         if result.is_exact() {
                             format!("= {}", result_str)
                         } else {
@@ -140,6 +147,10 @@ mod controller {
                 Ok(result) => RichText::new(result).size(20.0),
                 Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
             });
+            let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
+            if drag_val_resp.changed() {
+                self.update_calculation_result();
+            }
         }
     }
 
