@@ -519,6 +519,7 @@ mod tests {
             ("1.9999e10", 4, Some("2e10")),
             ("1e10", 4, Some("1e10")),
             ("11e10", 4, None), // there is no decimal point between the first and second digit
+            ("-1e0", 1, Some("-1e0")),
         ];
         for (input, decimals, expected) in inputs_and_expected {
             assert_eq!(round_scientific(input, decimals), expected.map(ToOwned::to_owned));
