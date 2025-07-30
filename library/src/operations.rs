@@ -378,6 +378,8 @@ impl Number {
         // Take the result of the float calculation and round it to like 250 digits and then convert it to a rational number.
         // Now check whether the rational to the power of the b^-1 is equal to the original number.
         // If that is the case, return the rational number.
+// Better idea: First perform pow of the number to the numerator, which should be straight forward and then take that to the pow of the denominator.
+// Now do the pow as a float operation and round the result to around 900 bits precision. Convert that to a rational and take that to the power of the denominator^-1 and if that results in the original number, then we know the rational is the precise result for the operation
 
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::from(inexact_if_needed!(expr!(pow(a, b), &mut *ctx), a, b))
