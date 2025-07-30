@@ -458,21 +458,26 @@ mod tests {
     #[test]
     fn test_create_number_from_string() {
         let mut ctx = create_default_context();
-        let mut assert_eq_num = |a: &str, b: Option<&str>| {
+
+        let mut assert_output_eq = |a: &str, b: Option<(Number, &str)>| {
             println!("Testing: {} == {:?}", a, b);
+            println!("Testing conversion to Number");
+            assert_eq!(Number::from_string(a).as_ref(), b.as_ref().map(|s| &s.0));
+            println!("Testing conversion to string");
             assert_eq!(
                 Number::from_string(a).map(|n| n.to_string_default_rounding(&mut ctx)),
-                b.map(|s| s.to_string())
+                b.as_ref().map(|s| s.1.to_string())
             );
         };
-        assert_eq_num("1", Some("1"));
-        assert_eq_num("1.23", Some("1.23"));
-        assert_eq_num("-1.23", Some("-1.23"));
-        assert_eq_num("1000", Some("1000"));
-        assert_eq_num("1_000", Some("1000"));
-        assert_eq_num("1000_", None);
-        assert_eq_num("_1000", None);
-        assert_eq_num("1_000_000", Some("1000000"));
+
+        assert_output_eq("1", Some((Number::Rational(creat_rational(1, 1)), "1")));
+        assert_output_eq("1.23", Some((Number::Rational(creat_rational(123, 100)), "1.23")));
+        assert_output_eq("-1.23", Some((Number::Rational(creat_rational(-123, 100)), "-1.23")));
+        assert_output_eq("1000", Some((Number::Rational(creat_rational(1000, 1)), "1000")));
+        assert_output_eq("1_000", Some((Number::Rational(creat_rational(1000, 1)), "1000")));
+        assert_output_eq("1000_", None);
+        assert_output_eq("_1000", None);
+        assert_output_eq("1_000_000", Some((Number::Rational(creat_rational(1000000, 1)), "1000000")));
     }
 
     #[test]
