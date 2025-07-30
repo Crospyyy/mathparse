@@ -1,4 +1,3 @@
-use crate::operations::create_default_context;
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
@@ -12,11 +11,16 @@ pub struct FormulaStore {
 
 #[test]
 fn test_float_consts() {
+    use crate::operations::create_default_context;
     use astro_float::BigFloat;
+    use astro_float::expr;
+
     let ctx = &mut create_default_context();
     assert_eq!(ctx.const_pi().inexact(), true);
     assert_eq!(ctx.const_e().inexact(), true);
     assert_eq!(BigFloat::nan(None).inexact(), false);
+    assert_eq!(expr!(sqrt(16), &mut *ctx).inexact(), false);
+    assert_eq!(expr!(pow(16, 0.5), &mut *ctx).inexact(), true);
 }
 
 impl FormulaStore {

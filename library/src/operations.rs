@@ -362,9 +362,15 @@ impl Number {
     }
 
     pub fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
-        if let (Some(a), Some(b)) =
-            (self.get_exact_rational(), other.get_exact_rational().and_then(|r| r.to_i32()))
-        {
+        if let (Some(a), Some(b)) = (
+            self.get_exact_rational(),
+            other.get_exact_rational().and_then(|r| {
+                if !r.is_integer() {
+                    return None;
+                }
+                r.to_i32()
+            }),
+        ) {
             return Self::from(a.pow(b));
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
@@ -543,6 +549,8 @@ mod tests {
         exact_check!(num(1).sin(ctx), false);
         exact_check!(num(1).sin(ctx).plus(&num(0), ctx), false);
         exact_check!(num(1).sin(ctx).plus(&num(0), ctx).mul(&num(2), ctx), false);
+        exact_check!(num(4).sqrt(ctx), true);
+        exact_check!(num(4).pow(&num("0.5"), ctx), true);
     }
     // `find_min!` will calculate the minimum of any number of arguments.
 
