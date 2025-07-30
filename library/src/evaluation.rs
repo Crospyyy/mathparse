@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn test_formula_evaluation() {
         let mut ctx = create_default_context();
-        let inputs: [(&str, Option<Number>); 30] = [
+        let inputs = [
             ("1+2", Some(3.into())),
             ("1+2*3", Some(7.into())),
             ("1+2*3-4/2", Some(5.into())),
@@ -132,6 +132,7 @@ mod tests {
             ("(2^3)^2", Some(64.into())),
             ("-2^2", Some((-4).into())), // -(2^2)
             ("(-2)^2", Some(4.into())),
+            ("16^(1/2)", Some(4.into())),
             // Negation
             ("-1", Some((-1).into())),
             ("--1", Some(1.into())),
