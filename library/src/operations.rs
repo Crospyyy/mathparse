@@ -578,7 +578,9 @@ mod tests {
             (num("1").asin(ctx).mul(&num("2"), ctx), "3.14159", 6),
             (num("1").asin(ctx).mul(&num("2"), ctx), "3.14159265", 9),
             (num("1").asin(ctx).sin(ctx), "1", 10),
-            (num("1").asin(ctx).sin(ctx), "1", 30)
+            (num("1").asin(ctx).sin(ctx), "1", 30),
+            (num("2").div(&num("3"), ctx), "0.6666666666666666666666666667", 28),
+            (num("2").div(&num("3"), ctx), "0.66666666666666666666666666667", 29)
         );
     }
 }
