@@ -1,10 +1,12 @@
 use crate::Number;
-use crate::operations::helper_functions::float_to_exact_rational;
+use crate::operations::helper_functions::{
+    float_to_exact_rational, power_rational_and_rational, rational_from_float,
+};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, RoundingMode, expr};
 use num_rational::BigRational;
 use regex::Regex;
-use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
+use rust_decimal::prelude::{One, Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 
 pub fn create_default_context() -> Context {
@@ -18,12 +20,61 @@ pub fn create_default_context() -> Context {
 }
 
 mod helper_functions {
+    use crate::Number;
     use astro_float::ctx::Context;
     use astro_float::{BigFloat, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use rust_decimal::Decimal;
+    use rust_decimal::prelude::{One, ToPrimitive, Zero};
     use std::str::FromStr;
+
+    pub(super) fn power_rational_and_rational(
+        base: &BigRational, exponent: &BigRational, ctx: &mut Context,
+    ) -> Number {
+        if exponent.is_one() {
+            // x1/x2 ^ 1 = x1/x2
+            return Number::from(base.clone());
+        }
+        if exponent.is_zero() {
+            // x1/x2 ^ 0 = 1
+            return Number::from(BigRational::one()); // any number to the power of 0 is 1
+        }
+        if exponent.is_integer() {
+            // x1/x2 ^ n = (x1^n)/(x2^n)
+            return Number::from(base.pow(exponent.to_i32().unwrap())); // todo remove unwrap
+        }
+
+        // If we reach here, we have a case like x1/x2 ^ (n/d)
+        // We now do the following: (x1/x2 ^ n) ^ (1/d)
+        let intermediate = if exponent.numer().is_one() {
+            base.clone()
+        } else {
+            base.pow(exponent.numer().to_i32().unwrap()) // todo remove unwrap
+        };
+
+        // Now the exponents' numerator is handled, we need to handle the denominator
+
+        let numer_result = big_int_to_power_of_inv_of_big_int(intermediate.numer(), exponent.denom(), ctx);
+        let denom_result = big_int_to_power_of_inv_of_big_int(intermediate.denom(), exponent.denom(), ctx);
+        numer_result.div(&denom_result, ctx)
+    }
+
+    /// Calculates the result of a^(1/b).
+    /// If a precise result is not possible, it returns a float.
+    pub(super) fn big_int_to_power_of_inv_of_big_int(a: &BigInt, b: &BigInt, ctx: &mut Context) -> Number {
+        let float_a = BigFloat::from_str(&a.to_string()).unwrap();
+        let float_b = BigFloat::from_str(&b.to_string()).unwrap();
+        let result = expr!(pow(float_a, 1 / float_b), &mut *ctx);
+        let result_rounded = result.round(800, ctx.rounding_mode()); // if ctx.precision() is 1024
+        let result_rational = rational_from_float(&result_rounded).unwrap();
+        let converted_back = result_rational.pow(b.to_i32().unwrap());
+        if converted_back.is_integer() && converted_back.numer() == a {
+            Number::from(result_rational)
+        } else {
+            Number::from(result)
+        }
+    }
 
     /// Converts a `BigFloat` to a `BigRational` if it is exact.
     /// Returns `None` if the float is inexact or cannot be converted.
@@ -362,6 +413,9 @@ impl Number {
     }
 
     pub fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
+        if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
+            return power_rational_and_rational(&a, &b, ctx);
+        }
         if let (Some(a), Some(b)) = (
             self.get_exact_rational(),
             other.get_exact_rational().and_then(|r| {
@@ -378,8 +432,8 @@ impl Number {
         // Take the result of the float calculation and round it to like 250 digits and then convert it to a rational number.
         // Now check whether the rational to the power of the b^-1 is equal to the original number.
         // If that is the case, return the rational number.
-// Better idea: First perform pow of the number to the numerator, which should be straight forward and then take that to the pow of the denominator.
-// Now do the pow as a float operation and round the result to around 900 bits precision. Convert that to a rational and take that to the power of the denominator^-1 and if that results in the original number, then we know the rational is the precise result for the operation
+        // Better idea: First perform pow of the number to the numerator, which should be straight forward and then take that to the pow of the denominator.
+        // Now do the pow as a float operation and round the result to around 900 bits precision. Convert that to a rational and take that to the power of the denominator^-1 and if that results in the original number, then we know the rational is the precise result for the operation
 
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::from(inexact_if_needed!(expr!(pow(a, b), &mut *ctx), a, b))
@@ -470,7 +524,10 @@ impl Number {
 mod tests {
     use crate::Number;
     use crate::operations::create_default_context;
-    use crate::operations::helper_functions::{rational_from_float, round_scientific};
+    use crate::operations::helper_functions::{
+        big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
+        round_scientific,
+    };
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
@@ -478,6 +535,42 @@ mod tests {
 
     fn creat_rational(a: impl Into<BigInt>, b: impl Into<BigInt>) -> BigRational {
         BigRational::new(a.into(), b.into())
+    }
+
+    #[test]
+    fn test_big_int_to_power_of_inv_of_big_int() {
+        let mut ctx = create_default_context();
+        let values = [
+            (4, 2, creat_rational(2, 1)),
+            (9, 2, creat_rational(3, 1)),
+            (16, 2, creat_rational(4, 1)),
+            (27, 3, creat_rational(3, 1)),
+            (64, 3, creat_rational(4, 1)),
+            (1000, 3, creat_rational(10, 1)),
+            (1000000, 6, creat_rational(10, 1)),
+            (1024, 10, creat_rational(2, 1)), // 1024^(1/10) = 2
+        ];
+        for (a, b, expected) in values {
+            println!("Testing: {} ^ (1/{})", a, b);
+            let result = big_int_to_power_of_inv_of_big_int(&a.into(), &b.into(), &mut ctx);
+            assert_eq!(result.get_exact_rational(), Some(expected));
+        }
+    }
+
+    #[test]
+    pub fn test_power_rational_and_rational() {
+        let values = [
+            (creat_rational(16, 1), creat_rational(2, 1), creat_rational(256, 1)),
+            (creat_rational(16, 1), creat_rational(1, 2), creat_rational(4, 1)),
+            (creat_rational(4, 1), creat_rational(1, 2), creat_rational(2, 1)),
+            (creat_rational(25, 9), creat_rational(1, 2), creat_rational(5, 3)),
+        ];
+        let mut ctx = create_default_context();
+        for (base, exponent, expected) in values {
+            println!("Testing: {} ^ {}", base, exponent);
+            let result = power_rational_and_rational(&base, &exponent, &mut ctx);
+            assert_eq!(result.get_exact_rational(), Some(expected));
+        }
     }
 
     #[test]
