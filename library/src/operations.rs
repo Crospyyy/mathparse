@@ -66,9 +66,9 @@ mod helper_functions {
         let float_a = BigFloat::from_str(&a.to_string()).unwrap();
         let float_b = BigFloat::from_str(&b.to_string()).unwrap();
         let result = expr!(pow(float_a, 1 / float_b), &mut *ctx);
-        let result_rounded = result.round(800, ctx.rounding_mode()); // if ctx.precision() is 1024
-        let result_rational = rational_from_float(&result_rounded).unwrap();
-        let converted_back = result_rational.pow(b.to_i32().unwrap());
+        let result_rounded = result.round(800, ctx.rounding_mode()); // todo this only works for ctx.precision() 1024, make this dynamic
+        let result_rational = rational_from_float(&result_rounded).unwrap(); // todo remove unwrap
+        let converted_back = result_rational.pow(b.to_i32().unwrap()); // todo remove unwrap
         if converted_back.is_integer() && converted_back.numer() == a {
             Number::from(result_rational)
         } else {
