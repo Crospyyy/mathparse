@@ -147,10 +147,13 @@ mod controller {
                 Ok(result) => RichText::new(result).size(20.0),
                 Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
             });
-            let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
-            if drag_val_resp.changed() {
-                self.update_calculation_result();
-            }
+            ui.horizontal(|ui| {
+                ui.label("Round Digits:");
+                let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
+                if drag_val_resp.changed() {
+                    self.update_calculation_result();
+                }
+            });
         }
     }
 

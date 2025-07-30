@@ -193,6 +193,8 @@ impl Number {
     }
 
     pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
+        // todo output whether the result has been rounded or not
+        // (not rounded means that the result is exact and all digits are shown)
         match self {
             Number::Rational(r) => {
                 if let Some(d) = helper_functions::decimal_from_rational(r)
