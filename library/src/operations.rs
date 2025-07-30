@@ -373,6 +373,12 @@ impl Number {
         ) {
             return Self::from(a.pow(b));
         }
+        // todo An idea for how to fix 4^(1/2) not being exact:
+        // If both numbers are rationals:
+        // Take the result of the float calculation and round it to like 250 digits and then convert it to a rational number.
+        // Now check whether the rational to the power of the b^-1 is equal to the original number.
+        // If that is the case, return the rational number.
+
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::from(inexact_if_needed!(expr!(pow(a, b), &mut *ctx), a, b))
     }
