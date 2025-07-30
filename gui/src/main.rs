@@ -2,7 +2,7 @@ use crate::controller::Window;
 
 pub fn main() {
     use eframe::NativeOptions;
-    eframe::run_native("Window", NativeOptions::default(), Box::new(|cc| Ok(Box::new(Window::new(cc)))))
+    eframe::run_native("Quick Mafs", NativeOptions::default(), Box::new(|cc| Ok(Box::new(Window::new(cc)))))
         .expect("panic message");
 }
 
