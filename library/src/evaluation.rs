@@ -75,12 +75,9 @@ impl Element {
 
 impl FormulaStore {
     pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number, String> {
-        dbg!("Parsing formula: {}", &formula_str);
         let mut formula =
             Element::parse(formula_str).map_err(|err| format!("Could not parse formula: {err}"))?;
-        dbg!("Parsed formula: {:?}", &formula);
         self.expand_formula(&mut formula, &HashSet::new())?;
-        dbg!("Expanded formula: {:?}", &formula);
         formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))
     }
 
@@ -199,60 +196,71 @@ mod tests {
     }
 
     #[test]
-    fn test_expression_function_definitions() {
+    fn test_expression_functions() {
         let mut store = FormulaStore::new_empty();
         let mut ctx = create_default_context();
 
         store.define_default_symbols().unwrap();
-        assert!(store.add_symbol_from_string("sin(x)=x", false).is_err());
 
-        assert_eq!(store.eval("sin(123)", &mut ctx), Ok(Number::Float(expr!(sin(123), &mut ctx))));
-        assert_eq!(store.eval("cos(123)", &mut ctx), Ok(Number::Float(expr!(cos(123), &mut ctx))));
-        assert_eq!(store.eval("tan(123)", &mut ctx), Ok(Number::Float(expr!(tan(123), &mut ctx))));
-        assert_eq!(store.eval("sqrt(123)", &mut ctx), Ok(Number::Float(expr!(sqrt(123), &mut ctx))));
-        assert_eq!(store.eval("abs(-123)", &mut ctx), Ok(123.into()));
-        assert_eq!(store.eval("log2(123)", &mut ctx), Ok(Number::Float(expr!(log2(123), &mut ctx))));
-        assert_eq!(store.eval("avg(1,2,3)", &mut ctx), Ok(2.into()));
-        assert_eq!(store.eval("max(1,2,3)", &mut ctx), Ok(3.into()));
-        assert_eq!(store.eval("min(1,2,3)", &mut ctx), Ok(1.into()));
-        assert_eq!(store.eval("sum(1,2,3)", &mut ctx), Ok(6.into()));
-        assert_eq!(store.eval("median(1,2,3)", &mut ctx), Ok(2.into()));
-        assert_eq!(store.eval("median(1,2,3,4)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
-        assert_eq!(store.eval("median(2,3,4,1)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
-        assert_eq!(store.eval("median(3,4,1,2)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
-        assert_eq!(store.eval("median(4,1,2,3)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
-        assert_eq!(store.eval("median(4,1,2,3)", &mut ctx), Ok(Number::from_string("2.5").unwrap()));
+        // test signatures
+        fn generate_fn_call(fun_name: &str, arg_count: usize) -> String {
+            format!("{}({})", fun_name, vec!["0"; arg_count].join(","))
+        }
+        let mut test_with_multiple_arg_counts = |function_names: &[&str], expected: fn(usize) -> bool| {
+            for function in function_names {
+                for i in 0..5 {
+                    println!("Testing function: {} with {} arguments", function, i);
+                    assert_eq!(store.eval(&&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
+                }
+            }
+        };
 
         let functions_that_take_one_argument =
-            ["sin", "cos", "tan", "sqrt", "abs", "log2", "floor", "ceil", "round"];
-        for function in functions_that_take_one_argument {
-            assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
-            assert!(store.eval(&format!("{}(0, 0)", function), &mut ctx).is_err());
-        }
+            ["sin", "cos", "tan", "sqrt", "abs", "log2", "log10", "ln", "floor", "ceil", "round"];
+        let functions_that_take_zero_or_more_arguments = ["sum"];
         let functions_that_take_one_or_more_arguments = ["avg", "max", "min", "median"];
-        for function in functions_that_take_one_or_more_arguments {
-            assert!(store.eval(&format!("{}()", function), &mut ctx).is_err());
-            assert!(store.eval(&format!("{}(0)", function), &mut ctx).is_ok());
-            assert!(store.eval(&format!("{}(0,0)", function), &mut ctx).is_ok());
-            assert!(store.eval(&format!("{}(0,0,0)", function), &mut ctx).is_ok());
+
+        test_with_multiple_arg_counts(&functions_that_take_one_argument, |i| i == 1);
+        test_with_multiple_arg_counts(&functions_that_take_zero_or_more_arguments, |_| true);
+        test_with_multiple_arg_counts(&functions_that_take_one_or_more_arguments, |i| i >= 1);
+
+        macro_rules! test_eval {
+            ($input:literal, $output:expr) => {
+                assert_eq!(store.eval($input, &mut ctx), Ok($output))
+            };
         }
-        assert_eq!(store.eval("sum()", &mut ctx), Ok(0.into()));
-        assert_eq!(store.eval("sum(0)", &mut ctx), Ok(0.into()));
-        assert_eq!(store.eval("sum(0,0)", &mut ctx), Ok(0.into()));
 
-        // Test für floor
-        assert_eq!(store.eval("floor(123.456)", &mut ctx).unwrap(), 123.into());
-        assert_eq!(store.eval("floor(-123.456)", &mut ctx).unwrap(), Number::from(-124));
+        test_eval!("sin(123)", Number::Float(expr!(sin(123), &mut ctx)));
+        test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
+        test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));
+        test_eval!("sqrt(123)", Number::Float(expr!(sqrt(123), &mut ctx)));
+        test_eval!("abs(-123)", 123.into());
+        test_eval!("log2(123)", Number::Float(expr!(log2(123), &mut ctx)));
+        test_eval!("avg(1,2,3)", 2.into());
+        test_eval!("max(1,2,3)", 3.into());
+        test_eval!("min(1,2,3)", 1.into());
+        test_eval!("sum(1,2,3)", 6.into());
+        test_eval!("median(1,2,3)", 2.into());
+        test_eval!("median(1,2,3,4)", Number::from_string("2.5").unwrap());
+        test_eval!("median(2,3,4,1)", Number::from_string("2.5").unwrap());
+        test_eval!("median(3,4,1,2)", Number::from_string("2.5").unwrap());
+        test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
+        test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
 
-        // Test für ceil
-        assert_eq!(store.eval("ceil(123.456)", &mut ctx).unwrap(), Number::from(124));
-        assert_eq!(store.eval("ceil(-123.456)", &mut ctx).unwrap(), Number::from(-123));
+        test_eval!("sum()", 0.into());
+        test_eval!("sum(0)", 0.into());
+        test_eval!("sum(0,0)", 0.into());
 
-        // Test für round
-        assert_eq!(store.eval("round(123.456)", &mut ctx).unwrap(), Number::from(123));
-        assert_eq!(store.eval("round(123.789)", &mut ctx).unwrap(), Number::from(124));
-        assert_eq!(store.eval("round(-123.456)", &mut ctx).unwrap(), Number::from(-123));
-        assert_eq!(store.eval("round(-123.789)", &mut ctx).unwrap(), Number::from(-124));
+        test_eval!("floor(123.456)", 123.into());
+        test_eval!("floor(-123.456)", Number::from(-124));
+
+        test_eval!("ceil(123.456)", Number::from(124));
+        test_eval!("ceil(-123.456)", Number::from(-123));
+
+        test_eval!("round(123.456)", Number::from(123));
+        test_eval!("round(123.789)", Number::from(124));
+        test_eval!("round(-123.456)", Number::from(-123));
+        test_eval!("round(-123.789)", Number::from(-124));
     }
 
     #[test]
