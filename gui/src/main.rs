@@ -13,15 +13,18 @@ mod ui {
         pub(super) top_user_input: String,
         pub(super) calculation_result: Result<String, String>,
         pub(super) output_digits: usize,
+        pub all_symbol_strings: Vec<String>,
     }
 
     impl UiState {
         pub(super) fn new() -> Self {
-            Self {
+            let state = Self {
                 top_user_input: "".to_string(),
                 calculation_result: Ok("".to_string()),
                 output_digits: Number::DEFAULT_ROUNDING_DIGITS,
-            }
+                all_symbol_strings: Vec::new(),
+            };
+            state
         }
     }
 }
@@ -37,7 +40,6 @@ mod controller {
         CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
         ScrollArea, TextEdit, Ui, Widget,
     };
-    use library::Number;
     use library::operations::create_default_context;
     use library::parsing::implementation::get_fun_name_end_of_string;
     use library::storing::FormulaStore;
@@ -56,7 +58,9 @@ mod controller {
             store.add_variable_with_value("kw_to_ps", "1.35962", false).unwrap();
             store.add_variable_with_value("km_to_miles", "0.6214", false).unwrap();
             store.add_variable_with_value("liter_to_gallons", "0.264172", false).unwrap();
-            Self { formula_store: store, ui_state: UiState::new() }
+            let mut window = Self { formula_store: store, ui_state: UiState::new() };
+            window.update_all_symbol_strings();
+            window
         }
 
         fn update_calculation_result(&mut self) {
@@ -70,8 +74,7 @@ mod controller {
                 self.ui_state.calculation_result = self
                     .formula_store
                     .add_symbol_from_string(input, true)
-                    .map(|name| format!("Create new symbol '{}'", name))
-                    .map_err(|s| format!("Error: {}", s));
+                    .map(|name| format!("Create new symbol '{}'", name));
             } else {
                 self.ui_state.calculation_result = self
                     .formula_store
@@ -98,6 +101,7 @@ mod controller {
                 if result.is_ok() {
                     self.ui_state.top_user_input.clear();
                     self.update_calculation_result();
+                    self.update_all_symbol_strings();
                 }
             }
         }
@@ -155,6 +159,32 @@ mod controller {
                 }
             });
         }
+
+        fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
+            let area = ScrollArea::vertical().auto_shrink(false);
+            area.show(ui, |ui| {
+                for text in &self.ui_state.all_symbol_strings {
+                    ui.label(RichText::new(text).size(17.0));
+                }
+            });
+        }
+
+        fn update_all_symbol_strings(&mut self) {
+            let mut elements = self.formula_store.get_symbols();
+            elements.sort_by_key(|e| e.0);
+            self.ui_state.all_symbol_strings = elements
+                .iter()
+                .map(|(name, params, value)| {
+                    let mut text = name.to_string();
+                    if let Some(params) = params {
+                        text.push_str(&format!("({})", params.join(", ")));
+                    }
+                    text.push_str(" = ");
+                    text.push_str(&value.get_string(&mut create_default_context()));
+                    text
+                })
+                .collect();
+        }
     }
 
     fn set_cursor_pos(response: &Response, cursor_pos: usize) {
@@ -169,20 +199,7 @@ mod controller {
             CentralPanel::default().show(ctx, |ui| {
                 self.show_top_input(ui);
                 ui.separator();
-                let area = ScrollArea::vertical().auto_shrink(false);
-                area.show(ui, |ui| {
-                    let mut elements = self.formula_store.get_symbols();
-                    elements.sort_by_key(|e| e.0);
-                    elements.iter().for_each(|(name, params, value)| {
-                        let mut text = name.to_string();
-                        if let Some(params) = params {
-                            text.push_str(&format!("({})", params.join(", ")));
-                        }
-                        text.push_str(" = ");
-                        text.push_str(&value.get_string(&mut create_default_context()));
-                        ui.label(RichText::new(text).size(17.0));
-                    });
-                });
+                self.show_all_defined_symbols(ui);
             });
         }
     }

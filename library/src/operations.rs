@@ -112,7 +112,7 @@ mod helper_functions {
         let float_string = float.to_string();
         let scientific = round_scientific(&float_string, decimals).unwrap_or(float_string);
         if decimals > 28 {
-            return scientific.replace("e0", ""); // Decimal can only handle up to 28 digits of precision
+            return scientific.replace("e0", "").replace("e+0", ""); // Decimal can only handle up to 28 digits of precision
         }
         let Ok(d) = Decimal::from_scientific(&scientific) else { return scientific };
         d.to_string()
