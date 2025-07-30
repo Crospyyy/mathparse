@@ -108,8 +108,12 @@ mod helper_functions {
     }
 
     pub(super) fn float_to_string_with_rounding(float: &BigFloat, decimals: usize) -> String {
+        // todo somehow unify the printing of floats and rationals and add tests to prove that both work as expected
         let float_string = float.to_string();
         let scientific = round_scientific(&float_string, decimals).unwrap_or(float_string);
+        if decimals > 28 {
+            return scientific.replace("e0", ""); // Decimal can only handle up to 28 digits of precision
+        }
         let Ok(d) = Decimal::from_scientific(&scientific) else { return scientific };
         d.to_string()
     }
