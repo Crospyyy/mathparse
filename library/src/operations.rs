@@ -145,6 +145,8 @@ impl From<i32> for Number {
 
 // implement external interaction with the Number type
 impl Number {
+    pub const DEFAULT_ROUNDING_DIGITS: usize = 20;
+
     pub fn from_string(str: impl ToString) -> Option<Self> {
         let string = str.to_string();
         // remove "_" in between digits like "1_000" to "1000"
@@ -186,9 +188,6 @@ impl Number {
         }
     }
 
-    pub fn to_string_default_rounding(&self, ctx: &mut Context) -> String {
-        self.to_string(20, ctx)
-    }
     pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
         match self {
             Number::Rational(r) => {
@@ -471,7 +470,7 @@ mod tests {
             assert_eq!(Number::from_string(a).as_ref(), b.as_ref().map(|s| &s.0));
             println!("Testing conversion to string");
             assert_eq!(
-                Number::from_string(a).map(|n| n.to_string_default_rounding(&mut ctx)),
+                Number::from_string(a).map(|n| n.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx)),
                 b.as_ref().map(|s| s.1.to_string())
             );
         };

@@ -558,7 +558,7 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::Element;
+    use crate::{Element, Number};
     use crate::formula_short::*;
     use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
@@ -609,7 +609,7 @@ pub mod testing {
             println!("{}", element.get_debug_string());
             println!();
             if let Some(num) = element.eval(&mut ctx) {
-                println!("Calculated Result: {}", num.to_string_default_rounding(&mut ctx));
+                println!("Calculated Result: {}", num.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx));
             } else {
                 println!("Calculated Result: Could not evaluate the formula.");
             }
@@ -745,30 +745,10 @@ pub mod testing {
     mod formula_generation {
         use crate::Element;
         use crate::parsing::testing::test_formula_parsing;
+        use crate::printing::Formula;
         use rand::random_range;
-        use std::fmt::Display;
-
-        enum Formula {
-            Plus(Vec<Formula>),
-            Multiply(Vec<Formula>),
-            Negate(Box<Formula>),
-            Number(String),
-            Variable(String),
-            Pow(Box<Formula>, Box<Formula>),
-            Division(Box<Formula>, Box<Formula>),
-            Function { name: String, arguments: Vec<Formula> },
-        }
 
         impl Formula {
-            fn get_priority(&self) -> usize {
-                match self {
-                    Formula::Plus(_) => 0,
-                    Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
-                    Formula::Pow(..) => 2,
-                    Formula::Number(_) | Formula::Variable(_) | Formula::Function { .. } => 3,
-                }
-            }
-
             fn random_number() -> f64 {
                 random_range(0.0..=100.0)
             }
@@ -803,74 +783,6 @@ pub mod testing {
                         Formula::Function { name, arguments: args }
                     },
                     _ => unreachable!(),
-                }
-            }
-        }
-
-        impl Display for Formula {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                match self {
-                    Formula::Plus(elements) => {
-                        write!(
-                            f,
-                            "{}",
-                            elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + ")
-                        )
-                    },
-                    Formula::Multiply(elements) => {
-                        let string = elements
-                            .iter()
-                            .map(|e| {
-                                if e.get_priority() < self.get_priority() {
-                                    format!("({})", e)
-                                } else {
-                                    e.to_string()
-                                }
-                            })
-                            .collect::<Vec<_>>()
-                            .join(" * ");
-                        write!(f, "{}", string)
-                    },
-                    Formula::Negate(e) => {
-                        if matches!(e.as_ref(), Formula::Plus(..) | Formula::Multiply(..)) {
-                            write!(f, "-({})", e)
-                        } else {
-                            write!(f, "-{}", e)
-                        }
-                    },
-                    Formula::Number(n) | Formula::Variable(n) => write!(f, "{}", n),
-                    Formula::Pow(base, exponent) => {
-                        if base.get_priority() <= self.get_priority() {
-                            write!(f, "({})^", base)?;
-                        } else {
-                            write!(f, "{}^", base)?;
-                        }
-                        if exponent.get_priority() < self.get_priority() {
-                            write!(f, "({})", exponent)
-                        } else {
-                            write!(f, "{}", exponent)
-                        }
-                    },
-                    Formula::Division(numerator, denominator) => {
-                        if numerator.get_priority() < self.get_priority() {
-                            write!(f, "({})/", numerator)?;
-                        } else {
-                            write!(f, "{}/", numerator)?;
-                        }
-                        if denominator.get_priority() <= self.get_priority() {
-                            write!(f, "({})", denominator)
-                        } else {
-                            write!(f, "{}", denominator)
-                        }
-                    },
-                    Formula::Function { name, arguments } => {
-                        write!(
-                            f,
-                            "{}({})",
-                            name,
-                            arguments.iter().map(|a| format!("{}", a)).collect::<Vec<_>>().join(", ")
-                        )
-                    },
                 }
             }
         }

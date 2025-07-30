@@ -30,6 +30,7 @@ mod controller {
         CentralPanel, Color32, Context, FontFamily, FontSelection, Label, Response, RichText, ScrollArea,
         TextEdit, Ui,
     };
+    use library::Number;
     use library::operations::create_default_context;
     use library::parsing::implementation::get_fun_name_end_of_string;
     use library::storing::FormulaStore;
@@ -69,7 +70,7 @@ mod controller {
                     .formula_store
                     .eval(input, ctx)
                     .map(|result| {
-                        let result_str = result.to_string_default_rounding(ctx);
+                        let result_str = result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx);
                         if result.is_exact() {
                             format!("= {}", result_str)
                         } else {

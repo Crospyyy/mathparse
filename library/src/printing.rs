@@ -1,72 +1,12 @@
 use crate::parsing::signature::ParamCount;
-use crate::{Element, FunctionExpression};
+use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use colored::Colorize;
 use std::fmt::Display;
 
-enum Inner<'a, T: 'a>
-where
-    T: IntoIterator<Item = &'a Element>,
-{
-    #[allow(unused)]
-    Single(&'a Element),
-    Multiple {
-        delimiter: &'a str,
-        elements: T,
-    },
-}
-
-impl<'a, T> Inner<'a, T>
-where
-    T: IntoIterator<Item = &'a Element>,
-{
-    fn print(self, output: &mut String, show_type: bool, ctx: &mut Context) {
-        match self {
-            Inner::Single(element) => element.add_to_string(true, show_type, output, ctx),
-            Inner::Multiple { delimiter, elements } => {
-                for (i, element) in elements.into_iter().enumerate() {
-                    if i != 0 {
-                        if show_type {
-                            output.push(' ');
-                        }
-                        output.push_str(delimiter);
-                        if show_type {
-                            output.push(' ');
-                        }
-                    }
-                    element.add_to_string(true, show_type, output, ctx);
-                }
-            },
-        }
-    }
-}
-
-fn print_in_brackets<'a, T: IntoIterator<Item = &'a Element>>(
-    inner: Inner<'a, T>, show_brackets: bool, string_before_brackets: Option<&str>, show_types: bool,
-    type_string: &str, output: &mut String, ctx: &mut Context,
-) {
-    add_type_string(show_types, type_string, output);
-    if !show_brackets {
-        inner.print(output, show_types, ctx);
-    } else {
-        if let Some(str) = string_before_brackets {
-            output.push_str(str);
-        }
-        output.push_str("(");
-        inner.print(output, show_types, ctx);
-        output.push_str(")");
-    }
-}
-
-fn mark_string_red(str: impl ToString, apply_color: bool) -> String {
-    if apply_color { str.to_string().red().to_string() } else { str.to_string() }
-}
-
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
-        let mut output = String::new();
-        self.add_to_string(false, false, &mut output, ctx);
-        output
+        Formula::from_element(self, Number::DEFAULT_ROUNDING_DIGITS, false, ctx).to_string()
     }
 
     pub fn get_debug_string(&self) -> String {
@@ -116,86 +56,149 @@ impl Element {
             },
         }
     }
+}
 
-    fn add_to_string(&self, show_brackets: bool, show_types: bool, output: &mut String, ctx: &mut Context) {
+pub enum Formula {
+    Plus(Vec<Formula>),
+    Multiply(Vec<Formula>),
+    Negate(Box<Formula>),
+    Number(String),
+    Variable(String),
+    Pow(Box<Formula>, Box<Formula>),
+    Division(Box<Formula>, Box<Formula>),
+    Function { name: String, arguments: Vec<Formula> },
+    ForcedBrackets(Vec<Self>),
+}
+
+impl Formula {
+    fn get_priority(&self) -> usize {
         match self {
-            Element::Brackets(elements) => print_in_brackets(
-                Inner::Multiple { delimiter: if show_types { "," } else { "" }, elements },
-                show_brackets,
-                None,
-                show_types,
-                "br",
-                output,
-                ctx,
-            ),
-            Element::Plus(elements) => print_in_brackets(
-                Inner::Multiple { delimiter: "+", elements },
-                show_brackets,
-                None,
-                show_types,
-                "plus",
-                output,
-                ctx,
-            ),
-            Element::Multiply(elements) => print_in_brackets(
-                Inner::Multiple { delimiter: "*", elements },
-                show_brackets,
-                None,
-                show_types,
-                "mul",
-                output,
-                ctx,
-            ),
-            Element::Function { name, arguments } => print_in_brackets(
-                Inner::Multiple { delimiter: ",", elements: arguments },
-                show_brackets,
-                Some(name),
-                show_types,
-                "fun",
-                output,
-                ctx,
-            ),
-            Element::FunctionWithExpression { arguments, .. } => print_in_brackets(
-                Inner::Multiple { delimiter: ",", elements: arguments },
-                show_brackets,
-                Some("fun_with_expr"),
-                show_types,
-                "fun_with_expr",
-                output,
-                ctx,
-            ),
-            Element::Pow(base, exponent) => {
-                print_in_brackets(
-                    Inner::Multiple { delimiter: "^", elements: [base.as_ref(), exponent] },
-                    show_brackets,
-                    None,
-                    show_types,
-                    "pow",
-                    output,
-                    ctx,
-                );
-            },
-            Element::Negate(element) => {
-                add_element_string(show_types, "neg", "-", output);
-                element.add_to_string(true, show_types, output, ctx);
-            },
-            Element::Number(num) => add_element_string(show_types, "num", num.to_string_default_rounding(ctx), output),
-            Element::Variable(name) => add_element_string(show_types, "var", name, output),
-            Element::VariableOrFunction(name) => add_element_string(show_types, "var or fun", name, output),
-            Element::String(s) => add_element_string(show_types, "str", mark_string_red(s, true), output),
-            Element::NumberWithExpression(_) => output.push_str("num_with_expr"),
+            Formula::Plus(_) => 0,
+            Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
+            Formula::Pow(..) => 2,
+            Formula::Number(_)
+            | Formula::Variable(_)
+            | Formula::Function { .. }
+            | Formula::ForcedBrackets(_) => 3,
         }
     }
 }
 
-fn add_element_string(show_types: bool, type_string: &str, content: impl Display, output: &mut String) {
-    add_type_string(show_types, type_string, output);
-    output.push_str(content.to_string().as_str());
+impl Display for Formula {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Formula::Plus(elements) => {
+                write!(f, "{}", elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + "))
+            },
+            Formula::Multiply(elements) => {
+                let string = elements
+                    .iter()
+                    .map(|e| {
+                        if e.get_priority() < self.get_priority() {
+                            format!("({})", e)
+                        } else {
+                            e.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" * ");
+                write!(f, "{}", string)
+            },
+            Formula::Negate(e) => {
+                if matches!(e.as_ref(), Formula::Plus(..) | Formula::Multiply(..)) {
+                    write!(f, "-({})", e)
+                } else {
+                    write!(f, "-{}", e)
+                }
+            },
+            Formula::Number(n) | Formula::Variable(n) => write!(f, "{}", n),
+            Formula::Pow(base, exponent) => {
+                if base.get_priority() <= self.get_priority() {
+                    write!(f, "({})^", base)?;
+                } else {
+                    write!(f, "{}^", base)?;
+                }
+                if exponent.get_priority() < self.get_priority()
+                    && !matches!(exponent.as_ref(), Formula::Negate(_))
+                {
+                    write!(f, "({})", exponent)
+                } else {
+                    write!(f, "{}", exponent)
+                }
+            },
+            Formula::Division(numerator, denominator) => {
+                if numerator.get_priority() < self.get_priority() {
+                    write!(f, "({})/", numerator)?;
+                } else {
+                    write!(f, "{}/", numerator)?;
+                }
+                if denominator.get_priority() <= self.get_priority() {
+                    write!(f, "({})", denominator)
+                } else {
+                    write!(f, "{}", denominator)
+                }
+            },
+            Formula::Function { name, arguments } => {
+                write!(
+                    f,
+                    "{}({})",
+                    name,
+                    arguments.iter().map(|a| format!("{}", a)).collect::<Vec<_>>().join(", ")
+                )
+            },
+            Formula::ForcedBrackets(elements) => {
+                write!(
+                    f,
+                    "({})",
+                    elements.iter().map(Self::to_string).reduce(|a, b| a + &b).unwrap_or_default()
+                )
+            },
+        }
+    }
 }
 
-fn add_type_string(show_types: bool, type_string: &str, output: &mut String) {
-    if show_types {
-        output.push_str(type_string);
-        output.push_str(": ");
+impl Formula {
+    fn from_element(
+        element: &Element, rounding_digits: usize, mark_unparsed_red: bool, ctx: &mut Context,
+    ) -> Self {
+        macro_rules! create_formula {
+            ($element:expr) => {
+                Self::from_element($element, rounding_digits, mark_unparsed_red, ctx)
+            };
+        }
+
+        match element {
+            Element::Plus(elements) => {
+                let elements = elements.iter().map(|e| create_formula!(e)).collect();
+                Formula::Plus(elements)
+            },
+            Element::Multiply(elements) => {
+                let elements = elements.iter().map(|e| create_formula!(e)).collect();
+                Formula::Multiply(elements)
+            },
+            Element::Negate(e) => Formula::Negate(Box::new(create_formula!(e))),
+            Element::Number(num) => Formula::Number(num.to_string(rounding_digits, ctx)),
+            Element::Variable(name) => Formula::Variable(name.clone()),
+            Element::VariableOrFunction(name) => Formula::Variable(name.clone()),
+            Element::Pow(base, exponent) => {
+                Formula::Pow(Box::new(create_formula!(base)), Box::new(create_formula!(exponent)))
+            },
+            Element::Function { name, arguments } => Formula::Function {
+                name: name.clone(),
+                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
+            },
+
+            Element::Brackets(elements) => {
+                Formula::ForcedBrackets(elements.iter().map(|e| create_formula!(e)).collect())
+            },
+            Element::String(s) => {
+                Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
+            },
+            Element::FunctionWithExpression { arguments, .. } => Formula::Function {
+                name: "fun_with_expr".to_string(),
+                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
+            },
+            Element::NumberWithExpression(_) => Formula::Variable("num_with_expr".to_string()),
+        }
     }
 }

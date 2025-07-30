@@ -28,9 +28,9 @@ pub fn run_formula_evaluator() {
             match result1 {
                 Ok(result) => {
                     if result.is_exact() {
-                        println!("= {}", result.to_string_default_rounding(ctx));
+                        println!("= {}", result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx));
                     } else {
-                        println!("~= {}", result.to_string_default_rounding(ctx));
+                        println!("~= {}", result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx));
                     }
                 },
                 Err(s) => {
