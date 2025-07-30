@@ -3,6 +3,7 @@ use crate::operations::helper_functions::float_to_exact_rational;
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, RoundingMode, expr};
 use num_rational::BigRational;
+use regex::Regex;
 use rust_decimal::prelude::{Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 
@@ -146,6 +147,8 @@ impl From<i32> for Number {
 impl Number {
     pub fn from_string(str: impl ToString) -> Option<Self> {
         let string = str.to_string();
+        // remove "_" in between digits like "1_000" to "1000"
+        let string = Regex::new(r"(\d)_(\d)").unwrap().replace_all(&string, "$1$2");
         if string.chars().any(|c| !matches!(c, '0'..='9' | '.' | '-')) {
             return None; // only digits and dot are allowed
         }
@@ -450,6 +453,26 @@ mod tests {
 
     fn creat_rational(a: impl Into<BigInt>, b: impl Into<BigInt>) -> BigRational {
         BigRational::new(a.into(), b.into())
+    }
+
+    #[test]
+    fn test_create_number_from_string() {
+        let mut ctx = create_default_context();
+        let mut assert_eq_num = |a: &str, b: Option<&str>| {
+            println!("Testing: {} == {:?}", a, b);
+            assert_eq!(
+                Number::from_string(a).map(|n| n.to_string_default_rounding(&mut ctx)),
+                b.map(|s| s.to_string())
+            );
+        };
+        assert_eq_num("1", Some("1"));
+        assert_eq_num("1.23", Some("1.23"));
+        assert_eq_num("-1.23", Some("-1.23"));
+        assert_eq_num("1000", Some("1000"));
+        assert_eq_num("1_000", Some("1000"));
+        assert_eq_num("1000_", None);
+        assert_eq_num("_1000", None);
+        assert_eq_num("1_000_000", Some("1000000"));
     }
 
     #[test]
