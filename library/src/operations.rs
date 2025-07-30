@@ -196,7 +196,13 @@ impl Number {
                     .and_then(|d| d.round_sf(rounding_digits as u32))
                 {
                     let mut string = d.to_string();
-                    while string.len() > 1 && matches!(string.chars().last(), Some('0' | '.')) {
+                    while string.len() > 1
+                        && (string.chars().last().is_some_and(|c| match c {
+                            '0' => string.contains('.'),
+                            '.' => true,
+                            _ => false,
+                        }))
+                    {
                         string.pop();
                     }
                     return string;
