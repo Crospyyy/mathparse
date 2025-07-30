@@ -752,7 +752,8 @@ pub mod testing {
             Plus(Vec<Formula>),
             Multiply(Vec<Formula>),
             Negate(Box<Formula>),
-            Number(f64),
+            Number(String),
+            Variable(String),
             Pow(Box<Formula>, Box<Formula>),
             Division(Box<Formula>, Box<Formula>),
             Function { name: String, arguments: Vec<Formula> },
@@ -764,40 +765,44 @@ pub mod testing {
                     Formula::Plus(_) => 0,
                     Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
                     Formula::Pow(..) => 2,
-                    Formula::Number(_) => 3,
-                    Formula::Function { .. } => 3,
+                    Formula::Number(_) | Formula::Variable(_) | Formula::Function { .. } => 3,
                 }
             }
 
+            fn random_number() -> f64 {
+                random_range(0.0..=100.0)
+            }
+
+            fn random_var_name() -> String {
+                format!("var{}", random_range(1..=10))
+            }
+
             fn generate_random(depth: usize) -> Self {
-                if depth == 0 {
-                    Formula::Number(random_range(0..=100) as _)
-                } else {
-                    match random_range(0..7) {
-                        0 => Formula::Number(random_range(0..=100) as _),
-                        1 => Formula::Plus(
-                            (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
-                        ),
-                        2 => Formula::Multiply(
-                            (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
-                        ),
-                        3 => Formula::Negate(Box::new(Self::generate_random(depth - 1))),
-                        4 => Formula::Pow(
-                            Box::new(Self::generate_random(depth - 1)),
-                            Box::new(Self::generate_random(depth - 1)),
-                        ),
-                        5 => Formula::Division(
-                            Box::new(Self::generate_random(depth - 1)),
-                            Box::new(Self::generate_random(depth - 1)),
-                        ),
-                        6 => {
-                            let name = format!("f{}", random_range(1..=10));
-                            let args =
-                                (0..random_range(1..=3)).map(|_| Self::generate_random(depth - 1)).collect();
-                            Formula::Function { name, arguments: args }
-                        },
-                        _ => unreachable!(),
-                    }
+                match random_range(0..if depth == 0 { 2 } else { 8 }) {
+                    0 => Formula::Number(Self::random_number().to_string()),
+                    1 => Formula::Variable(Self::random_var_name()),
+                    2 => Formula::Plus(
+                        (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
+                    ),
+                    3 => Formula::Multiply(
+                        (0..random_range(2..=4)).map(|_| Self::generate_random(depth - 1)).collect(),
+                    ),
+                    4 => Formula::Negate(Box::new(Self::generate_random(depth - 1))),
+                    5 => Formula::Pow(
+                        Box::new(Self::generate_random(depth - 1)),
+                        Box::new(Self::generate_random(depth - 1)),
+                    ),
+                    6 => Formula::Division(
+                        Box::new(Self::generate_random(depth - 1)),
+                        Box::new(Self::generate_random(depth - 1)),
+                    ),
+                    7 => {
+                        let name = format!("f{}", random_range(1..=10));
+                        let args =
+                            (0..random_range(1..=3)).map(|_| Self::generate_random(depth - 1)).collect();
+                        Formula::Function { name, arguments: args }
+                    },
+                    _ => unreachable!(),
                 }
             }
         }
@@ -833,7 +838,7 @@ pub mod testing {
                             write!(f, "-{}", e)
                         }
                     },
-                    Formula::Number(n) => write!(f, "{}", n),
+                    Formula::Number(n) | Formula::Variable(n) => write!(f, "{}", n),
                     Formula::Pow(base, exponent) => {
                         if base.get_priority() <= self.get_priority() {
                             write!(f, "({})^", base)?;
@@ -1230,40 +1235,40 @@ pub mod signature {
             &self, name: &str, list: &mut HashSet<(String, usize)>,
         ) {
             match self {
-                Element::Function { arguments, name: this_name } => {
-                    if this_name == name {
-                        for (i, arg_name) in arguments
-                            .iter()
-                            .enumerate()
-                            .filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
-                            .map(|(i, e)| e.get_name().map(|n| (i, n)))
-                            .flatten()
-                        {
-                            if arg_name != name {
-                                list.insert((arg_name.to_string(), i));
-                            }
-                        }
-                    }
-                    arguments
-                        .iter()
-                        .for_each(|a| a.list_all_function_arguments_where_function_has_name(name, list))
-                },
-                Element::Plus(elements) | Element::Multiply(elements) => elements
-                    .iter()
-                    .for_each(|e| e.list_all_function_arguments_where_function_has_name(name, list)),
-                Element::Pow(a, b) => {
-                    a.list_all_function_arguments_where_function_has_name(name, list);
-                    b.list_all_function_arguments_where_function_has_name(name, list);
-                },
-                Element::Negate(e) => e.list_all_function_arguments_where_function_has_name(name, list),
-                Element::Brackets(_)
-                | Element::String(_)
-                | Element::Number(_)
-                | Element::Variable(_)
-                |Element::NumberWithExpression(_)
-                | Element::FunctionWithExpression { .. } // todo I'm not sure if it is correct to ignore this
-                | Element::VariableOrFunction(_) => {},
-            }
+				Element::Function { arguments, name: this_name } => {
+					if this_name == name {
+						for (i, arg_name) in arguments
+							.iter()
+							.enumerate()
+							.filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
+							.map(|(i, e)| e.get_name().map(|n| (i, n)))
+							.flatten()
+						{
+							if arg_name != name {
+								list.insert((arg_name.to_string(), i));
+							}
+						}
+					}
+					arguments
+						.iter()
+						.for_each(|a| a.list_all_function_arguments_where_function_has_name(name, list))
+				}
+				Element::Plus(elements) | Element::Multiply(elements) => elements
+					.iter()
+					.for_each(|e| e.list_all_function_arguments_where_function_has_name(name, list)),
+				Element::Pow(a, b) => {
+					a.list_all_function_arguments_where_function_has_name(name, list);
+					b.list_all_function_arguments_where_function_has_name(name, list);
+				}
+				Element::Negate(e) => e.list_all_function_arguments_where_function_has_name(name, list),
+				Element::Brackets(_)
+				| Element::String(_)
+				| Element::Number(_)
+				| Element::Variable(_)
+				| Element::NumberWithExpression(_)
+				| Element::FunctionWithExpression { .. } // todo I'm not sure if it is correct to ignore this
+				| Element::VariableOrFunction(_) => {}
+			}
         }
     }
 
