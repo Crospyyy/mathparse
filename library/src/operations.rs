@@ -251,7 +251,9 @@ mod helper_functions {
             if rounded.is_empty() {
                 return "0".to_string();
             }
-            if exponent.abs() as usize > non_scientific_decimals {
+            if exponent.abs() as usize > non_scientific_decimals
+                && !(exponent.is_positive() && rounded.len() as i64 > exponent)
+            {
                 let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
                 if output_string.len() > 1 {
                     output_string.insert(1, '.');
@@ -791,14 +793,15 @@ mod tests {
         assert_eq!(quick_conversion(vec![1, 2, 3], -2, 0), "1.23e-2");
         assert_eq!(quick_conversion(vec![1, 2, 3], -1, 0), "1.23e-1");
         assert_eq!(quick_conversion(vec![1, 2, 3], 0, 0), "1.23");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 0), "1.23e1");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 0), "1.23e2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 0), "12.3"); // no e because all digits are visible till zero
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 0), "123"); // no e because all digits are visible till zero
+        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 0), "1.23e3");
 
         assert_eq!(quick_conversion(vec![1, 2, 3], -2, 1), "1.23e-2");
         assert_eq!(quick_conversion(vec![1, 2, 3], -1, 1), "0.123");
         assert_eq!(quick_conversion(vec![1, 2, 3], 0, 1), "1.23");
         assert_eq!(quick_conversion(vec![1, 2, 3], 1, 1), "12.3");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "1.23e2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "123"); // no e because all digits are visible till zero
         fn quick_round(base: Vec<u8>, round_to_decimals: usize) -> String {
             ScientificNumber::new(false, base, 0)
                 .to_string(round_to_decimals, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
