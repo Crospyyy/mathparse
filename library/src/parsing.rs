@@ -200,6 +200,7 @@ pub mod implementation {
                 Element::String(s) => {
                     if s.starts_with('-') {
                         *self = Element::Negate(Box::new(Element::String(s[1..].to_owned())));
+                        self.process_minus();
                     }
                 },
                 Element::Negate(element) => {
