@@ -34,11 +34,12 @@ mod logic {}
 mod controller {
     use crate::ui::UiState;
     use eframe::epaint::FontId;
+    use eframe::epaint::text::TextWrapMode;
     use eframe::{App, CreationContext, Frame};
-    use egui::text::{CCursor, CCursorRange};
+    use egui::text::{CCursor, CCursorRange, LayoutJob, TextWrapping};
     use egui::{
         CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
-        ScrollArea, TextEdit, Ui, Widget,
+        ScrollArea, TextEdit, TextFormat, Ui, Widget,
     };
     use library::operations::create_default_context;
     use library::parsing::implementation::get_fun_name_end_of_string;
@@ -147,10 +148,27 @@ mod controller {
                 self.try_apply_calculation();
                 response.request_focus();
             }
-            ui.label(match &self.ui_state.calculation_result {
-                Ok(result) => RichText::new(result).size(20.0),
-                Err(err) => RichText::new(err).size(20.0).color(Color32::ORANGE.gamma_multiply(0.7)),
-            });
+
+            let mut job = LayoutJob::default();
+            let calc_result = &self.ui_state.calculation_result;
+            let text = match calc_result {
+                Ok(result) => result,
+                Err(err) => err,
+            };
+            let mut format =
+                TextFormat { font_id: FontId::new(20.0, FontFamily::Proportional), ..Default::default() };
+            if calc_result.is_err() {
+                format.color = Color32::ORANGE.gamma_multiply(0.7);
+            }
+            job.append(text, 0.0, format);
+            job.wrap = TextWrapping {
+                max_width: ui.available_width(),
+                max_rows: usize::MAX,     // Use multiple rows as needed
+                break_anywhere: true,     // 🔑 allow breaking at any character
+                overflow_character: None, // optional
+            };
+
+            ui.label(job);
             ui.horizontal(|ui| {
                 ui.label("Round Digits:");
                 let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
