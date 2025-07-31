@@ -39,11 +39,12 @@ macro_rules! inexact_if_needed {
 mod helper_functions {
     use crate::Number;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Word, expr};
+    use astro_float::{BigFloat, Consts, Radix, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use rust_decimal::Decimal;
     use rust_decimal::prelude::{One, ToPrimitive, Zero};
+    use std::cmp::Ordering;
     use std::str::FromStr;
 
     pub(super) fn power_rational_and_rational(
@@ -167,6 +168,126 @@ mod helper_functions {
         let exp_adj = exponent - (mantissa.len() * size_of::<Word>() * 8) as i32;
         let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
         Some(ratio)
+    }
+
+    pub(super) struct ScientificNumber {
+        negative: bool,
+        base: Vec<u8>,
+        exponent: i64,
+    }
+
+    impl ScientificNumber {
+        pub(super) fn new(negative: bool, base: impl Into<Vec<u8>>, exponent: i64) -> Self {
+            Self { negative, base: base.into(), exponent }
+        }
+
+        fn from_big_float(float: &BigFloat, ctx: &mut Context) -> Option<Self> {
+            let (sign, numbers, exp) =
+                float.convert_to_radix(Radix::Dec, ctx.rounding_mode(), ctx.consts()).ok()?;
+            Some(Self { negative: sign.is_negative(), base: numbers, exponent: exp as i64 })
+        }
+
+        fn from_scientific_string(str: &str) -> Option<Self> {
+            let (a, b) = str.split_once("e")?;
+            let b: i64 = b.parse().ok()?;
+
+            let mut refined_a = a.to_string();
+
+            let negative = refined_a.starts_with('-');
+            if negative {
+                refined_a.remove(0);
+            }
+
+            if refined_a.is_empty() {
+                return None; // empty string is not a valid number
+            }
+
+            if refined_a.len() == 1 {
+                return if let Some(digit) = a.chars().nth(0).unwrap().to_digit(10) {
+                    Some(Self { negative, base: vec![digit as u8], exponent: b })
+                } else {
+                    None
+                };
+            }
+
+            if refined_a.chars().nth(1) == Some('.') {
+                refined_a.remove(1);
+            } else {
+                return None; // invalid format
+            }
+
+            let numbers: Vec<_> =
+                refined_a.chars().map(|c| c.to_digit(10).map(|n| n as _)).collect::<Option<_>>()?;
+
+            Some(Self { negative, base: numbers, exponent: b })
+        }
+
+        pub(super) fn print(&self, round_to_decimals: usize, non_scientific_decimals: usize) -> String {
+            let mut exponent = self.exponent;
+            let mut rounded = if round_to_decimals >= self.base.len() {
+                self.base.clone()
+            } else {
+                let mut numbers = self.base[..=round_to_decimals].to_vec();
+                if numbers[round_to_decimals] >= 5 {
+                    for i in (0..round_to_decimals).rev() {
+                        if numbers[i] == 9 {
+                            numbers[i] = 0;
+                            if i == 0 {
+                                numbers.insert(0, 1);
+                                exponent += 1;
+                            }
+                        } else {
+                            numbers[i] += 1;
+                            break;
+                        }
+                    }
+                }
+                numbers
+            };
+            while rounded.last() == Some(&0) {
+                rounded.pop();
+            }
+            if rounded.is_empty() {
+                return "0".to_string();
+            }
+            if exponent.abs() as usize > non_scientific_decimals {
+                let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
+                if output_string.len() > 1 {
+                    output_string.insert(1, '.');
+                }
+                return format!("{}{}e{}", if self.negative { "-" } else { "" }, output_string, exponent,);
+            }
+            match self.exponent.cmp(&0) {
+                Ordering::Less => {
+                    let mut output_string = vec![0; (-self.exponent) as usize]
+                        .into_iter()
+                        .chain(rounded.into_iter())
+                        .map(|n| n.to_string())
+                        .collect::<String>();
+                    output_string.insert(1, '.');
+                    if self.negative { format!("-{}", output_string) } else { output_string }
+                },
+                Ordering::Equal => {
+                    let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
+                    if output_string.len() > 1 {
+                        output_string.insert(1, '.');
+                    }
+                    if self.negative { format!("-{}", output_string) } else { output_string }
+                },
+                Ordering::Greater => {
+                    let add_digits = self.exponent - rounded.len() as i64 + 1;
+                    let mut output_digits = rounded;
+                    if add_digits > 0 {
+                        output_digits.extend(vec![0; add_digits as usize]);
+                    }
+                    let mut output_string = output_digits.iter().map(|n| n.to_string()).collect::<String>();
+                    if output_string.len() > 1 && add_digits < 0 {
+                        output_string.insert((self.exponent + 1) as _, '.');
+                    }
+                    if self.negative { format!("-{}", output_string) } else { output_string }
+                },
+            }
+        }
     }
 
     pub(super) fn round_scientific(str: &str, decimals: usize) -> Option<String> {
@@ -567,8 +688,8 @@ impl Number {
 mod tests {
     use crate::operations::create_default_context;
     use crate::operations::helper_functions::{
-        big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
-        round_scientific,
+        ScientificNumber, big_int_to_power_of_inv_of_big_int, power_rational_and_rational,
+        rational_from_float, round_scientific,
     };
     use crate::{Number, fancy_assert_eq};
     use astro_float::BigFloat;
@@ -735,5 +856,37 @@ mod tests {
             (num("2").div(&num("3"), ctx), "0.6666666666666666666666666667", 28),
             (num("2").div(&num("3"), ctx), "0.66666666666666666666666666667", 29)
         );
+    }
+
+    #[test]
+    fn test_scientific_number() {
+        fn quick_standard(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
+            ScientificNumber::new(false, base, exponent).print(100, no_sci_digits)
+        }
+        assert_eq!(quick_standard(vec![0, 0, 0], 0, 100), "0");
+        assert_eq!(quick_standard(vec![0, 0, 0], 3, 100), "0");
+        assert_eq!(quick_standard(vec![1], -1, 100), "0.1");
+        assert_eq!(quick_standard(vec![1], 0, 100), "1");
+        assert_eq!(quick_standard(vec![1], 3, 100), "1000");
+
+        assert_eq!(quick_standard(vec![1, 2, 3], -2, 100), "0.0123");
+        assert_eq!(quick_standard(vec![1, 2, 3], -1, 100), "0.123");
+        assert_eq!(quick_standard(vec![1, 2, 3], 0, 100), "1.23");
+        assert_eq!(quick_standard(vec![1, 2, 3], 1, 100), "12.3");
+        assert_eq!(quick_standard(vec![1, 2, 3], 2, 100), "123");
+        assert_eq!(quick_standard(vec![1, 2, 3], 3, 100), "1230");
+        assert_eq!(quick_standard(vec![1, 2, 3], 4, 100), "12300");
+
+        assert_eq!(quick_standard(vec![1, 2, 3], -2, 0), "1.23e-2");
+        assert_eq!(quick_standard(vec![1, 2, 3], -1, 0), "1.23e-1");
+        assert_eq!(quick_standard(vec![1, 2, 3], 0, 0), "1.23");
+        assert_eq!(quick_standard(vec![1, 2, 3], 1, 0), "1.23e1");
+        assert_eq!(quick_standard(vec![1, 2, 3], 2, 0), "1.23e2");
+
+        assert_eq!(quick_standard(vec![1, 2, 3], -2, 1), "1.23e-2");
+        assert_eq!(quick_standard(vec![1, 2, 3], -1, 1), "0.123");
+        assert_eq!(quick_standard(vec![1, 2, 3], 0, 1), "1.23");
+        assert_eq!(quick_standard(vec![1, 2, 3], 1, 1), "12.3");
+        assert_eq!(quick_standard(vec![1, 2, 3], 2, 1), "1.23e2");
     }
 }
