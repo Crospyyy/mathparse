@@ -246,7 +246,21 @@ impl FormulaStore {
 }
 
 #[test]
-pub fn test_get_insertion_element_expanded() {
+fn test_add_symbols() {
+    let mut all = FormulaStore::new_empty();
+    assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
+    assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
+    println!("{:?}", all.get_signatures());
+    assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c", false), Ok("fun2".to_owned()));
+    println!("{:?}", all.get_signatures());
+    let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)", false);
+    println!("{:?}", result);
+    assert_eq!(result, Ok("fun3".to_owned()));
+    println!("{:?}", all.get_signatures());
+}
+
+#[test]
+fn test_get_insertion_element_expanded() {
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("f(i)=i^2", false).unwrap();
     store.add_symbol_from_string("g(x)=f(x+1)", false).unwrap();
@@ -255,7 +269,7 @@ pub fn test_get_insertion_element_expanded() {
     dbg!(insert);
 }
 #[test]
-pub fn test_insert_formula() {
+fn test_insert_formula() {
     use crate::formula_short::{plus, var};
     let mut store = FormulaStore::new_empty();
     store.add_symbol_from_string("fun(f,x,y)=f(x,y)", false).unwrap();

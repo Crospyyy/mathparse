@@ -19,6 +19,23 @@ pub fn create_default_context() -> Context {
     )
 }
 
+macro_rules! inexact_if_needed {
+    ($expr:expr, $item:ident) => {{
+        let mut result = $expr;
+        if $item.inexact() {
+            result.set_inexact(true);
+        }
+        result
+    }};
+    ($expr:expr, $item:ident, $item2:ident) => {{
+        let mut result = $expr;
+        if $item.inexact() || $item2.inexact() {
+            result.set_inexact(true);
+        }
+        result
+    }};
+}
+
 mod helper_functions {
     use crate::Number;
     use astro_float::ctx::Context;
@@ -32,6 +49,17 @@ mod helper_functions {
     pub(super) fn power_rational_and_rational(
         base: &BigRational, exponent: &BigRational, ctx: &mut Context,
     ) -> Number {
+        macro_rules! safe_return_float_calculation {
+            () => {
+                let base_float = float_from_rational(base, ctx);
+                let exponent_float = float_from_rational(exponent, ctx);
+                return Number::from(inexact_if_needed!(
+                    expr!(pow(base_float, exponent_float), &mut *ctx),
+                    base_float,
+                    exponent_float
+                ));
+            };
+        }
         if exponent.is_one() {
             // x1/x2 ^ 1 = x1/x2
             return Number::from(base.clone());
@@ -42,7 +70,10 @@ mod helper_functions {
         }
         if exponent.is_integer() {
             // x1/x2 ^ n = (x1^n)/(x2^n)
-            return Number::from(base.pow(exponent.to_i32().unwrap())); // todo remove unwrap
+            let Some(exp) = exponent.to_i32() else {
+                safe_return_float_calculation!();
+            };
+            return Number::from(base.pow(exp));
         }
 
         // If we reach here, we have a case like x1/x2 ^ (n/d)
@@ -50,7 +81,10 @@ mod helper_functions {
         let intermediate = if exponent.numer().is_one() {
             base.clone()
         } else {
-            base.pow(exponent.numer().to_i32().unwrap()) // todo remove unwrap
+            let Some(exp) = exponent.numer().to_i32() else {
+                safe_return_float_calculation!();
+            };
+            base.pow(exp)
         };
 
         // Now the exponents' numerator is handled, we need to handle the denominator
@@ -66,9 +100,27 @@ mod helper_functions {
         let float_a = BigFloat::from_str(&a.to_string()).unwrap();
         let float_b = BigFloat::from_str(&b.to_string()).unwrap();
         let result = expr!(pow(float_a, 1 / float_b), &mut *ctx);
-        let result_rounded = result.round(800, ctx.rounding_mode()); // todo this only works for ctx.precision() 1024, make this dynamic
-        let result_rational = rational_from_float(&result_rounded).unwrap(); // todo remove unwrap
-        let converted_back = result_rational.pow(b.to_i32().unwrap()); // todo remove unwrap
+
+        if ctx.precision() < 164 {
+            return Number::from(result);
+        } // if precision is too low rounding is not possible
+
+        let rounding_precision = (ctx.precision() - 100).min((ctx.precision() * 8) / 10);
+
+        let result_rounded = result.round(rounding_precision, ctx.rounding_mode());
+
+        // unwrap is safe here because b is neither nan nor infinity
+        let result_rational = rational_from_float(&result_rounded).unwrap();
+        let Some(b_i32) = b.to_i32() else {
+            return if expr!(pow(result_rounded, float_b), &mut *ctx) == float_a {
+                let mut made_exact = result_rounded;
+                made_exact.set_inexact(false);
+                Number::from(made_exact)
+            } else {
+                Number::from(result)
+            };
+        };
+        let converted_back = result_rational.pow(b_i32);
         if converted_back.is_integer() && converted_back.numer() == a {
             Number::from(result_rational)
         } else {
@@ -101,6 +153,7 @@ mod helper_functions {
         expr!(a_float / b_float, &mut *ctx)
     }
 
+    /// Returns `None` if the float is inf or NaN.
     pub(super) fn rational_from_float(float: &BigFloat) -> Option<BigRational> {
         use num_bigint::Sign as IntSign;
         let sign_positive = float.sign()?.is_positive();
@@ -299,23 +352,6 @@ impl Number {
     }
 }
 
-macro_rules! inexact_if_needed {
-    ($expr:expr, $item:ident) => {{
-        let mut result = $expr;
-        if $item.inexact() {
-            result.set_inexact(true);
-        }
-        result
-    }};
-    ($expr:expr, $item:ident, $item2:ident) => {{
-        let mut result = $expr;
-        if $item.inexact() || $item2.inexact() {
-            result.set_inexact(true);
-        }
-        result
-    }};
-}
-
 // implement operations where there is a list of numbers as a parameter
 impl Number {
     pub fn sum(numbers: &[Self], ctx: &mut Context) -> Self {
@@ -427,13 +463,6 @@ impl Number {
         ) {
             return Self::from(a.pow(b));
         }
-        // todo An idea for how to fix 4^(1/2) not being exact:
-        // If both numbers are rationals:
-        // Take the result of the float calculation and round it to like 250 digits and then convert it to a rational number.
-        // Now check whether the rational to the power of the b^-1 is equal to the original number.
-        // If that is the case, return the rational number.
-        // Better idea: First perform pow of the number to the numerator, which should be straight forward and then take that to the pow of the denominator.
-        // Now do the pow as a float operation and round the result to around 900 bits precision. Convert that to a rational and take that to the power of the denominator^-1 and if that results in the original number, then we know the rational is the precise result for the operation
 
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         Self::from(inexact_if_needed!(expr!(pow(a, b), &mut *ctx), a, b))

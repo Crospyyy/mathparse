@@ -558,25 +558,10 @@ pub mod implementation {
 
 #[cfg(test)]
 pub mod testing {
-    use crate::{Element, Number};
     use crate::formula_short::*;
     use crate::operations::create_default_context;
-    use crate::storing::FormulaStore;
+    use crate::{Element, Number};
     use astro_float::ctx::Context;
-
-    #[test]
-    fn test_symbols() {
-        let mut all = FormulaStore::new_empty();
-        assert_eq!(all.add_symbol_from_string("fun(a,b)=a+b", false), Ok("fun".to_owned()));
-        assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
-        println!("{:?}", all.get_signatures());
-        assert_eq!(all.add_symbol_from_string("fun2(a,b,c)=fun(a,b)+c", false), Ok("fun2".to_owned()));
-        println!("{:?}", all.get_signatures());
-        let result = all.add_symbol_from_string("fun3(some_fun)=fun(1,2)+some_fun(3)", false);
-        println!("{:?}", result);
-        assert_eq!(result, Ok("fun3".to_owned()));
-        println!("{:?}", all.get_signatures());
-    }
 
     #[allow(unused)]
     pub fn test_with_user_input() {
@@ -618,7 +603,7 @@ pub mod testing {
     }
 
     #[test]
-    pub fn run_all_tests() {
+    fn test_parsing_on_manual_formulas() {
         let inputs = [
             (
                 "((x/x-x)*-x^x)/(x-x)^-x",
