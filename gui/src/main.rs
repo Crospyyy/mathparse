@@ -163,9 +163,9 @@ mod controller {
             job.append(text, 0.0, format);
             job.wrap = TextWrapping {
                 max_width: ui.available_width(),
-                max_rows: usize::MAX,     // Use multiple rows as needed
-                break_anywhere: true,     // 🔑 allow breaking at any character
-                overflow_character: None, // optional
+                max_rows: usize::MAX,
+                break_anywhere: true,
+                overflow_character: None,
             };
 
             ui.label(job);
