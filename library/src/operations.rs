@@ -102,7 +102,11 @@ mod helper_functions {
     pub(super) fn big_int_to_power_of_inv_of_big_int(a: &BigInt, b: &BigInt, ctx: &mut Context) -> Number {
         let float_a = BigFloat::from_str(&a.to_string()).unwrap();
         let float_b = BigFloat::from_str(&b.to_string()).unwrap();
-        let result = expr!(pow(float_a, 1 / float_b), &mut *ctx);
+        let result = if b == &2.into() {
+            expr!(sqrt(float_a), &mut *ctx)
+        } else {
+            expr!(pow(float_a, 1 / float_b), &mut *ctx)
+        };
 
         if ctx.precision() < 164 {
             return Number::from(result);
@@ -608,7 +612,6 @@ impl Number {
     float_op!(tan);
     float_op!(atan);
 
-    float_op!(sqrt); // todo check if this can be implemented with rational numbers
     float_op!(log2); // todo check if this can be implemented with rational numbers
     float_op!(log10);
     float_op!(ln);
@@ -728,7 +731,6 @@ mod tests {
         exact_check!(num(1).sin(ctx), false);
         exact_check!(num(1).sin(ctx).plus(&num(0), ctx), false);
         exact_check!(num(1).sin(ctx).plus(&num(0), ctx).mul(&num(2), ctx), false);
-        exact_check!(num(4).sqrt(ctx), true);
         exact_check!(num(4).pow(&num("0.5"), ctx), true);
     }
     // `find_min!` will calculate the minimum of any number of arguments.
