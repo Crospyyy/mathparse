@@ -120,6 +120,8 @@ mod tests {
     fn test_formula_evaluation() {
         let mut ctx = create_default_context();
         let inputs = [
+            ("0/0", Some(Number::nan())),
+            ("1/0", Some(Number::nan())),
             ("1+2", Some(3.into())),
             ("1+2*3", Some(7.into())),
             ("1+2*3-4/2", Some(5.into())),
