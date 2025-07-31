@@ -8,6 +8,7 @@ pub mod operations;
 pub mod parsing;
 mod printing;
 pub mod storing;
+mod testing;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

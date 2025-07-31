@@ -172,14 +172,25 @@ mod helper_functions {
     pub(super) fn round_scientific(str: &str, decimals: usize) -> Option<String> {
         let (a, b) = str.split_once("e")?;
         let mut b: i64 = b.parse().ok()?;
-        if a.find(".") != Some(1) {
-            if a.len() == 1 && a.chars().next().unwrap().is_digit(10) {
-                return Some(str.to_string());
-            }
-            return None;
+
+        let mut refined_a = a.to_string();
+
+        let negative = refined_a.starts_with('-');
+        if negative {
+            refined_a.remove(0);
         }
-        let mut numbers: Vec<_> =
-            a.replace(".", "").chars().map(|c| c.to_digit(10)).collect::<Option<_>>()?;
+
+        if refined_a.len() == 1 {
+            return Some(str.to_string());
+        }
+
+        if refined_a.chars().nth(1) == Some('.') {
+            refined_a.remove(1);
+        } else {
+            return None; // invalid format
+        }
+
+        let mut numbers: Vec<_> = refined_a.chars().map(|c| c.to_digit(10)).collect::<Option<_>>()?;
         if decimals + 1 > numbers.len() {
             return Some(str.to_owned());
         }
@@ -206,6 +217,9 @@ mod helper_functions {
 
         if string.len() > 1 {
             string.insert(1, '.');
+        }
+        if negative {
+            string.insert(0, '-');
         }
 
         Some(format!("{}e{}", string, b))
@@ -551,12 +565,12 @@ impl Number {
 
 #[cfg(test)]
 mod tests {
-    use crate::Number;
     use crate::operations::create_default_context;
     use crate::operations::helper_functions::{
         big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
         round_scientific,
     };
+    use crate::{Number, fancy_assert_eq};
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
@@ -658,6 +672,7 @@ mod tests {
             ("-1e0", 1, Some("-1e0")),
         ];
         for (input, decimals, expected) in inputs_and_expected {
+            println!("Testing: {} with {} decimals expecting {:?}", input, decimals, expected);
             assert_eq!(round_scientific(input, decimals), expected.map(ToOwned::to_owned));
         }
     }
