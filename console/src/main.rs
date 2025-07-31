@@ -1,11 +1,10 @@
 fn main() {
-    println!("Hello, world!");
+    run_formula_evaluator();
 }
-use library::operations::create_default_context;
+use library::operations::{FormattingOptions, create_default_context};
 use library::storing::FormulaStore;
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
-use library::Number;
 
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();
@@ -28,10 +27,11 @@ pub fn run_formula_evaluator() {
             let result1 = store.eval(&line, ctx);
             match result1 {
                 Ok(result) => {
+                    let result_string = result.to_string(FormattingOptions::default(), ctx);
                     if result.is_exact() {
-                        println!("= {}", result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx));
+                        println!("= {}", result_string);
                     } else {
-                        println!("~= {}", result.to_string(Number::DEFAULT_ROUNDING_DIGITS, ctx));
+                        println!("~= {}", result_string);
                     }
                 },
                 Err(s) => {

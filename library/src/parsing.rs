@@ -1027,7 +1027,7 @@ pub mod signature {
 #[cfg(test)]
 pub mod testing {
     use crate::formula_short::*;
-    use crate::operations::create_default_context;
+    use crate::operations::{FormattingOptions, create_default_context};
     use crate::{Element, Number};
     use astro_float::ctx::Context;
 
@@ -1062,7 +1062,7 @@ pub mod testing {
             println!("{}", element.get_debug_string());
             println!();
             if let Some(num) = element.eval(&mut ctx) {
-                println!("Calculated Result: {}", num.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx));
+                println!("Calculated Result: {}", num.to_string(FormattingOptions::default(), &mut ctx));
             } else {
                 println!("Calculated Result: Could not evaluate the formula.");
             }

@@ -1,3 +1,4 @@
+use crate::operations::FormattingOptions;
 use crate::parsing::signature::ParamCount;
 use crate::{Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
@@ -6,7 +7,7 @@ use std::fmt::Display;
 
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
-        Formula::from_element(self, Number::DEFAULT_ROUNDING_DIGITS, false, ctx).to_string()
+        Formula::from_element(self, FormattingOptions::default(), false, ctx).to_string()
     }
 
     pub fn get_debug_string(&self) -> String {
@@ -159,11 +160,11 @@ impl Display for Formula {
 
 impl Formula {
     fn from_element(
-        element: &Element, rounding_digits: usize, mark_unparsed_red: bool, ctx: &mut Context,
+        element: &Element, formatting_options: FormattingOptions, mark_unparsed_red: bool, ctx: &mut Context,
     ) -> Self {
         macro_rules! create_formula {
             ($element:expr) => {
-                Self::from_element($element, rounding_digits, mark_unparsed_red, ctx)
+                Self::from_element($element, formatting_options, mark_unparsed_red, ctx)
             };
         }
 
@@ -177,7 +178,7 @@ impl Formula {
                 Formula::Multiply(elements)
             },
             Element::Negate(e) => Formula::Negate(Box::new(create_formula!(e))),
-            Element::Number(num) => Formula::Number(num.to_string(rounding_digits, ctx)),
+            Element::Number(num) => Formula::Number(num.to_string(formatting_options, ctx)),
             Element::Variable(name) => Formula::Variable(name.clone()),
             Element::VariableOrFunction(name) => Formula::Variable(name.clone()),
             Element::Pow(base, exponent) => {

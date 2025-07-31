@@ -7,7 +7,7 @@ pub fn main() {
 }
 
 mod ui {
-    use library::Number;
+    use library::operations::FormattingOptions;
 
     pub(super) struct UiState {
         pub(super) top_user_input: String,
@@ -21,7 +21,7 @@ mod ui {
             let state = Self {
                 top_user_input: "".to_string(),
                 calculation_result: Ok("".to_string()),
-                output_digits: Number::DEFAULT_ROUNDING_DIGITS,
+                output_digits: FormattingOptions::default().round_to_decimals,
                 all_symbol_strings: Vec::new(),
             };
             state
@@ -34,14 +34,13 @@ mod logic {}
 mod controller {
     use crate::ui::UiState;
     use eframe::epaint::FontId;
-    use eframe::epaint::text::TextWrapMode;
     use eframe::{App, CreationContext, Frame};
     use egui::text::{CCursor, CCursorRange, LayoutJob, TextWrapping};
     use egui::{
         CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
         ScrollArea, TextEdit, TextFormat, Ui, Widget,
     };
-    use library::operations::create_default_context;
+    use library::operations::{FormattingOptions, create_default_context};
     use library::parsing::implementation::get_fun_name_end_of_string;
     use library::storing::FormulaStore;
 
@@ -81,7 +80,10 @@ mod controller {
                     .formula_store
                     .eval(input, ctx)
                     .map(|result| {
-                        let result_str = result.to_string(self.ui_state.output_digits, ctx);
+                        let result_str = result.to_string(
+                            FormattingOptions::default().with_rounding(self.ui_state.output_digits),
+                            ctx,
+                        );
                         if result.is_exact() {
                             format!("= {}", result_str)
                         } else {

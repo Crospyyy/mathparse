@@ -38,6 +38,7 @@ macro_rules! inexact_if_needed {
 
 mod helper_functions {
     use crate::Number;
+    use crate::operations::FormattingOptions;
     use astro_float::ctx::Context;
     use astro_float::{BigFloat, Error, Radix, Word, expr};
     use num_bigint::BigInt;
@@ -178,8 +179,6 @@ mod helper_functions {
     }
 
     impl ScientificNumber {
-        pub(super) const DEFAULT_NON_SCIENTIFIC_DECIMALS: usize = 12;
-
         pub(super) fn new(negative: bool, base: impl Into<Vec<u8>>, exponent: i64) -> Self {
             Self { negative, base: base.into(), exponent }
         }
@@ -225,8 +224,8 @@ mod helper_functions {
             Some(Self { negative, base: numbers, exponent: b })
         }
 
-        pub(super) fn to_string(&self, round_to_decimals: usize, non_scientific_decimals: usize) -> String {
-            let round_to_decimals = round_to_decimals.max(1);
+        pub(super) fn to_string(&self, options: FormattingOptions) -> String {
+            let round_to_decimals = options.round_to_decimals.max(1);
             let mut exponent = self.exponent;
             let mut rounded = if round_to_decimals >= self.base.len() {
                 self.base.clone()
@@ -255,7 +254,7 @@ mod helper_functions {
             if rounded.is_empty() {
                 return "0".to_string();
             }
-            if exponent.abs() as usize > non_scientific_decimals
+            if exponent.abs() as usize > options.non_scientific_decimals
                 && !(exponent.is_positive() && rounded.len() as i64 > exponent)
             {
                 let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
@@ -295,6 +294,30 @@ mod helper_functions {
                 },
             }
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct FormattingOptions {
+    pub round_to_decimals: usize,
+    pub non_scientific_decimals: usize,
+}
+
+impl Default for FormattingOptions {
+    fn default() -> Self {
+        Self { round_to_decimals: 20, non_scientific_decimals: 12 }
+    }
+}
+
+impl FormattingOptions {
+    pub fn with_rounding(mut self, decimals: usize) -> Self {
+        self.round_to_decimals = decimals;
+        self
+    }
+
+    pub fn with_non_scientific_decimals(mut self, decimals: usize) -> Self {
+        self.non_scientific_decimals = decimals;
+        self
     }
 }
 
@@ -340,8 +363,6 @@ impl PartialEq for Number {
 
 // implement external interaction with the Number type
 impl Number {
-    pub const DEFAULT_ROUNDING_DIGITS: usize = 20;
-
     pub fn from_string(str: impl ToString) -> Option<Self> {
         let string = str.to_string();
         // remove "_" in between digits like "1_000" to "1000"
@@ -383,10 +404,10 @@ impl Number {
         }
     }
 
-    pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
+    pub fn to_string(&self, formatting_options: FormattingOptions, ctx: &mut Context) -> String {
         let float = self.get_float(ctx);
         if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
-            scientific.to_string(rounding_digits, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
+            scientific.to_string(formatting_options)
         } else {
             float.to_string()
         }
@@ -620,11 +641,11 @@ impl Number {
 #[cfg(test)]
 mod tests {
     use crate::Number;
-    use crate::operations::create_default_context;
     use crate::operations::helper_functions::{
         ScientificNumber, big_int_to_power_of_inv_of_big_int, power_rational_and_rational,
         rational_from_float,
     };
+    use crate::operations::{FormattingOptions, create_default_context};
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
@@ -681,7 +702,7 @@ mod tests {
             assert_eq!(number.as_ref(), b.as_ref().map(|s| &s.0));
             println!("Testing conversion to string");
             assert_eq!(
-                number.map(|n| n.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx)),
+                number.map(|n| n.to_string(FormattingOptions::default(), &mut ctx)),
                 b.as_ref().map(|s| s.1.to_string())
             );
         };
@@ -743,7 +764,7 @@ mod tests {
             // Base case:
             (($calc:expr, $expected:expr, $rounding:expr)) => (
                 println!("Checking: {} == {} with rounding {}", stringify!($calc), $expected, $rounding);
-                assert_eq!($calc.to_string($rounding, ctx), $expected)
+                assert_eq!($calc.to_string(FormattingOptions::default().with_rounding($rounding), ctx), $expected)
             );
             // `$x` followed by at least one `$y,`
             (($calc:expr, $expected:expr, $rounding:expr), $(($a:expr, $b:expr, $c:expr)), + ) => (
@@ -776,7 +797,9 @@ mod tests {
     #[test]
     fn test_scientific_number() {
         fn quick_conversion(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
-            ScientificNumber::new(false, base, exponent).to_string(100, no_sci_digits)
+            ScientificNumber::new(false, base, exponent).to_string(
+                FormattingOptions::default().with_rounding(100).with_non_scientific_decimals(no_sci_digits),
+            )
         }
         assert_eq!(quick_conversion(vec![0, 0, 0], 0, 100), "0");
         assert_eq!(quick_conversion(vec![0, 0, 0], 3, 100), "0");
@@ -806,7 +829,7 @@ mod tests {
         assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "123"); // no e because all digits are visible till zero
         fn quick_round(base: Vec<u8>, round_to_decimals: usize) -> String {
             ScientificNumber::new(false, base, 0)
-                .to_string(round_to_decimals, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
+                .to_string(FormattingOptions::default().with_rounding(round_to_decimals))
         }
         assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 1), "1");
         assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 2), "1.2");
