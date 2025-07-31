@@ -372,7 +372,6 @@ impl Number {
     pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
         let float = self.get_float(ctx);
         if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
-            println!("Scientific: {:?}", scientific);
             scientific.to_string(rounding_digits, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
         } else {
             float.to_string()
