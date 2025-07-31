@@ -1,6 +1,6 @@
 use crate::Number;
 use crate::operations::helper_functions::{
-    float_to_exact_rational, power_rational_and_rational, rational_from_float,
+    ScientificNumber, float_to_exact_rational, power_rational_and_rational, rational_from_float,
 };
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, RoundingMode, expr};
@@ -170,6 +170,7 @@ mod helper_functions {
         Some(ratio)
     }
 
+    #[derive(Debug)]
     pub(super) struct ScientificNumber {
         negative: bool,
         base: Vec<u8>,
@@ -177,14 +178,16 @@ mod helper_functions {
     }
 
     impl ScientificNumber {
+        pub(super) const DEFAULT_NON_SCIENTIFIC_DECIMALS: usize = 12;
+
         pub(super) fn new(negative: bool, base: impl Into<Vec<u8>>, exponent: i64) -> Self {
             Self { negative, base: base.into(), exponent }
         }
 
-        fn from_big_float(float: &BigFloat, ctx: &mut Context) -> Option<Self> {
+        pub(super) fn from_big_float(float: &BigFloat, ctx: &mut Context) -> Option<Self> {
             let (sign, numbers, exp) =
                 float.convert_to_radix(Radix::Dec, ctx.rounding_mode(), ctx.consts()).ok()?;
-            Some(Self { negative: sign.is_negative(), base: numbers, exponent: exp as i64 })
+            Some(Self { negative: sign.is_negative(), base: numbers, exponent: exp as i64 - 1 })
         }
 
         fn from_scientific_string(str: &str) -> Option<Self> {
@@ -222,7 +225,8 @@ mod helper_functions {
             Some(Self { negative, base: numbers, exponent: b })
         }
 
-        pub(super) fn print(&self, round_to_decimals: usize, non_scientific_decimals: usize) -> String {
+        pub(super) fn to_string(&self, round_to_decimals: usize, non_scientific_decimals: usize) -> String {
+            let round_to_decimals = round_to_decimals.max(1);
             let mut exponent = self.exponent;
             let mut rounded = if round_to_decimals >= self.base.len() {
                 self.base.clone()
@@ -242,6 +246,7 @@ mod helper_functions {
                         }
                     }
                 }
+                numbers.pop();
                 numbers
             };
             while rounded.last() == Some(&0) {
@@ -288,73 +293,6 @@ mod helper_functions {
                 },
             }
         }
-    }
-
-    pub(super) fn round_scientific(str: &str, decimals: usize) -> Option<String> {
-        let (a, b) = str.split_once("e")?;
-        let mut b: i64 = b.parse().ok()?;
-
-        let mut refined_a = a.to_string();
-
-        let negative = refined_a.starts_with('-');
-        if negative {
-            refined_a.remove(0);
-        }
-
-        if refined_a.len() == 1 {
-            return Some(str.to_string());
-        }
-
-        if refined_a.chars().nth(1) == Some('.') {
-            refined_a.remove(1);
-        } else {
-            return None; // invalid format
-        }
-
-        let mut numbers: Vec<_> = refined_a.chars().map(|c| c.to_digit(10)).collect::<Option<_>>()?;
-        if decimals + 1 > numbers.len() {
-            return Some(str.to_owned());
-        }
-        if numbers[decimals] >= 5 {
-            for i in (0..decimals).rev() {
-                if numbers[i] == 9 {
-                    numbers[i] = 0;
-                    if i == 0 {
-                        numbers.insert(0, 1);
-                        b += 1;
-                    }
-                } else {
-                    numbers[i] += 1;
-                    break;
-                }
-            }
-        }
-
-        let mut rounded = numbers[..decimals].to_vec();
-        while rounded.len() > 1 && rounded.last() == Some(&0) {
-            rounded.pop();
-        }
-        let mut string = rounded.iter().map(|n| n.to_string()).reduce(|a, b| a + &b).unwrap_or("".to_owned());
-
-        if string.len() > 1 {
-            string.insert(1, '.');
-        }
-        if negative {
-            string.insert(0, '-');
-        }
-
-        Some(format!("{}e{}", string, b))
-    }
-
-    pub(super) fn float_to_string_with_rounding(float: &BigFloat, decimals: usize) -> String {
-        // todo somehow unify the printing of floats and rationals and add tests to prove that both work as expected
-        let float_string = float.to_string();
-        let scientific = round_scientific(&float_string, decimals).unwrap_or(float_string);
-        if decimals > 28 {
-            return scientific.replace("e0", "").replace("e+0", ""); // Decimal can only handle up to 28 digits of precision
-        }
-        let Ok(d) = Decimal::from_scientific(&scientific) else { return scientific };
-        d.to_string()
     }
 }
 
@@ -432,29 +370,12 @@ impl Number {
     }
 
     pub fn to_string(&self, rounding_digits: usize, ctx: &mut Context) -> String {
-        // todo output whether the result has been rounded or not
-        // (not rounded means that the result is exact and all digits are shown)
-        match self {
-            Number::Rational(r) => {
-                if let Some(d) = helper_functions::decimal_from_rational(r)
-                    .and_then(|d| d.round_sf(rounding_digits as u32))
-                {
-                    let mut string = d.to_string();
-                    while string.len() > 1
-                        && (string.chars().last().is_some_and(|c| match c {
-                            '0' => string.contains('.'),
-                            '.' => true,
-                            _ => false,
-                        }))
-                    {
-                        string.pop();
-                    }
-                    return string;
-                }
-                let float = helper_functions::float_from_rational(r, ctx);
-                helper_functions::float_to_string_with_rounding(&float, rounding_digits)
-            },
-            Number::Float(f) => helper_functions::float_to_string_with_rounding(f, rounding_digits),
+        let float = self.get_float(ctx);
+        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
+            println!("Scientific: {:?}", scientific);
+            scientific.to_string(rounding_digits, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
+        } else {
+            float.to_string()
         }
     }
 
@@ -689,7 +610,7 @@ mod tests {
     use crate::operations::create_default_context;
     use crate::operations::helper_functions::{
         ScientificNumber, big_int_to_power_of_inv_of_big_int, power_rational_and_rational,
-        rational_from_float, round_scientific,
+        rational_from_float,
     };
     use crate::{Number, fancy_assert_eq};
     use astro_float::BigFloat;
@@ -744,10 +665,11 @@ mod tests {
         let mut assert_output_eq = |a: &str, b: Option<(Number, &str)>| {
             println!("Testing: {} == {:?}", a, b);
             println!("Testing conversion to Number");
-            assert_eq!(Number::from_string(a).as_ref(), b.as_ref().map(|s| &s.0));
+            let number = Number::from_string(a);
+            assert_eq!(number.as_ref(), b.as_ref().map(|s| &s.0));
             println!("Testing conversion to string");
             assert_eq!(
-                Number::from_string(a).map(|n| n.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx)),
+                number.map(|n| n.to_string(Number::DEFAULT_ROUNDING_DIGITS, &mut ctx)),
                 b.as_ref().map(|s| s.1.to_string())
             );
         };
@@ -777,24 +699,6 @@ mod tests {
         for (i, o) in inputs_and_expected {
             let float = BigFloat::from_str(i).unwrap();
             assert_eq!(rational_from_float(&float), o);
-        }
-    }
-
-    #[test]
-    fn test_round_scientific() {
-        let inputs_and_expected = [
-            ("1.23e10", 2, Some("1.2e10")),
-            ("9.99e10", 2, Some("1e11")),
-            ("1.19e10", 2, Some("1.2e10")),
-            ("1.9999e10", 4, Some("2e10")),
-            ("1.9999e10", 4, Some("2e10")),
-            ("1e10", 4, Some("1e10")),
-            ("11e10", 4, None), // there is no decimal point between the first and second digit
-            ("-1e0", 1, Some("-1e0")),
-        ];
-        for (input, decimals, expected) in inputs_and_expected {
-            println!("Testing: {} with {} decimals expecting {:?}", input, decimals, expected);
-            assert_eq!(round_scientific(input, decimals), expected.map(ToOwned::to_owned));
         }
     }
 
@@ -860,33 +764,46 @@ mod tests {
 
     #[test]
     fn test_scientific_number() {
-        fn quick_standard(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
-            ScientificNumber::new(false, base, exponent).print(100, no_sci_digits)
+        fn quick_conversion(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
+            ScientificNumber::new(false, base, exponent).to_string(100, no_sci_digits)
         }
-        assert_eq!(quick_standard(vec![0, 0, 0], 0, 100), "0");
-        assert_eq!(quick_standard(vec![0, 0, 0], 3, 100), "0");
-        assert_eq!(quick_standard(vec![1], -1, 100), "0.1");
-        assert_eq!(quick_standard(vec![1], 0, 100), "1");
-        assert_eq!(quick_standard(vec![1], 3, 100), "1000");
+        assert_eq!(quick_conversion(vec![0, 0, 0], 0, 100), "0");
+        assert_eq!(quick_conversion(vec![0, 0, 0], 3, 100), "0");
+        assert_eq!(quick_conversion(vec![1], -1, 100), "0.1");
+        assert_eq!(quick_conversion(vec![1], 0, 100), "1");
+        assert_eq!(quick_conversion(vec![1], 3, 100), "1000");
 
-        assert_eq!(quick_standard(vec![1, 2, 3], -2, 100), "0.0123");
-        assert_eq!(quick_standard(vec![1, 2, 3], -1, 100), "0.123");
-        assert_eq!(quick_standard(vec![1, 2, 3], 0, 100), "1.23");
-        assert_eq!(quick_standard(vec![1, 2, 3], 1, 100), "12.3");
-        assert_eq!(quick_standard(vec![1, 2, 3], 2, 100), "123");
-        assert_eq!(quick_standard(vec![1, 2, 3], 3, 100), "1230");
-        assert_eq!(quick_standard(vec![1, 2, 3], 4, 100), "12300");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 100), "0.0123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 100), "0.123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 100), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 100), "12.3");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 100), "123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 100), "1230");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 4, 100), "12300");
 
-        assert_eq!(quick_standard(vec![1, 2, 3], -2, 0), "1.23e-2");
-        assert_eq!(quick_standard(vec![1, 2, 3], -1, 0), "1.23e-1");
-        assert_eq!(quick_standard(vec![1, 2, 3], 0, 0), "1.23");
-        assert_eq!(quick_standard(vec![1, 2, 3], 1, 0), "1.23e1");
-        assert_eq!(quick_standard(vec![1, 2, 3], 2, 0), "1.23e2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 0), "1.23e-2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 0), "1.23e-1");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 0), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 0), "1.23e1");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 0), "1.23e2");
 
-        assert_eq!(quick_standard(vec![1, 2, 3], -2, 1), "1.23e-2");
-        assert_eq!(quick_standard(vec![1, 2, 3], -1, 1), "0.123");
-        assert_eq!(quick_standard(vec![1, 2, 3], 0, 1), "1.23");
-        assert_eq!(quick_standard(vec![1, 2, 3], 1, 1), "12.3");
-        assert_eq!(quick_standard(vec![1, 2, 3], 2, 1), "1.23e2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 1), "1.23e-2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 1), "0.123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 1), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 1), "12.3");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "1.23e2");
+        fn quick_round(base: Vec<u8>, round_to_decimals: usize) -> String {
+            ScientificNumber::new(false, base, 0)
+                .to_string(round_to_decimals, ScientificNumber::DEFAULT_NON_SCIENTIFIC_DECIMALS)
+        }
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 1), "1");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 2), "1.2");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 3), "1.23");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 4), "1.235");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 5), "1.2346");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 6), "1.23457");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 7), "1.234568");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 8), "1.2345679");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 9), "1.23456789");
     }
 }
