@@ -5,6 +5,7 @@ use library::operations::create_default_context;
 use library::storing::FormulaStore;
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
+use library::Number;
 
 pub fn run_formula_evaluator() {
     let mut store = FormulaStore::new_empty();
