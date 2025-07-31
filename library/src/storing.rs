@@ -59,7 +59,7 @@ impl FormulaStore {
                     average
                 } else {
                     eprintln!("Somehow average was called with zero numbers");
-                    Number::nan()
+                    Number::nan(None)
                 }
             },
         )?;
@@ -71,7 +71,7 @@ impl FormulaStore {
                     median
                 } else {
                     eprintln!("Somehow median was called with zero numbers");
-                    Number::nan()
+                    Number::nan(None)
                 }
             },
         )?;
@@ -83,7 +83,7 @@ impl FormulaStore {
                     max
                 } else {
                     eprintln!("Somehow max was called with zero numbers");
-                    Number::nan()
+                    Number::nan(None)
                 }
             },
         )?;
@@ -95,7 +95,7 @@ impl FormulaStore {
                     min
                 } else {
                     eprintln!("Somehow min was called with zero numbers");
-                    Number::nan()
+                    Number::nan(None)
                 }
             },
         )?;

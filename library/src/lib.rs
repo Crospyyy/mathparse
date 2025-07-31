@@ -53,7 +53,7 @@ pub enum FunctionExpression {
     MultipleArguments(fn(&mut Context, Vec<Number>) -> Number),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Number {
     Rational(BigRational),
     Float(BigFloat),

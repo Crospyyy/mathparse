@@ -109,19 +109,18 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
-    use crate::formula_short::num;
     use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
-    use astro_float::expr;
+    use astro_float::{Error, expr};
 
     #[test]
     fn test_formula_evaluation() {
         let mut ctx = create_default_context();
         let inputs = [
-            ("0/0", Some(Number::nan())),
-            ("1/0", Some(Number::nan())),
+            ("0/0", Some(Number::nan(Error::DivisionByZero.into()))),
+            ("1/0", Some(Number::nan(Error::DivisionByZero.into()))),
             ("1+2", Some(3.into())),
             ("1+2*3", Some(7.into())),
             ("1+2*3-4/2", Some(5.into())),

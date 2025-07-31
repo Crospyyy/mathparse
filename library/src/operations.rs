@@ -3,7 +3,7 @@ use crate::operations::helper_functions::{
     ScientificNumber, float_to_exact_rational, power_rational_and_rational,
 };
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Consts, RoundingMode, expr};
+use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
@@ -39,10 +39,10 @@ macro_rules! inexact_if_needed {
 mod helper_functions {
     use crate::Number;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Radix, Word, expr};
+    use astro_float::{BigFloat, Error, Radix, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
-    use num_traits::{One, ToPrimitive, Zero};
+    use num_traits::{One, Signed, ToPrimitive, Zero};
     use std::cmp::Ordering;
     use std::str::FromStr;
 
@@ -73,6 +73,9 @@ mod helper_functions {
             let Some(exp) = exponent.to_i32() else {
                 safe_return_float_calculation!();
             };
+            if exp.is_negative() && base.is_zero() {
+                return Number::nan(Some(Error::DivisionByZero));
+            }
             return Number::from(base.pow(exp));
         }
 
@@ -317,6 +320,18 @@ impl From<i32> for Number {
     }
 }
 
+impl PartialEq for Number {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Number::Rational(a), Number::Rational(b)) => a == b,
+            (Number::Float(a), Number::Float(b)) => {
+                a.eq(b) || (a.is_nan() && b.is_nan() && (a.err() == b.err()))
+            },
+            _ => false,
+        }
+    }
+}
+
 // implement external interaction with the Number type
 impl Number {
     pub const DEFAULT_ROUNDING_DIGITS: usize = 20;
@@ -379,8 +394,8 @@ impl Number {
     }
 
     // This is not marked as inexact
-    pub fn nan() -> Self {
-        Self::Float(BigFloat::nan(None))
+    pub fn nan(error: Option<Error>) -> Self {
+        Self::Float(BigFloat::nan(error))
     }
 
     pub fn is_nan(&self) -> bool {
@@ -424,7 +439,7 @@ impl Number {
             _ => {},
         }
         if numbers.iter().any(|num| num.is_nan()) {
-            return Some(Self::nan());
+            return Some(Self::nan(None));
         }
         let mut sorted = numbers.to_vec();
         sorted.sort_by(|a, b| a.cmp(b, ctx).unwrap());
@@ -444,7 +459,7 @@ impl Number {
             _ => {},
         }
         if numbers.iter().any(|num| num.is_nan()) {
-            return Some(Self::nan());
+            return Some(Self::nan(None));
         }
         Some(numbers.iter().max_by(|a, b| a.cmp(b, ctx).unwrap()).unwrap().clone())
     }
@@ -456,7 +471,7 @@ impl Number {
             _ => {},
         }
         if numbers.iter().any(|num| num.is_nan()) {
-            return Some(Self::nan());
+            return Some(Self::nan(None));
         }
         Some(numbers.iter().min_by(|a, b| a.cmp(b, ctx).unwrap()).unwrap().clone())
     }
@@ -485,13 +500,13 @@ impl Number {
     pub fn div(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             if b.is_zero() {
-                return Self::nan(); // handle division by zero
+                return Self::nan(None); // handle division by zero
             }
             return Self::from(a / b);
         }
         let (a, b) = (self.get_float(ctx), other.get_float(ctx));
         if b.is_zero() {
-            return Self::nan(); // handle division by zero
+            return Self::nan(None); // handle division by zero
         }
         Self::from(inexact_if_needed!(expr!(a / b, &mut *ctx), a, b))
     }
@@ -517,12 +532,12 @@ impl Number {
     }
 
     pub fn max(&self, other: &Self, ctx: &mut Context) -> Self {
-        let Some(comp) = self.cmp(other, ctx) else { return Self::nan() };
+        let Some(comp) = self.cmp(other, ctx) else { return Self::nan(None) };
         if comp.is_ge() { self.clone() } else { other.clone() }
     }
 
     pub fn min(&self, other: &Self, ctx: &mut Context) -> Self {
-        let Some(comp) = self.cmp(other, ctx) else { return Self::nan() };
+        let Some(comp) = self.cmp(other, ctx) else { return Self::nan(None) };
         if comp.is_le() { self.clone() } else { other.clone() }
     }
 }
