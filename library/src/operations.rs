@@ -1,12 +1,12 @@
 use crate::Number;
 use crate::operations::helper_functions::{
-    ScientificNumber, float_to_exact_rational, power_rational_and_rational, rational_from_float,
+    ScientificNumber, float_to_exact_rational, power_rational_and_rational,
 };
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, RoundingMode, expr};
 use num_rational::BigRational;
+use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
-use rust_decimal::prelude::{One, Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 
 pub fn create_default_context() -> Context {
@@ -39,11 +39,10 @@ macro_rules! inexact_if_needed {
 mod helper_functions {
     use crate::Number;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Consts, Radix, Word, expr};
+    use astro_float::{BigFloat, Radix, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
-    use rust_decimal::Decimal;
-    use rust_decimal::prelude::{One, ToPrimitive, Zero};
+    use num_traits::{One, ToPrimitive, Zero};
     use std::cmp::Ordering;
     use std::str::FromStr;
 
@@ -140,12 +139,6 @@ mod helper_functions {
 
     pub(super) fn rational_from_string(s: &str) -> Option<BigRational> {
         BigRational::from_str(s).ok()
-    }
-
-    pub(super) fn decimal_from_rational(rational: &BigRational) -> Option<Decimal> {
-        let num = Decimal::from_str(&rational.numer().to_string()).ok()?;
-        let denom = Decimal::from_str(&rational.denom().to_string()).ok()?;
-        Some(num / denom)
     }
 
     pub(super) fn float_from_rational(rational: &BigRational, ctx: &mut Context) -> BigFloat {
@@ -536,7 +529,7 @@ impl Number {
 
 // implement operations for just one number
 impl Number {
-    pub fn neg(&self, ctx: &mut Context) -> Self {
+    pub fn neg(&self, _ctx: &mut Context) -> Self {
         match self {
             Self::Rational(r) => Self::from(-r),
             Self::Float(f) => Self::from(inexact_if_needed!(f.neg(), f)),
@@ -606,12 +599,12 @@ impl Number {
 
 #[cfg(test)]
 mod tests {
+    use crate::Number;
     use crate::operations::create_default_context;
     use crate::operations::helper_functions::{
         ScientificNumber, big_int_to_power_of_inv_of_big_int, power_rational_and_rational,
         rational_from_float,
     };
-    use crate::{Number, fancy_assert_eq};
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
