@@ -1,8 +1,8 @@
 fn main() {
     run_formula_evaluator();
 }
-use library::operations::{FormattingOptions, create_default_context};
-use library::storing::FormulaStore;
+
+use library::{FormattingOptions, FormulaStore, create_default_context};
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
 

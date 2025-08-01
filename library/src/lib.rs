@@ -4,11 +4,16 @@ use astro_float::ctx::Context;
 use num_rational::BigRational;
 
 mod evaluation;
-pub mod operations;
-pub mod parsing;
+mod operations;
+mod parsing;
 mod printing;
-pub mod storing;
+mod storing;
 mod testing;
+
+pub use operations::create_default_context;
+pub use parsing::get_fun_name_end_of_string;
+pub use printing::FormattingOptions;
+pub use storing::FormulaStore;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

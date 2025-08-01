@@ -1,3 +1,5 @@
+pub use implementation::get_fun_name_end_of_string;
+
 pub mod implementation {
     use crate::{Element, Number};
     use regex::Regex;
@@ -1027,7 +1029,8 @@ pub mod signature {
 #[cfg(test)]
 pub mod testing {
     use crate::formula_short::*;
-    use crate::operations::{FormattingOptions, create_default_context};
+    use crate::operations::create_default_context;
+    use crate::printing::FormattingOptions;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
 

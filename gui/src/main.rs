@@ -7,7 +7,7 @@ pub fn main() {
 }
 
 mod ui {
-    use library::operations::FormattingOptions;
+    use library::FormattingOptions;
 
     pub(super) struct UiState {
         pub(super) top_user_input: String,
@@ -40,9 +40,7 @@ mod controller {
         CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
         ScrollArea, TextEdit, TextFormat, Ui, Widget,
     };
-    use library::operations::{FormattingOptions, create_default_context};
-    use library::parsing::implementation::get_fun_name_end_of_string;
-    use library::storing::FormulaStore;
+    use library::{FormattingOptions, FormulaStore, create_default_context, get_fun_name_end_of_string};
 
     pub struct Window {
         formula_store: FormulaStore,

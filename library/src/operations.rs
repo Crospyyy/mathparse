@@ -1,7 +1,6 @@
 use crate::Number;
-use crate::operations::helper_functions::{
-    ScientificNumber, float_to_exact_rational, power_rational_and_rational,
-};
+use crate::operations::helper_functions::{float_to_exact_rational, power_rational_and_rational};
+use crate::printing::{FormattingOptions, ScientificNumber};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use num_rational::BigRational;
@@ -169,161 +168,6 @@ mod helper_functions {
         let exp_adj = exponent - (mantissa.len() * size_of::<Word>() * 8) as i32;
         let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
         Some(ratio)
-    }
-
-    #[derive(Debug)]
-    pub(super) struct ScientificNumber {
-        negative: bool,
-        base: Vec<u8>,
-        exponent: i64,
-    }
-
-    impl ScientificNumber {
-        pub(super) fn new(negative: bool, base: impl Into<Vec<u8>>, exponent: i64) -> Self {
-            Self { negative, base: base.into(), exponent }
-        }
-
-        pub(super) fn from_big_float(float: &BigFloat, ctx: &mut Context) -> Option<Self> {
-            let (sign, numbers, exp) =
-                float.convert_to_radix(Radix::Dec, ctx.rounding_mode(), ctx.consts()).ok()?;
-            Some(Self { negative: sign.is_negative(), base: numbers, exponent: exp as i64 - 1 })
-        }
-
-        fn from_scientific_string(str: &str) -> Option<Self> {
-            let (a, b) = str.split_once("e")?;
-            let b: i64 = b.parse().ok()?;
-
-            let mut refined_a = a.to_string();
-
-            let negative = refined_a.starts_with('-');
-            if negative {
-                refined_a.remove(0);
-            }
-
-            if refined_a.is_empty() {
-                return None; // empty string is not a valid number
-            }
-
-            if refined_a.len() == 1 {
-                return if let Some(digit) = a.chars().nth(0).unwrap().to_digit(10) {
-                    Some(Self { negative, base: vec![digit as u8], exponent: b })
-                } else {
-                    None
-                };
-            }
-
-            if refined_a.chars().nth(1) == Some('.') {
-                refined_a.remove(1);
-            } else {
-                return None; // invalid format
-            }
-
-            let numbers: Vec<_> =
-                refined_a.chars().map(|c| c.to_digit(10).map(|n| n as _)).collect::<Option<_>>()?;
-
-            Some(Self { negative, base: numbers, exponent: b })
-        }
-
-        pub(super) fn to_string(&self, options: FormattingOptions) -> String {
-            let round_to_decimals = options.round_to_decimals.max(1);
-            let mut exponent = self.exponent;
-            let mut rounded = if round_to_decimals >= self.base.len() {
-                self.base.clone()
-            } else {
-                let mut numbers = self.base[..=round_to_decimals].to_vec();
-                if numbers[round_to_decimals] >= 5 {
-                    for i in (0..round_to_decimals).rev() {
-                        if numbers[i] == 9 {
-                            numbers[i] = 0;
-                            if i == 0 {
-                                numbers.insert(0, 1);
-                                exponent += 1;
-                            }
-                        } else {
-                            numbers[i] += 1;
-                            break;
-                        }
-                    }
-                }
-                numbers.pop();
-                numbers
-            };
-            while rounded.last() == Some(&0) {
-                rounded.pop();
-            }
-            if rounded.is_empty() {
-                return "0".to_string();
-            }
-            if exponent.abs() as usize > options.non_scientific_decimals
-                && !(exponent.is_positive() && rounded.len() as i64 > exponent)
-            {
-                let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
-                if output_string.len() > 1 {
-                    output_string.insert(1, '.');
-                }
-                return format!("{}{}e{}", if self.negative { "-" } else { "" }, output_string, exponent,);
-            }
-            match self.exponent.cmp(&0) {
-                Ordering::Less => {
-                    let mut output_string = vec![0; (-self.exponent) as usize]
-                        .into_iter()
-                        .chain(rounded.into_iter())
-                        .map(|n| n.to_string())
-                        .collect::<String>();
-                    output_string.insert(1, '.');
-                    if self.negative { format!("-{}", output_string) } else { output_string }
-                },
-                Ordering::Equal => {
-                    let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
-                    if output_string.len() > 1 {
-                        output_string.insert(1, '.');
-                    }
-                    if self.negative { format!("-{}", output_string) } else { output_string }
-                },
-                Ordering::Greater => {
-                    let add_digits = self.exponent - rounded.len() as i64 + 1;
-                    let mut output_digits = rounded;
-                    if add_digits > 0 {
-                        output_digits.extend(vec![0; add_digits as usize]);
-                    }
-                    let mut output_string = output_digits.iter().map(|n| n.to_string()).collect::<String>();
-                    if output_string.len() > 1 && add_digits < 0 {
-                        output_string.insert((self.exponent + 1) as _, '.');
-                    }
-                    if self.negative { format!("-{}", output_string) } else { output_string }
-                },
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct FormattingOptions {
-    pub round_to_decimals: usize,
-    pub non_scientific_decimals: usize,
-}
-
-impl Default for FormattingOptions {
-    fn default() -> Self {
-        Self { round_to_decimals: 20, non_scientific_decimals: 12 }
-    }
-}
-
-impl FormattingOptions {
-    pub fn with_rounding(mut self, decimals: usize) -> Self {
-        self.round_to_decimals = decimals;
-        self
-    }
-
-    pub fn with_non_scientific_decimals(mut self, decimals: usize) -> Self {
-        self.non_scientific_decimals = decimals;
-        self
-    }
-}
-
-impl From<BigRational> for Number {
-    fn from(value: BigRational) -> Self {
-        Self::Rational(value)
     }
 }
 
@@ -642,10 +486,10 @@ impl Number {
 mod tests {
     use crate::Number;
     use crate::operations::helper_functions::{
-        ScientificNumber, big_int_to_power_of_inv_of_big_int, power_rational_and_rational,
-        rational_from_float,
+        big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
     };
     use crate::operations::{FormattingOptions, create_default_context};
+    use crate::printing::ScientificNumber;
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;
