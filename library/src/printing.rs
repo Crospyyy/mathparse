@@ -358,9 +358,3 @@ impl FormattingOptions {
         self
     }
 }
-
-impl From<BigRational> for Number {
-    fn from(value: BigRational) -> Self {
-        Self::Rational(value)
-    }
-}

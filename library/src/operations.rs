@@ -171,6 +171,12 @@ mod helper_functions {
     }
 }
 
+impl From<BigRational> for Number {
+    fn from(value: BigRational) -> Self {
+        Self::Rational(value)
+    }
+}
+
 impl From<BigFloat> for Number {
     fn from(value: BigFloat) -> Self {
         if let Some(rational) = float_to_exact_rational(&value) {
