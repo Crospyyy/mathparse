@@ -1,6 +1,6 @@
-use crate::Number;
 use crate::operations::helper_functions::{float_to_exact_rational, power_rational_and_rational};
 use crate::printing::{FormattingOptions, ScientificNumber};
+use crate::{Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use num_rational::BigRational;
@@ -9,8 +9,8 @@ use regex::Regex;
 use std::cmp::Ordering;
 use std::sync::LazyLock;
 
-pub fn create_default_context() -> Context {
-    Context::new(
+pub fn create_default_context() -> NumberContext {
+    NumberContext::new(
         1024,
         RoundingMode::ToEven,
         Consts::new().expect("Constants cache initialized"),
@@ -38,13 +38,11 @@ macro_rules! inexact_if_needed {
 
 mod helper_functions {
     use crate::Number;
-    use crate::operations::FormattingOptions;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Error, Radix, Word, expr};
+    use astro_float::{BigFloat, Error, Word, expr};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use num_traits::{One, Signed, ToPrimitive, Zero};
-    use std::cmp::Ordering;
     use std::str::FromStr;
 
     pub(super) fn power_rational_and_rational(
@@ -498,7 +496,6 @@ mod tests {
         big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
     };
     use crate::operations::{FormattingOptions, create_default_context};
-    use crate::printing::ScientificNumber;
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;

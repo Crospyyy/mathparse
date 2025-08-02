@@ -11,6 +11,7 @@ mod printing;
 mod storing;
 mod testing;
 
+pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use operations::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
