@@ -41,7 +41,8 @@ mod controller {
         ScrollArea, TextEdit, TextFormat, Ui, Widget,
     };
     use library::{
-        Benchmark, FormattingOptions, FormulaStore, create_default_context, get_fun_name_end_of_string,
+        Benchmark, FormattingOptions, FormulaStore, benchmark, create_default_context,
+        get_fun_name_end_of_string,
     };
 
     pub struct Window {
@@ -81,10 +82,15 @@ mod controller {
                     .formula_store
                     .eval_with_benchmark(input, ctx, &mut benchmark)
                     .map(|result| {
-                        let result_str = result.to_string(
-                            FormattingOptions::default().with_rounding(self.ui_state.output_digits),
-                            ctx,
+                        let mut b = Benchmark::new();
+                        benchmark!(b, "Turn input into result string",
+                            let result_str = result.to_string(
+                                FormattingOptions::default().with_rounding(self.ui_state.output_digits),
+                                ctx,
+                            )
                         );
+                        b.print_times();
+
                         if result.is_exact() {
                             format!("= {}", result_str)
                         } else {

@@ -64,7 +64,7 @@ impl Benchmark {
         println!()
     }
 
-    pub(crate) fn start(&mut self) {
+    pub fn start(&mut self) {
         if let Benchmark::Enabled { sub_start_time, .. } = self {
             if sub_start_time.is_some() {
                 panic!("Benchmark already started, cannot start again without completing the previous one.");
@@ -73,7 +73,7 @@ impl Benchmark {
         }
     }
 
-    pub(crate) fn complete(&mut self, name: &str) {
+    pub fn complete(&mut self, name: &str) {
         if let Benchmark::Enabled { sub_start_time, total_duration, tasks } = self {
             let Some(duration) = sub_start_time.take().map(|t| t.elapsed()) else {
                 panic!("Benchmark was not started, cannot complete.");
