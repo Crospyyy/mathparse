@@ -44,7 +44,7 @@ mod ui {
     }
 
     impl App for Window {
-        fn update(&mut self, ctx: &Context, frame: &mut Frame) {
+        fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
             CentralPanel::default().show(ctx, |ui| {
                 let input = &mut vec![];
                 self.show_top_input(ui, input);
@@ -194,7 +194,7 @@ mod controller {
     use crate::ui::UiState;
     use eframe::CreationContext;
     use egui::text::{CCursor, CCursorRange};
-    use egui::{Response, TextEdit, Widget};
+    use egui::{Response, TextBuffer, TextEdit};
     use library::{FormulaStore, create_default_context, get_fun_name_end_of_string};
 
     impl Window {
@@ -225,7 +225,6 @@ mod controller {
                     },
                 }
             }
-            self.update_all_symbol_strings();
         }
 
         fn update_calculation_result(&mut self) {
@@ -276,7 +275,7 @@ mod controller {
         pub fn get_autocompletion_result(
             &self, input_string: &str, cursor_pos: usize,
         ) -> Option<AutocompletionResult> {
-            let input_symbol_name = get_fun_name_end_of_string(&input_string[..cursor_pos]);
+            let input_symbol_name = get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos));
             if input_symbol_name.is_empty() {
                 return None;
             }
