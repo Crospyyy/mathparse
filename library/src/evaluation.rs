@@ -1,8 +1,7 @@
 use crate::storing::FormulaStore;
 use crate::{Benchmark, Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::collections::HashSet;
 
 impl Element {
     pub fn eval(&self, ctx: &mut Context) -> Option<Number> {

@@ -4,6 +4,9 @@ pub mod implementation {
     use crate::{Benchmark, Element, Number, benchmark};
     use regex::Regex;
     use std::mem;
+    use std::sync::LazyLock;
+
+    static REGEX_INSERT_PLUS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([\w)])-([\w(-])").unwrap());
 
     fn is_valid_char_for_function_name(c: char) -> bool {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
@@ -59,7 +62,7 @@ pub mod implementation {
         /// Step 0
         pub(crate) fn preprocess_string_minus(input: &str) -> String {
             let without_whitespace = input.replace(" ", "");
-            Regex::new(r"([\w)])-([\w(-])").unwrap().replace_all(&without_whitespace, "$1+-$2").to_string()
+            REGEX_INSERT_PLUS.replace_all(&without_whitespace, "$1+-$2").to_string()
         }
 
         /// Step 1

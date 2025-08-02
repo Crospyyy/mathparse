@@ -51,8 +51,8 @@ impl Benchmark {
             Benchmark::Enabled { total_duration, tasks, .. } => {
                 println!("{indent_str}{name}: {:?}", total_duration);
                 let mut tasks_vec: Vec<_> = tasks.iter().collect();
-                tasks_vec.sort_by_key(|(_, (count, _))| *count);
-                for (name, (_idx, task)) in tasks {
+                tasks_vec.sort_by_key(|(_, (idx, _))| *idx);
+                for (name, (_idx, task)) in tasks_vec {
                     task.print_times_internal(indent + 1, name);
                 }
             },
@@ -86,8 +86,7 @@ impl Benchmark {
     pub(crate) fn add_task_with_benchmark(&mut self, name: &str, benchmark: Benchmark) {
         if let Benchmark::Enabled { tasks, total_duration, .. } = self {
             *total_duration += benchmark.get_total_duration();
-            let index = tasks.len();
-            tasks.insert(name.to_string(), (index, benchmark));
+            tasks.insert(name.to_string(), (tasks.len(), benchmark));
         }
     }
 
