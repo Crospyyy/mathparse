@@ -32,12 +32,6 @@ impl FormulaStore {
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
-        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?;
-        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?;
-        self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
-        self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
-        self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
-
         macro_rules! define_fun_single_arg {
             ($op:ident) => {
                 self.add_expression_fun_single_arg(stringify!($op), Number::$op)?
@@ -103,6 +97,14 @@ impl FormulaStore {
             ParamCount::AtLeast(0),
             |ctx: &mut Context, args: Vec<Number>| Number::sum(&args, ctx),
         )?;
+
+        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?;
+        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?;
+        self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
+        self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
+        self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
+        self.add_symbol_from_string("rem(x)=x-round(x)", false)?; // todo implement this in a better way
+
         Ok(())
     }
 
