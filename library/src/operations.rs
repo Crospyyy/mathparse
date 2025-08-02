@@ -7,6 +7,7 @@ use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
 use std::cmp::Ordering;
+use std::sync::LazyLock;
 
 pub fn create_default_context() -> Context {
     Context::new(
@@ -211,12 +212,14 @@ impl PartialEq for Number {
     }
 }
 
+static REGEX_NUMBER_UNDERSCORE_REMOVAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)_(\d)").unwrap());
+
 // implement external interaction with the Number type
 impl Number {
     pub fn from_string(str: impl ToString) -> Option<Self> {
         let string = str.to_string();
         // remove "_" in between digits like "1_000" to "1000"
-        let string = Regex::new(r"(\d)_(\d)").unwrap().replace_all(&string, "$1$2");
+        let string = REGEX_NUMBER_UNDERSCORE_REMOVAL.replace_all(&string, "$1$2");
         if string.chars().any(|c| !matches!(c, '0'..='9' | '.' | '-')) {
             return None; // only digits and dot are allowed
         }
