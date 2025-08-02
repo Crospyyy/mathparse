@@ -259,7 +259,7 @@ impl ScientificNumber {
 
     pub(super) fn to_string(&self, options: FormattingOptions) -> String {
         let round_to_decimals = options.round_to_decimals.max(1);
-        let mut exponent = self.exponent;
+        let mut modified_exponent = self.exponent;
         let mut rounded = if round_to_decimals >= self.base.len() {
             self.base.clone()
         } else {
@@ -270,7 +270,7 @@ impl ScientificNumber {
                         numbers[i] = 0;
                         if i == 0 {
                             numbers.insert(0, 1);
-                            exponent += 1;
+                            modified_exponent += 1;
                         }
                     } else {
                         numbers[i] += 1;
@@ -287,45 +287,71 @@ impl ScientificNumber {
         if rounded.is_empty() {
             return "0".to_string();
         }
-        if exponent.abs() as usize > options.non_scientific_decimals
-            && !(exponent.is_positive() && rounded.len() as i64 > exponent)
-        {
-            let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
-            if output_string.len() > 1 {
-                output_string.insert(1, '.');
-            }
-            return format!("{}{}e{}", if self.negative { "-" } else { "" }, output_string, exponent,);
+        if Self::should_print_scientific(&rounded, modified_exponent, options) {
+            Self::create_scientific_string(&rounded, modified_exponent, self.negative)
+        } else {
+            Self::create_regular_string(rounded, modified_exponent, self.negative, options)
         }
-        match self.exponent.cmp(&0) {
+    }
+
+    fn create_regular_string(
+        rounded: Vec<u8>, modified_exponent: i64, negative: bool, formatting: FormattingOptions,
+    ) -> String {
+        match modified_exponent.cmp(&0) {
             Ordering::Less => {
-                let mut output_string = vec![0; (-self.exponent) as usize]
+                let mut output_string = vec![0; (-modified_exponent) as usize]
                     .into_iter()
                     .chain(rounded.into_iter())
                     .map(|n| n.to_string())
                     .collect::<String>();
                 output_string.insert(1, '.');
-                if self.negative { format!("-{}", output_string) } else { output_string }
+                if negative { format!("-{}", output_string) } else { output_string }
             },
             Ordering::Equal => {
                 let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
                 if output_string.len() > 1 {
                     output_string.insert(1, '.');
                 }
-                if self.negative { format!("-{}", output_string) } else { output_string }
+                if negative { format!("-{}", output_string) } else { output_string }
             },
             Ordering::Greater => {
-                let add_digits = self.exponent - rounded.len() as i64 + 1;
+                let add_digits = modified_exponent - rounded.len() as i64 + 1;
                 let mut output_digits = rounded;
                 if add_digits > 0 {
                     output_digits.extend(vec![0; add_digits as usize]);
                 }
                 let mut output_string = output_digits.iter().map(|n| n.to_string()).collect::<String>();
                 if output_string.len() > 1 && add_digits < 0 {
-                    output_string.insert((self.exponent + 1) as _, '.');
+                    output_string.insert((modified_exponent + 1) as _, '.');
                 }
-                if self.negative { format!("-{}", output_string) } else { output_string }
+
+                if formatting.thousands_separator {
+                    let full_digits = (modified_exponent as usize + 1).min(output_digits.len());
+                    let (a, b) = output_string.split_at(full_digits);
+                    let mut a = a.to_string();
+                    for i in (1..a.len().div_ceil(3)).rev() {
+                        let pos = a.len() - 3 * i;
+                        a.insert(pos, ',');
+                    }
+                    output_string = format!("{}{}", a, b);
+                }
+
+                if negative { format!("-{}", output_string) } else { output_string }
             },
         }
+    }
+
+    fn should_print_scientific(rounded: &Vec<u8>, exponent: i64, options: FormattingOptions) -> bool {
+        exponent.abs() as usize > options.non_scientific_decimals
+            && !(exponent.is_positive() && rounded.len() as i64 > exponent)
+    }
+
+    fn create_scientific_string(rounded: &[u8], modified_exponent: i64, negative: bool) -> String {
+        let mut output_string = rounded.iter().map(|n| n.to_string()).collect::<String>();
+        if output_string.len() > 1 {
+            output_string.insert(1, '.');
+        }
+        format!("{}{output_string}e{}", if negative { "-" } else { "" }, modified_exponent)
     }
 }
 
@@ -333,12 +359,12 @@ impl ScientificNumber {
 pub struct FormattingOptions {
     pub round_to_decimals: usize,
     pub non_scientific_decimals: usize,
-    pub bool_thousands_separator: bool,
+    pub thousands_separator: bool,
 }
 
 impl Default for FormattingOptions {
     fn default() -> Self {
-        Self { round_to_decimals: 20, non_scientific_decimals: 12, bool_thousands_separator: true }
+        Self { round_to_decimals: 20, non_scientific_decimals: 12, thousands_separator: true }
     }
 }
 
@@ -354,7 +380,64 @@ impl FormattingOptions {
     }
 
     pub fn with_thousands_separator(mut self, bool: bool) -> Self {
-        self.bool_thousands_separator = bool;
+        self.thousands_separator = bool;
         self
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::FormattingOptions;
+    use crate::printing::ScientificNumber;
+
+    #[test]
+    fn test_scientific_number() {
+        fn quick_conversion(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
+            ScientificNumber::new(false, base, exponent).to_string(
+                FormattingOptions::default().with_rounding(100).with_non_scientific_decimals(no_sci_digits),
+            )
+        }
+        assert_eq!(quick_conversion(vec![0, 0, 0], 0, 100), "0");
+        assert_eq!(quick_conversion(vec![0, 0, 0], 3, 100), "0");
+        assert_eq!(quick_conversion(vec![1], -1, 100), "0.1");
+        assert_eq!(quick_conversion(vec![1], 0, 100), "1");
+        assert_eq!(quick_conversion(vec![1], 3, 100), "1,000");
+
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 100), "0.0123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 100), "0.123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 100), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 100), "12.3");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 100), "123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 100), "1,230");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 4, 100), "12,300");
+        assert_eq!(quick_conversion(vec![1], 3, 100), "1,000");
+        assert_eq!(quick_conversion(vec![1], 6, 100), "1,000,000");
+        assert_eq!(quick_conversion(vec![1], 9, 100), "1,000,000,000");
+
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 0), "1.23e-2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 0), "1.23e-1");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 0), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 0), "12.3"); // no e because all digits are visible till zero
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 0), "123"); // no e because all digits are visible till zero
+        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 0), "1.23e3");
+
+        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 1), "1.23e-2");
+        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 1), "0.123");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 1), "1.23");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 1), "12.3");
+        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "123"); // no e because all digits are visible till zero
+        fn quick_round(base: Vec<u8>, round_to_decimals: usize) -> String {
+            ScientificNumber::new(false, base, 0)
+                .to_string(FormattingOptions::default().with_rounding(round_to_decimals))
+        }
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 1), "1");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 2), "1.2");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 3), "1.23");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 4), "1.235");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 5), "1.2346");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 6), "1.23457");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 7), "1.234568");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 8), "1.2345679");
+        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 9), "1.23456789");
     }
 }

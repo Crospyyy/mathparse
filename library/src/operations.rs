@@ -560,11 +560,11 @@ mod tests {
         assert_output_eq("1", Some((Number::Rational(creat_rational(1, 1)), "1")));
         assert_output_eq("1.23", Some((Number::Rational(creat_rational(123, 100)), "1.23")));
         assert_output_eq("-1.23", Some((Number::Rational(creat_rational(-123, 100)), "-1.23")));
-        assert_output_eq("1000", Some((Number::Rational(creat_rational(1000, 1)), "1000")));
-        assert_output_eq("1_000", Some((Number::Rational(creat_rational(1000, 1)), "1000")));
+        assert_output_eq("1000", Some((Number::Rational(creat_rational(1000, 1)), "1,000")));
+        assert_output_eq("1_000", Some((Number::Rational(creat_rational(1000, 1)), "1,000")));
         assert_output_eq("1000_", None);
         assert_output_eq("_1000", None);
-        assert_output_eq("1_000_000", Some((Number::Rational(creat_rational(1000000, 1)), "1000000")));
+        assert_output_eq("1_000_000", Some((Number::Rational(creat_rational(1000000, 1)), "1,000,000")));
     }
 
     #[test]
@@ -642,53 +642,5 @@ mod tests {
             (num("2").div(&num("3"), ctx), "0.6666666666666666666666666667", 28),
             (num("2").div(&num("3"), ctx), "0.66666666666666666666666666667", 29)
         );
-    }
-
-    #[test]
-    fn test_scientific_number() {
-        fn quick_conversion(base: Vec<u8>, exponent: i64, no_sci_digits: usize) -> String {
-            ScientificNumber::new(false, base, exponent).to_string(
-                FormattingOptions::default().with_rounding(100).with_non_scientific_decimals(no_sci_digits),
-            )
-        }
-        assert_eq!(quick_conversion(vec![0, 0, 0], 0, 100), "0");
-        assert_eq!(quick_conversion(vec![0, 0, 0], 3, 100), "0");
-        assert_eq!(quick_conversion(vec![1], -1, 100), "0.1");
-        assert_eq!(quick_conversion(vec![1], 0, 100), "1");
-        assert_eq!(quick_conversion(vec![1], 3, 100), "1000");
-
-        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 100), "0.0123");
-        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 100), "0.123");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 100), "1.23");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 100), "12.3");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 100), "123");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 100), "1230");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 4, 100), "12300");
-
-        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 0), "1.23e-2");
-        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 0), "1.23e-1");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 0), "1.23");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 0), "12.3"); // no e because all digits are visible till zero
-        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 0), "123"); // no e because all digits are visible till zero
-        assert_eq!(quick_conversion(vec![1, 2, 3], 3, 0), "1.23e3");
-
-        assert_eq!(quick_conversion(vec![1, 2, 3], -2, 1), "1.23e-2");
-        assert_eq!(quick_conversion(vec![1, 2, 3], -1, 1), "0.123");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 0, 1), "1.23");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 1, 1), "12.3");
-        assert_eq!(quick_conversion(vec![1, 2, 3], 2, 1), "123"); // no e because all digits are visible till zero
-        fn quick_round(base: Vec<u8>, round_to_decimals: usize) -> String {
-            ScientificNumber::new(false, base, 0)
-                .to_string(FormattingOptions::default().with_rounding(round_to_decimals))
-        }
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 1), "1");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 2), "1.2");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 3), "1.23");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 4), "1.235");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 5), "1.2346");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 6), "1.23457");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 7), "1.234568");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 8), "1.2345679");
-        assert_eq!(quick_round(vec![1, 2, 3, 4, 5, 6, 7, 8, 9], 9), "1.23456789");
     }
 }
