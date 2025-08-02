@@ -123,34 +123,7 @@ mod controller {
                 .lock_focus(true);
             let response = ui.add_sized([ui.available_width(), 20.0], edit);
             if response.has_focus() {
-                let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input);
-                if !var_name.is_empty() {
-                    // todo make this whole mechanism work when the cursor is not at the end of the string
-                    let compatible_symbols = self
-                        .formula_store
-                        .get_symbols()
-                        .iter()
-                        .filter(|(name, ..)| name.starts_with(&var_name))
-                        .map(|(name, ..)| *name)
-                        .collect::<Vec<_>>();
-
-                    if !compatible_symbols.is_empty() {
-                        let longest_common_start = determine_longest_common_start(&compatible_symbols);
-                        if !(compatible_symbols.len() == 1 && compatible_symbols[0] == &var_name) {
-                            response.show_tooltip_ui(|ui| {
-                                for name in compatible_symbols {
-                                    ui.add(Label::new(name).extend());
-                                }
-                            });
-                            if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start
-                            {
-                                self.ui_state.top_user_input += &longest_common_start[var_name.len()..];
-                                self.update_calculation_result();
-                                set_cursor_pos(&response, self.ui_state.top_user_input.len());
-                            }
-                        }
-                    }
-                }
+                self.show_autocompletion(ui, &response);
             }
             if response.changed() {
                 self.update_calculation_result();
@@ -189,6 +162,44 @@ mod controller {
             });
         }
 
+        fn show_autocompletion(&mut self, ui: &mut Ui, response: &Response) {
+            let Some(cursor_pos) = get_cursor_pos(&response) else {
+                return;
+            };
+            let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input[..cursor_pos]);
+            if !var_name.is_empty() {
+                // todo make this whole mechanism work when the cursor is not at the end of the string
+                let compatible_symbols = self
+                    .formula_store
+                    .get_symbols()
+                    .iter()
+                    .filter(|(name, ..)| name.starts_with(&var_name))
+                    .map(|(name, ..)| *name)
+                    .collect::<Vec<_>>();
+
+                if !compatible_symbols.is_empty() {
+                    let longest_common_start = determine_longest_common_start(&compatible_symbols);
+                    if !(compatible_symbols.len() == 1 && compatible_symbols[0] == &var_name) {
+                        response.show_tooltip_ui(|ui| {
+                            for name in compatible_symbols {
+                                ui.add(Label::new(name).extend());
+                            }
+                        });
+                        if ui.input(|i| i.key_pressed(egui::Key::Tab)) && var_name != longest_common_start {
+                            self.ui_state
+                                .top_user_input
+                                .insert_str(cursor_pos, &longest_common_start[var_name.len()..]);
+                            self.update_calculation_result();
+                            set_cursor_pos(
+                                &response,
+                                cursor_pos + longest_common_start.len() - var_name.len(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
             let area = ScrollArea::vertical().auto_shrink(false);
             area.show(ui, |ui| {
@@ -220,6 +231,14 @@ mod controller {
         if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
             state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos))));
             state.store(&response.ctx, response.id);
+        }
+    }
+
+    fn get_cursor_pos(response: &Response) -> Option<usize> {
+        if let Some(state) = TextEdit::load_state(&response.ctx, response.id) {
+            state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
+        } else {
+            None
         }
     }
 
