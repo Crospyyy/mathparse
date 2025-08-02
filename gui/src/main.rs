@@ -40,7 +40,9 @@ mod controller {
         CentralPanel, Color32, Context, DragValue, FontFamily, FontSelection, Label, Response, RichText,
         ScrollArea, TextEdit, TextFormat, Ui, Widget,
     };
-    use library::{FormattingOptions, FormulaStore, create_default_context, get_fun_name_end_of_string};
+    use library::{
+        Benchmark, FormattingOptions, FormulaStore, create_default_context, get_fun_name_end_of_string,
+    };
 
     pub struct Window {
         formula_store: FormulaStore,
@@ -74,9 +76,10 @@ mod controller {
                     .add_symbol_from_string(input, true)
                     .map(|name| format!("Create new symbol '{}'", name));
             } else {
+                let mut benchmark = Benchmark::new();
                 self.ui_state.calculation_result = self
                     .formula_store
-                    .eval(input, ctx)
+                    .eval_with_benchmark(input, ctx, &mut benchmark)
                     .map(|result| {
                         let result_str = result.to_string(
                             FormattingOptions::default().with_rounding(self.ui_state.output_digits),
@@ -89,6 +92,7 @@ mod controller {
                         }
                     })
                     .map_err(|s| format!("Error: {}", s));
+                benchmark.print_times();
             }
         }
 

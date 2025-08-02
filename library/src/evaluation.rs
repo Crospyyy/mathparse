@@ -1,7 +1,8 @@
 use crate::storing::FormulaStore;
-use crate::{Element, FunctionExpression, Number};
+use crate::{Benchmark, Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 impl Element {
     pub fn eval(&self, ctx: &mut Context) -> Option<Number> {
@@ -75,10 +76,26 @@ impl Element {
 
 impl FormulaStore {
     pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number, String> {
-        let mut formula =
-            Element::parse(formula_str).map_err(|err| format!("Could not parse formula: {err}"))?;
+        self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
+    }
+
+    pub fn eval_with_benchmark(
+        &self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
+    ) -> Result<Number, String> {
+        let mut inner_bench = benchmark.new_sub_bench();
+        let mut formula = Element::parse_benched(formula_str, &mut inner_bench)
+            .map_err(|err| format!("Could not parse formula: {err}"))?;
+        benchmark.add_task_with_benchmark("Parsing", inner_bench);
+
+        benchmark.start();
         self.expand_formula(&mut formula, &HashSet::new())?;
-        formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))
+        benchmark.complete("Expansion");
+
+        benchmark.start();
+        let result = formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))?;
+        benchmark.complete("Evaluation");
+
+        Ok(result)
     }
 
     pub(crate) fn expand_formula(

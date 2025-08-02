@@ -1,7 +1,7 @@
 pub use implementation::get_fun_name_end_of_string;
 
 pub mod implementation {
-    use crate::{Element, Number};
+    use crate::{Benchmark, Element, Number, benchmark};
     use regex::Regex;
     use std::mem;
 
@@ -25,21 +25,30 @@ pub mod implementation {
 
     impl Element {
         pub fn parse(input: &str) -> Result<Self, String> {
-            let cow = Element::preprocess_string_minus(&input);
-            let chars = cow.chars().collect::<Vec<_>>();
+            Self::parse_benched(input, &mut Benchmark::new())
+        }
+
+        pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
+            let b = benchmark;
+            benchmark!(b, "preprocess_string_minus", let cow = Element::preprocess_string_minus(&input));
+            benchmark!(b, "convert_to_chars", let chars = cow.chars().collect::<Vec<_>>());
             let mut start = 0;
-            let mut formula = Element::resolve_brackets(&chars, &mut start);
-            formula.resolve_functions();
-            formula.process_plus();
-            formula.process_minus();
-            formula.process_multiply();
-            formula.process_divide();
-            formula.process_minus();
-            formula.process_pow()?;
-            formula.process_minus();
-            formula.process_numbers_and_variables();
-            formula.remove_unneeded_outer_brackets();
-            formula.convert_to_variables_where_possible();
+            benchmark!(b, "resolve_brackets", let mut formula = Element::resolve_brackets(&chars, &mut start));
+            benchmark!(b, "resolve_functions", formula.resolve_functions());
+            benchmark!(b, "process_plus", formula.process_plus());
+            benchmark!(b, "process_minus", formula.process_minus());
+            benchmark!(b, "process_multiply", formula.process_multiply());
+            benchmark!(b, "process_divide", formula.process_divide());
+            benchmark!(b, "process_minus_2", formula.process_minus());
+            benchmark!(b, "process_pow", formula.process_pow()?);
+            benchmark!(b, "process_minus_3", formula.process_minus());
+            benchmark!(b, "process_numbers_and_variables", formula.process_numbers_and_variables());
+            benchmark!(b, "remove_unneeded_outer_brackets", formula.remove_unneeded_outer_brackets());
+            benchmark!(
+                b,
+                "convert_to_variables_where_possible",
+                formula.convert_to_variables_where_possible()
+            );
             if formula.anything_unparsed() {
                 Err("Parts of the formula could not be parsed".to_string())
             } else {
