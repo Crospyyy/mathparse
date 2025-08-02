@@ -125,6 +125,7 @@ mod controller {
             if response.has_focus() {
                 let var_name = get_fun_name_end_of_string(&self.ui_state.top_user_input);
                 if !var_name.is_empty() {
+                    // todo make this whole mechanism work when the cursor is not at the end of the string
                     let compatible_symbols = self
                         .formula_store
                         .get_symbols()
