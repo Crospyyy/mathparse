@@ -57,6 +57,7 @@ mod ui {
 
     impl Window {
         pub(crate) fn show_top_input(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
+            // todo make it possible to select text, then press the brackets button to wrap the selection in brackets
             let text_edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
                 .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
                 .lock_focus(true);
