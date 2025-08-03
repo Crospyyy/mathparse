@@ -77,6 +77,7 @@ mod ui {
 
             self.handle_ui_input(input);
 
+            // todo only show an error icon and display the error message in a tooltip
             let mut job = LayoutJob::default();
             let text = match &self.ui_state.calculation_result {
                 Some(Ok(result)) => result,
