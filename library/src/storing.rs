@@ -60,7 +60,7 @@ impl Symbol<'_> {
     }
 
     pub fn get_full_string(&self, ctx: &mut NumberContext) -> String {
-        format!("{}={}", self.get_signature_string(), self.formula.get_string(ctx))
+        format!("{} = {}", self.get_signature_string(), self.formula.get_string(ctx))
     }
 }
 
