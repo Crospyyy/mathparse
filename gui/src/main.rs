@@ -234,11 +234,13 @@ mod controller {
         pub(crate) fn new(_cc: &CreationContext) -> Self {
             let mut store = FormulaStore::new_empty();
             store.define_default_symbols().unwrap();
-            store.add_variable_with_value("speed_of_sound_mps", "343", false).unwrap();
-            store.add_variable_with_value("speed_of_light_mps", "299_792_458", false).unwrap();
-            store.add_variable_with_value("kw_to_ps", "1.35962", false).unwrap();
-            store.add_variable_with_value("km_to_miles", "0.6214", false).unwrap();
-            store.add_variable_with_value("liter_to_gallons", "0.264172", false).unwrap();
+            store.add_symbol_from_string("speed_of_sound_mps = 343", false).unwrap();
+            store.add_symbol_from_string("speed_of_light_mps = 299_792_458", false).unwrap();
+            store.add_symbol_from_string("kw_to_ps = 1.35962", false).unwrap();
+            store.add_symbol_from_string("km_to_miles = 0.6214", false).unwrap();
+            store.add_symbol_from_string("liter_to_gallons = 0.264172", false).unwrap();
+            store.add_symbol_from_string("joule_to_wh = 1/3600", false).unwrap();
+            store.add_symbol_from_string("water_heat_capacity_j_per_g = 4.184", false).unwrap();
             let mut window = Self { formula_store: store, ui_state: UiState::new() };
             window.update_all_symbol_strings();
             window
