@@ -65,7 +65,11 @@ mod ui {
                 .id(self.ui_state.top_user_input_id)
                 .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
                 .lock_focus(true);
+
             let response = ui.add_sized([ui.available_width(), 20.0], text_edit);
+
+            self.input_post_process(ui);
+
             if response.has_focus() {
                 self.show_autocompletion(ui, &response, input);
             }
@@ -85,7 +89,7 @@ mod ui {
             let mut job = LayoutJob::default();
             let text = match &self.ui_state.calculation_result {
                 Some(Ok(result)) => result,
-                Some(Err(_)) => "= !",
+                Some(Err(_)) => "=  !",
                 None => "",
             };
 
@@ -288,7 +292,7 @@ mod controller {
                 return;
             };
             if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
-                self.ui_state.top_user_input.insert(cursor_pos, '(');
+                self.ui_state.top_user_input.insert_str(cursor_pos, "()");
                 state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + 1))));
             } else {
                 let [min, max] = cursors.sorted_cursors().map(|c| c.index);
@@ -302,6 +306,55 @@ mod controller {
                     CCursor::new(cursors.secondary.index + 1),
                 )));
             }
+            state.store(ui.ctx(), self.ui_state.top_user_input_id);
+        }
+
+        pub(super) fn input_post_process(&mut self, ui: &mut Ui) {
+            if !ui.input(|ip| ip.events.iter().any(|e| matches!(e, Event::Text(_)))) {
+                return;
+            };
+            let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
+                return;
+            };
+            let Some(cursor_pos) = state.cursor.char_range().map(|c| c.sorted_cursors()[1].index) else {
+                return;
+            };
+            let string = get_fun_name_end_of_string(&self.ui_state.top_user_input[..cursor_pos], true);
+            if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_digit(10)) {
+                return;
+            }
+            let Some(first_char_pos) = string.chars().position(|c| !c.is_digit(10)) else {
+                return;
+            };
+            let pos_before = cursor_pos - string.len();
+            let insert_pos = pos_before + first_char_pos;
+            self.ui_state.top_user_input.insert_str(insert_pos, "*");
+            let mut add_move_cursor_right = 1;
+
+            if pos_before > 0 {
+                let mut first_num_char = pos_before;
+                loop {
+                    if first_num_char == 0 {
+                        break;
+                    }
+                    let new_first = first_num_char - 1;
+                    if matches!(self.ui_state.top_user_input.chars().nth(new_first), Some('0'..='9' | '.')) {
+                        first_num_char = new_first;
+                    } else {
+                        break;
+                    }
+                }
+                if first_num_char != 0
+                    && matches!(self.ui_state.top_user_input.chars().nth(first_num_char - 1), Some('^' | '/'))
+                {
+                    self.ui_state.top_user_input.insert(cursor_pos + 1, ')');
+                    self.ui_state.top_user_input.insert(first_num_char, '(');
+                    add_move_cursor_right += 1;
+                }
+            }
+            state
+                .cursor
+                .set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + add_move_cursor_right))));
             state.store(ui.ctx(), self.ui_state.top_user_input_id);
         }
 
@@ -355,7 +408,8 @@ mod controller {
         pub fn get_autocompletion_result(
             &self, input_string: &str, cursor_pos: usize,
         ) -> Option<AutocompletionResult> {
-            let input_symbol_name = get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos));
+            let input_symbol_name =
+                get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos), false);
             if input_symbol_name.is_empty() {
                 return None;
             }

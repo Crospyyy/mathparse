@@ -12,7 +12,7 @@ pub mod implementation {
         matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9')
     }
 
-    pub fn get_fun_name_end_of_string(name: &str) -> String {
+    pub fn get_fun_name_end_of_string(name: &str, allow_first_char_digit: bool) -> String {
         let mut valid_chars_count = 0;
         name.chars()
             .rev()
@@ -22,7 +22,11 @@ pub mod implementation {
             "".to_owned()
         } else {
             let name = name[name.len() - valid_chars_count..].to_owned();
-            if name.chars().nth(0).is_none_or(|c| matches!(c, '0'..='9')) { "".to_owned() } else { name }
+            if allow_first_char_digit || name.chars().nth(0).is_some_and(|c| !matches!(c, '0'..='9')) {
+                name
+            } else {
+                "".to_owned()
+            }
         }
     }
 
@@ -113,7 +117,7 @@ pub mod implementation {
                             (&elements[i], &elements[j])
                         {
                             let name = name.to_string();
-                            let function_name = get_fun_name_end_of_string(&name);
+                            let function_name = get_fun_name_end_of_string(&name, false);
                             if function_name.is_empty() {
                                 continue; // Function names cannot be empty or start with a digit
                             }
