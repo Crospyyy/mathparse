@@ -80,7 +80,7 @@ impl FormulaStore {
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
         macro_rules! define_fun_single_arg {
             ($op:ident) => {
-                self.add_expression_fun_single_arg(stringify!($op), Number::$op)?
+                self.add_expression_fun_single_arg(stringify!($op), Number::$op, "x")?
             };
             ($x:ident, $($y:ident),+) => {
                 define_fun_single_arg!($x);
@@ -247,18 +247,18 @@ impl FormulaStore {
         Ok(())
     }
     pub fn add_expression_fun_single_arg(
-        &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number,
+        &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number, param_name: &str,
     ) -> Result<(), String> {
         let name = name.to_string();
         if self.formulas.contains_key(&name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
-        self.parameter_mappings.insert(name.clone(), Some(vec![])); // add a mock parameter list
+        self.parameter_mappings.insert(name.clone(), Some(vec![param_name.to_string()])); // add a mock parameter list
         self.signatures.insert(name.clone(), Signature::Function(vec![Signature::Number]));
         self.formulas.insert(
             name,
             Element::FunctionWithExpression {
-                arguments: vec![],
+                arguments: vec![Element::Variable(param_name.to_string())],
                 param_count: ParamCount::Exactly(1),
                 expression: FunctionExpression::SingleArgument(expression),
             },
