@@ -20,13 +20,14 @@ mod ui {
     use eframe::epaint::{Color32, FontFamily, FontId};
     use eframe::{App, Frame};
     use egui::{
-        CentralPanel, Context, DragValue, FontSelection, Label, Response, RichText, ScrollArea, TextEdit, Ui,
-        Widget,
+        CentralPanel, Context, DragValue, Event, FontSelection, Id, Key, Label, Modifiers, Response,
+        RichText, ScrollArea, TextEdit, Ui, Widget,
     };
     use library::FormattingOptions;
 
     pub(super) struct UiState {
         pub(super) top_user_input: String,
+        pub(super) top_user_input_id: Id,
         pub(super) calculation_result: Option<Result<String, String>>,
         pub(super) output_digits: usize,
         pub all_symbol_strings: Vec<String>,
@@ -36,6 +37,7 @@ mod ui {
         pub(super) fn new() -> Self {
             Self {
                 top_user_input: "".to_string(),
+                top_user_input_id: "Formula Input".into(),
                 calculation_result: None,
                 output_digits: FormattingOptions::default().round_to_decimals,
                 all_symbol_strings: Vec::new(),
@@ -57,8 +59,10 @@ mod ui {
 
     impl Window {
         pub(crate) fn show_top_input(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
-            // todo make it possible to select text, then press the brackets button to wrap the selection in brackets
+            self.handle_bracket_input(ui);
+
             let text_edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
+                .id(self.ui_state.top_user_input_id)
                 .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
                 .lock_focus(true);
             let response = ui.add_sized([ui.available_width(), 20.0], text_edit);
@@ -210,7 +214,7 @@ mod controller {
     use crate::ui::UiState;
     use eframe::CreationContext;
     use egui::text::{CCursor, CCursorRange};
-    use egui::{Response, TextBuffer, TextEdit};
+    use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui};
     use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 
     impl Window {
@@ -256,6 +260,40 @@ mod controller {
                     },
                 }
             }
+        }
+
+        pub(super) fn handle_bracket_input(&mut self, ui: &mut Ui) {
+            let typed_brackets = ui.input_mut(|ip| {
+                let typed_bracket = ip.consume_key(Modifiers::NONE, Key::OpenBracket)
+                    | ip.consume_key(Modifiers::SHIFT, Key::Num8);
+                ip.events.retain(|e| e != &Event::Text("(".to_owned()));
+                typed_bracket
+            });
+            if !typed_brackets {
+                return;
+            }
+            let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
+                return;
+            };
+            let Some(cursors) = state.cursor.char_range() else {
+                return;
+            };
+            if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
+                self.ui_state.top_user_input.insert(cursor_pos, '(');
+                state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + 1))));
+            } else {
+                let [min, max] = cursors.sorted_cursors().map(|c| c.index);
+                let string_before = &self.ui_state.top_user_input[..min];
+                let string_middle = &self.ui_state.top_user_input[min..max];
+                let string_after = &self.ui_state.top_user_input[max..];
+                self.ui_state.top_user_input =
+                    format!("{}({}){}", string_before, string_middle, string_after);
+                state.cursor.set_char_range(Some(CCursorRange::two(
+                    CCursor::new(cursors.primary.index + 1),
+                    CCursor::new(cursors.secondary.index + 1),
+                )));
+            }
+            state.store(ui.ctx(), self.ui_state.top_user_input_id);
         }
 
         fn update_calculation_result(&mut self) {
