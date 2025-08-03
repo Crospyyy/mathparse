@@ -32,6 +32,7 @@ pub mod implementation {
         }
 
         pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
+            // todo make it possible to write something like `2pi` and have it parsed as `2 * pi`
             let b = benchmark;
             benchmark!(b, "preprocess_string_minus", let cow = Element::preprocess_string_minus(&input));
             benchmark!(b, "convert_to_chars", let chars = cow.chars().collect::<Vec<_>>());
