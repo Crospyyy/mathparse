@@ -11,6 +11,7 @@ mod printing;
 mod storing;
 mod testing;
 
+pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use operations::create_default_context;

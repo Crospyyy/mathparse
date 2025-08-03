@@ -20,8 +20,8 @@ mod ui {
     use eframe::epaint::{Color32, FontFamily, FontId};
     use eframe::{App, Frame};
     use egui::{
-        CentralPanel, Context, DragValue, Event, FontSelection, Id, Key, Label, Modifiers, Response,
-        RichText, ScrollArea, TextEdit, Ui, Widget,
+        CentralPanel, Context, DragValue, FontSelection, Id, Key, Label, Response, RichText, ScrollArea,
+        TextEdit, Ui, Widget,
     };
     use library::FormattingOptions;
 
@@ -294,7 +294,10 @@ mod controller {
                 return;
             };
             if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
-                self.ui_state.top_user_input.insert_str(cursor_pos, "()");
+                self.ui_state.top_user_input.insert_str(
+                    cursor_pos,
+                    if cursor_pos == self.ui_state.top_user_input.len() { "()" } else { "(" },
+                );
                 state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + 1))));
             } else {
                 let [min, max] = cursors.sorted_cursors().map(|c| c.index);
