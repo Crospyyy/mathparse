@@ -15,8 +15,10 @@ pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use operations::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
+pub use parsing::signature::Signature;
 pub use printing::FormattingOptions;
 pub use storing::FormulaStore;
+pub use storing::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

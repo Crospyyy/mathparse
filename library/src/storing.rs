@@ -1,5 +1,5 @@
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
-use crate::{Element, FunctionExpression, Number};
+use crate::{Element, FunctionExpression, Number, NumberContext};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
 
@@ -23,11 +23,57 @@ fn test_float_consts() {
     assert_eq!(expr!(pow(16, 0.5), &mut *ctx).inexact(), true);
 }
 
+pub struct Symbol<'a> {
+    name: &'a str,
+    signature: &'a Signature,
+    params: Option<&'a Vec<String>>,
+    formula: &'a Element,
+}
+
+impl Symbol<'_> {
+    pub fn name(&self) -> &str {
+        self.name
+    }
+
+    pub fn signature(&self) -> &Signature {
+        self.signature
+    }
+
+    pub fn params(&self) -> Option<&Vec<String>> {
+        self.params
+    }
+
+    pub fn formula(&self) -> &Element {
+        self.formula
+    }
+
+    pub fn get_signature_string(&self) -> String {
+        match self.signature {
+            Signature::NumberOrFunction => self.name.to_string(),
+            Signature::Number => self.name.to_string(),
+            Signature::Function(_) => {
+                format!("{}({})", self.name, self.params.map_or("".to_string(), |p| p.join(", ")))
+            },
+            Signature::FunctionNOrMoreParams(n) => format!("{}({}..)", self.name, n),
+            Signature::Conflicting => "Conflicting".to_string(),
+        }
+    }
+
+    pub fn get_full_string(&self, ctx: &mut NumberContext) -> String {
+        format!("{}={}", self.get_signature_string(), self.formula.get_string(ctx))
+    }
+}
+
 impl FormulaStore {
-    pub fn get_symbols(&self) -> Vec<(&String, &Option<Vec<String>>, &Element)> {
+    pub fn get_symbols(&self) -> Vec<Symbol> {
         self.parameter_mappings
             .iter()
-            .map(|(name, params)| (name, params, self.formulas.get(name).unwrap()))
+            .map(|(name, params)| Symbol {
+                name,
+                signature: self.signatures.get(name).unwrap(),
+                params: params.as_ref(),
+                formula: self.formulas.get(name).unwrap(),
+            })
             .collect::<Vec<_>>()
     }
 
@@ -238,6 +284,10 @@ impl FormulaStore {
         self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
 
         Ok(InsertionElement { name: name.to_string(), parameters: arguments, formula })
+    }
+
+    pub fn get_signature(&self, name: &str) -> Option<&Signature> {
+        self.signatures.get(name)
     }
 
     #[cfg(test)]

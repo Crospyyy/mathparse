@@ -65,8 +65,8 @@ mod ui {
             };
 
             response.show_tooltip_ui(|ui| {
-                for name in autocompletion.possible_symbols {
-                    ui.add(Label::new(name).extend());
+                for symbol in autocompletion.possible_symbols {
+                    ui.add(Label::new(symbol.get_signature_string()).extend());
                 }
             });
             if ui.input(|i| i.key_pressed(egui::Key::Tab)) {
@@ -195,7 +195,7 @@ mod controller {
     use eframe::CreationContext;
     use egui::text::{CCursor, CCursorRange};
     use egui::{Response, TextBuffer, TextEdit};
-    use library::{FormulaStore, create_default_context, get_fun_name_end_of_string};
+    use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 
     impl Window {
         pub(crate) fn new(_cc: &CreationContext) -> Self {
@@ -219,9 +219,22 @@ mod controller {
                         self.update_calculation_result()
                     },
                     UiStateInfo::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
-                        self.ui_state.top_user_input.insert_str(cursor_pos, &complete_to[input_term.len()..]);
+                        let insert_brackets =
+                            self.formula_store.get_signature(&complete_to).is_some_and(|s| {
+                                matches!(s, Signature::Function(..) | Signature::FunctionNOrMoreParams(..))
+                            });
+
+                        let mut insert = complete_to[input_term.len()..].to_string();
+                        let mut new_cursor_pos = cursor_pos + complete_to.len() - input_term.len();
+
+                        if insert_brackets {
+                            insert.push_str("()");
+                            new_cursor_pos += 1;
+                        }
+
+                        self.ui_state.top_user_input.insert_str(cursor_pos, &insert);
+                        set_cursor_pos(&response, new_cursor_pos);
                         self.update_calculation_result();
-                        set_cursor_pos(&response, cursor_pos + complete_to.len() - input_term.len());
                     },
                 }
             }
@@ -257,19 +270,10 @@ mod controller {
 
         fn update_all_symbol_strings(&mut self) {
             let mut elements = self.formula_store.get_symbols();
-            elements.sort_by_key(|e| e.0);
-            self.ui_state.all_symbol_strings = elements
-                .iter()
-                .map(|(name, params, value)| {
-                    let mut text = name.to_string();
-                    if let Some(params) = params {
-                        text.push_str(&format!("({})", params.join(", ")));
-                    }
-                    text.push_str(" = ");
-                    text.push_str(&value.get_string(&mut create_default_context()));
-                    text
-                })
-                .collect();
+            elements.sort_by_cached_key(|e| e.name().to_string());
+            let ctx = &mut create_default_context();
+            self.ui_state.all_symbol_strings =
+                elements.iter().map(|symbol| symbol.get_full_string(ctx)).collect();
         }
 
         pub fn get_autocompletion_result(
@@ -282,14 +286,11 @@ mod controller {
             let compatible_symbols = self
                 .formula_store
                 .get_symbols()
-                .iter()
-                .filter(|(name, ..)| name.starts_with(&input_symbol_name))
-                .map(|(name, ..)| *name)
+                .into_iter()
+                .filter(|symbol| symbol.name().starts_with(&input_symbol_name))
                 .collect::<Vec<_>>();
 
-            if compatible_symbols.is_empty()
-                || (compatible_symbols.len() == 1 && compatible_symbols[0] == &input_symbol_name)
-            {
+            if compatible_symbols.is_empty() {
                 return None;
             }
             let longest_common_start = determine_longest_common_start(&compatible_symbols);
@@ -303,7 +304,7 @@ mod controller {
 
     pub struct AutocompletionResult<'a> {
         pub input_term: String,
-        pub possible_symbols: Vec<&'a String>,
+        pub possible_symbols: Vec<Symbol<'a>>,
         pub longest_common_start: String,
     }
 
@@ -322,13 +323,13 @@ mod controller {
         }
     }
 
-    pub fn determine_longest_common_start(names: &Vec<&String>) -> String {
+    pub fn determine_longest_common_start(names: &[Symbol]) -> String {
         if names.is_empty() {
             return String::new();
         }
-        let common_start = names[0].clone();
+        let common_start = names[0].name().to_string();
         let mut longest_common = common_start.len();
-        for name in names.iter().skip(1) {
+        for name in names.iter().map(|s| s.name()).skip(1) {
             if longest_common == 0 {
                 return String::new();
             }
