@@ -5,7 +5,8 @@ use num_rational::BigRational;
 
 mod benchmarking;
 mod evaluation;
-mod operations;
+pub(crate) mod operations;
+mod optimization;
 mod parsing;
 mod printing;
 mod storing;
@@ -74,8 +75,8 @@ pub enum Number {
 mod formula_short {
     use crate::{Element, Number};
 
-    pub fn num(num: &str) -> Element {
-        Element::Number(Number::from_string(num.to_owned()).unwrap())
+    pub fn num(num: impl ToString) -> Element {
+        Element::Number(Number::from_string(num).unwrap())
     }
 
     pub fn var_or_fun(name: &str) -> Element {
