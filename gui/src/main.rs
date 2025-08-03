@@ -74,7 +74,7 @@ mod ui {
             if response.changed() {
                 input.push(UiStateInfo::TopInputChanged);
             }
-            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                 response.request_focus();
                 input.push(UiStateInfo::TopInputSubmit);
             }
@@ -85,7 +85,7 @@ mod ui {
             let mut job = LayoutJob::default();
             let text = match &self.ui_state.calculation_result {
                 Some(Ok(result)) => result,
-                Some(Err(err)) => err,
+                Some(Err(_)) => "= !",
                 None => "",
             };
 
@@ -101,8 +101,12 @@ mod ui {
                 break_anywhere: true,
                 overflow_character: None,
             };
+            let error_string = self.ui_state.calculation_result.as_ref().and_then(|r| r.as_ref().err());
 
-            ui.label(job);
+            let result_resp = Label::new(job).selectable(error_string.is_none()).ui(ui);
+            if let Some(err) = error_string {
+                result_resp.on_hover_text(err);
+            }
             ui.horizontal(|ui| {
                 ui.label("Round Digits:");
                 let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
@@ -216,6 +220,11 @@ mod controller {
     use egui::text::{CCursor, CCursorRange};
     use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui};
     use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
+    use regex::Regex;
+    use std::sync::LazyLock;
+
+    static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
 
     impl Window {
         pub(crate) fn new(_cc: &CreationContext) -> Self {
@@ -296,9 +305,20 @@ mod controller {
             state.store(ui.ctx(), self.ui_state.top_user_input_id);
         }
 
+        fn get_processed_input(&self) -> String {
+            let mut string = self.ui_state.top_user_input.trim().to_string();
+
+            while matches!(string.chars().last(), Some('=' | '-' | '+' | '*' | '/' | '^')) {
+                string.pop();
+            }
+            string = REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS.replace_all(&string, "$2").to_string();
+
+            string
+        }
+
         fn update_calculation_result(&mut self) {
             let ctx = &mut create_default_context();
-            let input = self.ui_state.top_user_input.trim().to_string();
+            let input = self.get_processed_input();
 
             self.ui_state.calculation_result = if input.is_empty() {
                 None
@@ -313,11 +333,11 @@ mod controller {
         }
 
         fn try_apply_calculation(&mut self) {
-            let input = self.ui_state.top_user_input.trim();
+            let input = self.get_processed_input();
             if input.is_empty() || !input.contains("=") {
                 return;
             }
-            if self.formula_store.add_symbol_from_string(input, false).is_ok() {
+            if self.formula_store.add_symbol_from_string(&input, false).is_ok() {
                 self.ui_state.top_user_input.clear();
                 self.update_calculation_result();
                 self.update_all_symbol_strings();
