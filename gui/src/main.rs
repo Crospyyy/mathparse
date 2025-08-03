@@ -56,38 +56,6 @@ mod ui {
     }
 
     impl Window {
-        fn show_autocompletion(&mut self, ui: &mut Ui, response: &Response, input: &mut Vec<UiStateInfo>) {
-            let Some(cursor_pos) = get_cursor_pos(&response) else { return };
-            let Some(autocompletion) =
-                self.get_autocompletion_result(&self.ui_state.top_user_input, cursor_pos)
-            else {
-                return;
-            };
-
-            response.show_tooltip_ui(|ui| {
-                for symbol in autocompletion.possible_symbols {
-                    ui.add(Label::new(symbol.get_signature_string()).extend());
-                }
-            });
-            if ui.input(|i| i.key_pressed(egui::Key::Tab)) {
-                input.push(UiStateInfo::RequestAutocompletion {
-                    cursor_pos,
-                    input_term: autocompletion.input_term,
-                    complete_to: autocompletion.longest_common_start,
-                    response: response.clone(),
-                });
-            }
-        }
-
-        fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
-            let area = ScrollArea::vertical().auto_shrink(false);
-            area.show(ui, |ui| {
-                for text in &self.ui_state.all_symbol_strings {
-                    ui.label(RichText::new(text).size(17.0));
-                }
-            });
-        }
-
         pub(crate) fn show_top_input(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
             let text_edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
                 .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
@@ -134,6 +102,51 @@ mod ui {
                 let drag_val_resp = DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
                 if drag_val_resp.changed() {
                     input.push(UiStateInfo::RoundingAccuracyChanged);
+                }
+            });
+        }
+
+        fn show_autocompletion(&mut self, ui: &mut Ui, response: &Response, input: &mut Vec<UiStateInfo>) {
+            let Some(cursor_pos) = get_cursor_pos(&response) else { return };
+            let Some(autocompletion) =
+                self.get_autocompletion_result(&self.ui_state.top_user_input, cursor_pos)
+            else {
+                return;
+            };
+
+            let already_input = autocompletion.input_term.len();
+
+            response.show_tooltip_ui(|ui| {
+                for symbol in autocompletion.possible_symbols {
+                    let mut job = LayoutJob::default();
+                    job.append(
+                        &autocompletion.input_term,
+                        0.0,
+                        TextFormat::simple(FontId::default(), ui.visuals().text_color()),
+                    );
+                    job.append(
+                        &symbol.get_signature_string()[already_input..],
+                        0.0,
+                        TextFormat::simple(FontId::default(), ui.visuals().weak_text_color()),
+                    );
+                    Label::new(job).extend().ui(ui);
+                }
+            });
+            if ui.input(|i| i.key_pressed(egui::Key::Tab)) {
+                input.push(UiStateInfo::RequestAutocompletion {
+                    cursor_pos,
+                    input_term: autocompletion.input_term,
+                    complete_to: autocompletion.longest_common_start,
+                    response: response.clone(),
+                });
+            }
+        }
+
+        fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
+            let area = ScrollArea::vertical().auto_shrink(false);
+            area.show(ui, |ui| {
+                for text in &self.ui_state.all_symbol_strings {
+                    ui.label(RichText::new(text).size(17.0));
                 }
             });
         }
@@ -225,10 +238,12 @@ mod controller {
                             });
 
                         let mut insert = complete_to[input_term.len()..].to_string();
-                        let mut new_cursor_pos = cursor_pos + complete_to.len() - input_term.len();
+                        let mut new_cursor_pos = cursor_pos - input_term.len() + complete_to.len();
 
                         if insert_brackets {
-                            insert.push_str("()");
+                            if self.ui_state.top_user_input.chars().nth(cursor_pos) != Some('(') {
+                                insert.push_str("()");
+                            }
                             new_cursor_pos += 1;
                         }
 
