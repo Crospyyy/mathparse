@@ -145,6 +145,7 @@ mod ui {
         }
 
         fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
+            // todo align all symbols to the `=` sign
             let area = ScrollArea::vertical().auto_shrink(false);
             area.show(ui, |ui| {
                 for text in &self.ui_state.all_symbol_strings {
