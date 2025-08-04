@@ -6,7 +6,7 @@ use strum_macros::{EnumCount, EnumIter};
 #[derive(EnumIter, EnumCount, Copy, Clone, PartialEq)]
 pub enum Optimization {
     CombineExponents,
-    OneToAnyPower,
+    OneOrZeroToAnyPower,
     MultiplyByOne,
     PlusZero,
     DoubleNegation,
@@ -14,6 +14,7 @@ pub enum Optimization {
     MultiplyByZero,
     FlattenPlus,
     FlattenMultiply,
+    PowerOfZero,
 }
 
 macro_rules! implement_internal {
@@ -90,10 +91,14 @@ impl Element {
                     }
                 }
             },
-            Optimization::OneToAnyPower => {
+            Optimization::OneOrZeroToAnyPower => {
                 if let Element::Pow(base, _) = self {
-                    if base.get_number_inner().is_some_and(|n| n == &Number::from(1)) {
+                    let number = base.get_number_inner();
+                    if number == Some(&Number::from(1)) {
                         *self = Element::Number(Number::from(1));
+                        successful = true;
+                    } else if number == Some(&Number::from(0)) {
+                        *self = Element::Number(Number::from(0));
                         successful = true;
                     }
                 }
@@ -222,6 +227,12 @@ impl Element {
                     }
                 }
             },
+            Optimization::PowerOfZero => {
+                if self.get_pow_inner().and_then(|(_b, e)| e.get_number_inner()) == Some(&Number::from(0)) {
+                    *self = Element::Number(Number::from(1));
+                    successful = true;
+                }
+            },
         }
         successful
     }
@@ -277,9 +288,11 @@ mod tests {
     }
 
     #[test]
-    fn test_one_to_any_power() {
-        check_input_and_output_match("1^-1", "1", Optimization::OneToAnyPower);
-        check_input_and_output_match("1^x", "1", Optimization::OneToAnyPower);
+    fn test_one_or_zero_to_any_power() {
+        check_input_and_output_match("1^-1", "1", Optimization::OneOrZeroToAnyPower);
+        check_input_and_output_match("1^x", "1", Optimization::OneOrZeroToAnyPower);
+        check_input_and_output_match("0^-1", "0", Optimization::OneOrZeroToAnyPower);
+        check_input_and_output_match("0^x", "0", Optimization::OneOrZeroToAnyPower);
     }
 
     #[test]
@@ -324,5 +337,34 @@ mod tests {
     #[test]
     fn test_flatten_multiply() {
         check_input_and_output_match("a*(b*c)", "a*b*c", Optimization::FlattenMultiply);
+    }
+
+    #[test]
+    fn test_power_of_zero() {
+        check_input_output_formula_match("a^0", num(1), Optimization::PowerOfZero);
+        check_input_output_formula_match("0^0", num(1), Optimization::PowerOfZero);
+        check_input_output_formula_match("1^0", num(1), Optimization::PowerOfZero);
+        check_input_output_formula_match("2^0", num(1), Optimization::PowerOfZero);
+    }
+
+    #[test]
+    fn test_optimize_all() {
+        // Formel mit mehreren möglichen Optimierungen:
+        // -(-a)*1 + (0+b) + c*(d*0)
+        let mut formula = Element::parse("-(-a)*1 + (0+b) + c*(d*0)").unwrap();
+
+        // Anwenden aller möglichen Optimierungen
+        let optimizations = formula.optimize_all();
+
+        // Überprüfen des Endergebnisses
+        let expected = Element::parse("a+b").unwrap();
+        assert_eq!(formula, expected);
+
+        // Prüfen, ob bestimmte Optimierungen durchgeführt wurden
+        assert!(optimizations.contains(&Optimization::DoubleNegation));
+        assert!(optimizations.contains(&Optimization::MultiplyByOne));
+        assert!(optimizations.contains(&Optimization::PlusZero));
+        assert!(optimizations.contains(&Optimization::MultiplyByZero));
+        assert!(!optimizations.is_empty());
     }
 }
