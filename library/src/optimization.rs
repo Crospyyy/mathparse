@@ -3,7 +3,7 @@ use std::cmp::PartialEq;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
 
-#[derive(EnumIter, EnumCount, Copy, Clone, PartialEq)]
+#[derive(EnumIter, EnumCount, Copy, Clone, PartialEq, Debug)]
 pub enum Optimization {
     CombineExponents,
     OneOrZeroToAnyPower,
@@ -349,22 +349,45 @@ mod tests {
 
     #[test]
     fn test_optimize_all() {
-        // Formel mit mehreren möglichen Optimierungen:
-        // -(-a)*1 + (0+b) + c*(d*0)
-        let mut formula = Element::parse("-(-a)*1 + (0+b) + c*(d*0)").unwrap();
+        // Testfälle: (Eingabeformel, Erwartete Ausgabe, Erwartete Optimierungen)
+        let test_cases = vec![
+            (
+                "-(-a)*1 + (0+b) + c*(d*0)",
+                "a+b",
+                vec![
+                    Optimization::DoubleNegation,
+                    Optimization::MultiplyByOne,
+                    Optimization::PlusZero,
+                    Optimization::MultiplyByZero,
+                ],
+            ),
+            ("x^0 + y*1", "1+y", vec![Optimization::PowerOfZero, Optimization::MultiplyByOne]),
+            ("(a+b)+(c+d)", "a+b+c+d", vec![Optimization::FlattenPlus]),
+            ("(a*b)*(c*d)", "a*b*c*d", vec![Optimization::FlattenMultiply]),
+            ("a*a^-1", "1", vec![Optimization::DivideBySame]),
+        ];
 
-        // Anwenden aller möglichen Optimierungen
-        let optimizations = formula.optimize_all();
+        // Führe alle Testfälle durch
+        for (input, expected_output, expected_optimizations) in test_cases {
+            let mut formula = Element::parse(input).unwrap();
+            let optimizations = formula.optimize_all();
+            let expected = Element::parse(expected_output).unwrap();
 
-        // Überprüfen des Endergebnisses
-        let expected = Element::parse("a+b").unwrap();
-        assert_eq!(formula, expected);
+            // Überprüfe Endergebnis
+            assert_eq!(formula, expected, "Fehler bei Formel: {}", input);
 
-        // Prüfen, ob bestimmte Optimierungen durchgeführt wurden
-        assert!(optimizations.contains(&Optimization::DoubleNegation));
-        assert!(optimizations.contains(&Optimization::MultiplyByOne));
-        assert!(optimizations.contains(&Optimization::PlusZero));
-        assert!(optimizations.contains(&Optimization::MultiplyByZero));
-        assert!(!optimizations.is_empty());
+            // Prüfe, ob erwartete Optimierungen durchgeführt wurden
+            for opt in &expected_optimizations {
+                assert!(
+                    optimizations.contains(opt),
+                    "Optimierung {:?} wurde nicht angewendet für: {}",
+                    opt,
+                    input
+                );
+            }
+
+            // Prüfe, dass mindestens eine Optimierung durchgeführt wurde
+            assert!(!optimizations.is_empty(), "Keine Optimierungen für: {}", input);
+        }
     }
 }
