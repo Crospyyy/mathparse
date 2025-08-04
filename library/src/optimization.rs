@@ -57,9 +57,16 @@ impl Element {
 
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
         let mut all_optimizations = Vec::with_capacity(Optimization::COUNT);
-        for optimization in Optimization::iter() {
-            if self.optimize(optimization) {
-                all_optimizations.push(optimization);
+        loop {
+            let mut any_optimization = false;
+            for optimization in Optimization::iter() {
+                if self.optimize(optimization) {
+                    all_optimizations.push(optimization);
+                    any_optimization = true;
+                }
+            }
+            if !any_optimization {
+                break;
             }
         }
         all_optimizations
