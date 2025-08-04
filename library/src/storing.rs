@@ -150,6 +150,8 @@ impl FormulaStore {
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
         self.add_symbol_from_string("rem(x)=x-floor(x)", false)?; // todo implement this in a better way
+        // todo implement a better sin function
+        // idea: better_sin(x) = round(sin( rem(x/(2pi))*2pi ) * 2^1022) * 2^(-1022)
 
         Ok(())
     }
