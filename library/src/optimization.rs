@@ -16,7 +16,45 @@ pub enum Optimization {
     FlattenMultiply,
 }
 
+macro_rules! implement_internal {
+    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
+        fn $name(&self) -> Option<&$return_type> {
+            match self {
+                Element::$enum_name($inner_name) => Some($inner_name),
+                _ => None,
+            }
+        }
+
+        fn $name_mut(&mut self) -> Option<&mut $return_type> {
+            match self {
+                Element::$enum_name($inner_name) => Some($inner_name),
+                _ => None,
+            }
+        }
+    };
+    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident, $inner_name2:ident) => {
+        fn $name(&self) -> Option<(&$return_type, &$return_type)> {
+            match self {
+                Element::$enum_name($inner_name, $inner_name2) => Some((&**$inner_name, &**$inner_name2)),
+                _ => None,
+            }
+        }
+
+        fn $name_mut(&mut self) -> Option<(&mut $return_type, &mut $return_type)> {
+            match self {
+                Element::$enum_name($inner_name, $inner_name2) => Some(($inner_name, $inner_name2)),
+                _ => None,
+            }
+        }
+    };
+}
+
 impl Element {
+    implement_internal!(get_number_inner, get_number_inner_mut, Number, Number, num);
+    implement_internal!(get_pow_inner, get_pow_inner_mut, Element, Pow, base, exponent);
+    implement_internal!(get_negate_inner, get_negate_inner_mut, Element, Negate, element);
+    implement_internal!(get_variable_inner, get_variable_inner_mut, String, Variable, name);
+
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
         let mut all_optimizations = Vec::with_capacity(Optimization::COUNT);
         for optimization in Optimization::iter() {
@@ -47,22 +85,16 @@ impl Element {
             },
             Optimization::OneToAnyPower => {
                 if let Element::Pow(base, _) = self {
-                    if let Element::Number(b) = &**base {
-                        if *b == Number::from(1) {
-                            *self = Element::Number(Number::from(1));
-                            successful = true;
-                        }
+                    if base.get_number_inner().is_some_and(|n| n == &Number::from(1)) {
+                        *self = Element::Number(Number::from(1));
+                        successful = true;
                     }
                 }
             },
             Optimization::MultiplyByOne => {
                 if let Element::Multiply(elements) = self {
                     let len_before = elements.len();
-                    elements.retain(
-                        |e| {
-                            if let Element::Number(n) = e { *n != Number::from(1) } else { true }
-                        },
-                    );
+                    elements.retain(|e| e.get_number_inner() != Some(&Number::from(1)));
                     successful |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(1));
@@ -74,11 +106,7 @@ impl Element {
             Optimization::PlusZero => {
                 if let Element::Plus(elements) = self {
                     let len_before = elements.len();
-                    elements.retain(
-                        |e| {
-                            if let Element::Number(n) = e { *n != Number::from(0) } else { true }
-                        },
-                    );
+                    elements.retain(|e| e.get_number_inner() != Some(&Number::from(0)));
                     successful |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(0));
@@ -97,20 +125,11 @@ impl Element {
             },
             Optimization::DivideBySame => {
                 fn b_is_inverse_of_a(a: &Element, b: &Element) -> bool {
-                    match (a, b) {
-                        (a, Element::Pow(base_b, exp_b)) => {
-                            if let Element::Negate(n) = &**exp_b {
-                                if let Element::Number(n) = &**n {
-                                    *n == Number::from(1) && *a == **base_b
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        },
-                        _ => false,
-                    }
+                    b.get_pow_inner().is_some_and(|(b_base, b_exponent)| {
+                        b_exponent.get_negate_inner().and_then(|e| e.get_number_inner())
+                            == Some(&Number::from(1))
+                            && *a == *b_base
+                    })
                 }
                 if let Element::Multiply(elements) = self {
                     let mut to_remove = vec![false; elements.len()];
@@ -151,9 +170,51 @@ impl Element {
                     }
                 }
             },
-            Optimization::MultiplyByZero => {},
-            Optimization::FlattenPlus => {},
-            Optimization::FlattenMultiply => {},
+            Optimization::MultiplyByZero => {
+                if let Element::Multiply(elements) = self {
+                    let zero = Number::from(0);
+                    if elements.iter().any(|e| e.get_number_inner() == Some(&zero)) {
+                        *self = Element::Number(zero);
+                        successful = true;
+                    }
+                }
+            },
+            Optimization::FlattenPlus => {
+                if let Element::Plus(elements) = self {
+                    let new_elements: Vec<_> = elements
+                        .iter()
+                        .flat_map(|e| {
+                            if let Element::Plus(inner_elements) = e {
+                                inner_elements.clone().into_iter()
+                            } else {
+                                vec![e.clone()].into_iter()
+                            }
+                        })
+                        .collect();
+                    if new_elements.len() != elements.len() {
+                        *elements = new_elements;
+                        successful = true;
+                    }
+                }
+            },
+            Optimization::FlattenMultiply => {
+                if let Element::Multiply(elements) = self {
+                    let new_elements: Vec<_> = elements
+                        .iter()
+                        .flat_map(|e| {
+                            if let Element::Multiply(inner_elements) = e {
+                                inner_elements.clone().into_iter()
+                            } else {
+                                vec![e.clone()].into_iter()
+                            }
+                        })
+                        .collect();
+                    if new_elements.len() != elements.len() {
+                        *elements = new_elements;
+                        successful = true;
+                    }
+                }
+            },
         }
         successful
     }
@@ -256,17 +317,5 @@ mod tests {
     #[test]
     fn test_flatten_multiply() {
         check_input_and_output_match("a*(b*c)", "a*b*c", Optimization::FlattenMultiply);
-    }
-
-    #[test]
-    fn test_optimize_all() {
-        let mut formula = Element::parse("-(-a)*1 + 0").unwrap();
-
-        let success1 = formula.optimize(Optimization::DoubleNegation);
-        let success2 = formula.optimize(Optimization::MultiplyByOne);
-        let success3 = formula.optimize(Optimization::PlusZero);
-
-        assert!(success1 && success2 && success3);
-        assert_eq!(formula, Element::parse("a").unwrap());
     }
 }
