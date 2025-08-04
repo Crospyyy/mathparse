@@ -324,7 +324,8 @@ mod controller {
             let Some(cursor_pos) = state.cursor.char_range().map(|c| c.sorted_cursors()[1].index) else {
                 return;
             };
-            let string = get_fun_name_end_of_string(&self.ui_state.top_user_input[..cursor_pos], true);
+            let string =
+                get_fun_name_end_of_string(&self.ui_state.top_user_input.char_range(0..cursor_pos), true);
             if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_digit(10)) {
                 return;
             }

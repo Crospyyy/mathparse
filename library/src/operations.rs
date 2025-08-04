@@ -460,7 +460,16 @@ impl Number {
             Self::from(r.round())
         } else {
             let float = self.get_float(ctx);
-            Self::from(inexact_if_needed!(float.round(ctx.precision(), ctx.rounding_mode()), float))
+            let ceil = float.ceil();
+            let diff_ceil = float.sub(&ceil, ctx.precision(), ctx.rounding_mode()).abs();
+
+            match diff_ceil.partial_cmp(&BigFloat::from(0.5)) {
+                None => {
+                    Self::nan(None) // cannot compare, return NaN
+                },
+                Some(Ordering::Less) | Some(Ordering::Equal) => Self::from(inexact_if_needed!(ceil, float)),
+                Some(Ordering::Greater) => Self::from(inexact_if_needed!(float.floor(), float)),
+            }
         }
     }
 }
