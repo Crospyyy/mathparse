@@ -90,6 +90,14 @@ impl FormulaStore {
         self.expand_formula(&mut formula, &HashSet::new())?;
         benchmark.complete("Expansion");
 
+        dbg!(formula.get_string(ctx));
+        dbg!(formula.get_debug_string());
+        benchmark.start();
+        formula.optimize_all();
+        benchmark.complete("Formula Optimization");
+        dbg!(formula.get_string(ctx));
+        dbg!(formula.get_debug_string());
+
         benchmark.start();
         let result = formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))?;
         benchmark.complete("Evaluation");

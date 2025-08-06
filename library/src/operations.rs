@@ -370,6 +370,11 @@ impl Number {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             Self::from(a * b)
         } else {
+            if self.get_exact_rational().is_some_and(|r| r.is_zero())
+                || self.get_exact_rational().is_some_and(|r| r.is_zero())
+            {
+                return Number::from(0);
+            }
             let (a, b) = (self.get_float(ctx), other.get_float(ctx));
             Self::from(inexact_if_needed!(expr!(a * b, &mut *ctx), a, b))
         }

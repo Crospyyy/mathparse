@@ -55,7 +55,7 @@ impl Element {
                 )
             },
             Element::NumberWithExpression(_) => {
-                format!("num_with_expr({})", self.get_debug_string())
+                "num_with_expr".to_owned()
             },
         }
     }
@@ -123,10 +123,10 @@ impl Formula {
                 Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
             },
             Element::FunctionWithExpression { arguments, .. } => Formula::Function {
-                name: "fun_with_expr".to_string(),
+                name: "fun_expr".to_string(),
                 arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
             },
-            Element::NumberWithExpression(_) => Formula::Variable("num_with_expr".to_string()),
+            Element::NumberWithExpression(_) => Formula::Variable("num_expr".to_string()),
         }
     }
 }

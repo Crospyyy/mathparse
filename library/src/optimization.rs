@@ -15,6 +15,7 @@ pub enum Optimization {
     FlattenPlus,
     FlattenMultiply,
     PowerOfZero,
+    FlattenPower,
 }
 
 macro_rules! implement_internal {
@@ -55,9 +56,15 @@ impl Element {
     implement_internal!(get_pow_inner, get_pow_inner_mut, Element, Pow, base, exponent);
     implement_internal!(get_negate_inner, get_negate_inner_mut, Element, Negate, element);
     implement_internal!(get_variable_inner, get_variable_inner_mut, String, Variable, name);
+    fn get_mul_inner(&self) -> Option<&Vec<Self>> {
+        if let Element::Multiply(inner) = self { Some(inner) } else { None }
+    }
+    fn get_mul_inner_mut(&mut self) -> Option<&mut Vec<Self>> {
+        if let Element::Multiply(inner) = self { Some(inner) } else { None }
+    }
 
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
-        let mut all_optimizations = Vec::with_capacity(Optimization::COUNT);
+        let mut all_optimizations = Vec::new();
         loop {
             let mut any_optimization = false;
             for optimization in Optimization::iter() {
@@ -78,7 +85,8 @@ impl Element {
             return false;
         }
 
-        let mut successful = self.run_on_children(&mut |element| Self::optimize(element, optimization));
+        let mut found_optimization =
+            self.run_on_children(&mut |element| Self::optimize(element, optimization));
         match optimization {
             Optimization::CombineExponents => {
                 if let Element::Pow(base, exponent) = self {
@@ -87,7 +95,7 @@ impl Element {
                             Box::new(*base_inner.clone()),
                             Box::new(Element::Multiply(vec![*exponent_inner.clone(), *exponent.clone()])),
                         );
-                        successful = true;
+                        found_optimization = true;
                     }
                 }
             },
@@ -96,10 +104,10 @@ impl Element {
                     let number = base.get_number_inner();
                     if number == Some(&Number::from(1)) {
                         *self = Element::Number(Number::from(1));
-                        successful = true;
+                        found_optimization = true;
                     } else if number == Some(&Number::from(0)) {
                         *self = Element::Number(Number::from(0));
-                        successful = true;
+                        found_optimization = true;
                     }
                 }
             },
@@ -107,7 +115,7 @@ impl Element {
                 if let Element::Multiply(elements) = self {
                     let len_before = elements.len();
                     elements.retain(|e| e.get_number_inner() != Some(&Number::from(1)));
-                    successful |= len_before != elements.len();
+                    found_optimization |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(1));
                     } else if elements.len() == 1 {
@@ -119,7 +127,7 @@ impl Element {
                 if let Element::Plus(elements) = self {
                     let len_before = elements.len();
                     elements.retain(|e| e.get_number_inner() != Some(&Number::from(0)));
-                    successful |= len_before != elements.len();
+                    found_optimization |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(0));
                     } else if elements.len() == 1 {
@@ -131,7 +139,7 @@ impl Element {
                 if let Element::Negate(element) = self {
                     if let Element::Negate(inner_element) = &**element {
                         *self = *inner_element.clone();
-                        successful = true;
+                        found_optimization = true;
                     }
                 }
             },
@@ -165,6 +173,7 @@ impl Element {
                         }
                     }
                     if found {
+                        found_optimization = true;
                         let mut new_elements: Vec<_> = elements
                             .iter()
                             .zip(to_remove.iter())
@@ -178,7 +187,6 @@ impl Element {
                         } else {
                             *elements = new_elements;
                         }
-                        successful = true;
                     }
                 }
             },
@@ -187,30 +195,35 @@ impl Element {
                     let zero = Number::from(0);
                     if elements.iter().any(|e| e.get_number_inner() == Some(&zero)) {
                         *self = Element::Number(zero);
-                        successful = true;
+                        found_optimization = true;
                     }
                 }
             },
             Optimization::FlattenPlus => {
                 if let Element::Plus(elements) = self {
+                    let mut could_flatten = false;
                     let new_elements: Vec<_> = elements
                         .iter()
                         .flat_map(|e| {
                             if let Element::Plus(inner_elements) = e {
+                                found_optimization = true;
+                                could_flatten = true;
                                 inner_elements.clone().into_iter()
                             } else {
                                 vec![e.clone()].into_iter()
                             }
                         })
                         .collect();
-                    if new_elements.len() != elements.len() {
+                    if could_flatten {
                         *elements = new_elements;
-                        successful = true;
                     }
                 }
             },
             Optimization::FlattenMultiply => {
                 if let Element::Multiply(elements) = self {
+                    if !elements.iter().any(|e| matches!(e, Element::Multiply(_))) {
+                        return found_optimization;
+                    }
                     let new_elements: Vec<_> = elements
                         .iter()
                         .flat_map(|e| {
@@ -221,20 +234,31 @@ impl Element {
                             }
                         })
                         .collect();
-                    if new_elements.len() != elements.len() {
-                        *elements = new_elements;
-                        successful = true;
-                    }
+
+                    found_optimization = true;
+                    *elements = new_elements;
                 }
             },
             Optimization::PowerOfZero => {
                 if self.get_pow_inner().and_then(|(_b, e)| e.get_number_inner()) == Some(&Number::from(0)) {
                     *self = Element::Number(Number::from(1));
-                    successful = true;
+                    found_optimization = true;
+                }
+            },
+            Optimization::FlattenPower => {
+                if let Some((base, exp)) = self.get_pow_inner_mut() {
+                    if let Some(inner) = base.get_mul_inner() {
+                        let new_elements = inner
+                            .iter()
+                            .map(|b| Element::Pow(Box::new(b.clone()), Box::new(exp.clone())))
+                            .collect();
+                        *self = Element::Multiply(new_elements);
+                        found_optimization = true;
+                    }
                 }
             },
         }
-        successful
+        found_optimization
     }
 
     fn run_on_children(&mut self, operation: &mut impl Fn(&mut Element) -> bool) -> bool {
@@ -259,7 +283,7 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::formula_short::{inv, mul, num, var};
+    use crate::formula_short::{inv, mul, neg, num, pow, var};
 
     fn check_input_and_output_match(input: &str, expected_output: &str, optimization: Optimization) {
         check_input_output_formula_match(input, Element::parse(expected_output).unwrap(), optimization);
@@ -280,6 +304,27 @@ mod tests {
 
         assert!(success);
         assert_eq!(formula, expected_out);
+    }
+
+    fn check_input_output_formula_both_match_also_complete(
+        input: Element, expected_out: Element, optimization: Optimization,
+    ) {
+        {
+            println!("Optimizing with the step alone");
+            let mut formula = input.clone();
+            let success = formula.optimize(optimization);
+
+            assert!(success);
+            assert_eq!(formula, expected_out);
+        }
+        {
+            println!("Optimizing all");
+            let mut formula = input.clone();
+            let success = formula.optimize_all();
+
+            assert!(success.contains(&optimization));
+            assert_eq!(formula, expected_out);
+        }
     }
 
     #[test]
@@ -336,7 +381,17 @@ mod tests {
 
     #[test]
     fn test_flatten_multiply() {
-        check_input_and_output_match("a*(b*c)", "a*b*c", Optimization::FlattenMultiply);
+        // check_input_and_output_match("a*(b*c)", "a*b*c", Optimization::FlattenMultiply);
+        // check_input_output_formula_both_match(
+        //     mul([var("a"), mul([var("b"), var("c")])]),
+        //     mul([var("a"), var("b"), var("c")]),
+        //     Optimization::FlattenMultiply,
+        // );
+        check_input_output_formula_both_match_also_complete(
+            mul([num(33), mul([pow(num(2), neg(num(1))), pow(num(34), neg(num(1)))])]),
+            mul([num(33), pow(num(2), neg(num(1))), pow(num(34), neg(num(1)))]),
+            Optimization::FlattenMultiply,
+        );
     }
 
     #[test]
@@ -365,6 +420,7 @@ mod tests {
             ("(a+b)+(c+d)", "a+b+c+d", vec![Optimization::FlattenPlus]),
             ("(a*b)*(c*d)", "a*b*c*d", vec![Optimization::FlattenMultiply]),
             ("a*a^-1", "1", vec![Optimization::DivideBySame]),
+            ("33*(2*33)^-1", "2^-1", vec![Optimization::FlattenPower, Optimization::FlattenMultiply]),
         ];
 
         // Führe alle Testfälle durch
