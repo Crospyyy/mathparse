@@ -189,11 +189,13 @@ mod logic {
                 .map(|result| {
                     benchmark.print_times();
                     let mut b = Benchmark::new();
-                    benchmark!(b, "Formatting number",
-                        let result_str = result.to_string(
+                    let result_str = benchmark!(
+                        b,
+                        result.to_string(
                             FormattingOptions::default().with_rounding(self.ui_state.output_digits),
                             ctx,
-                        )
+                        ),
+                        "Formatting number"
                     );
                     b.print_times();
 

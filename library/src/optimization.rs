@@ -18,51 +18,7 @@ pub enum Optimization {
     FlattenPower,
 }
 
-macro_rules! implement_internal {
-    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
-        fn $name(&self) -> Option<&$return_type> {
-            match self {
-                Element::$enum_name($inner_name) => Some($inner_name),
-                _ => None,
-            }
-        }
-
-        fn $name_mut(&mut self) -> Option<&mut $return_type> {
-            match self {
-                Element::$enum_name($inner_name) => Some($inner_name),
-                _ => None,
-            }
-        }
-    };
-    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident, $inner_name2:ident) => {
-        fn $name(&self) -> Option<(&$return_type, &$return_type)> {
-            match self {
-                Element::$enum_name($inner_name, $inner_name2) => Some((&**$inner_name, &**$inner_name2)),
-                _ => None,
-            }
-        }
-
-        fn $name_mut(&mut self) -> Option<(&mut $return_type, &mut $return_type)> {
-            match self {
-                Element::$enum_name($inner_name, $inner_name2) => Some(($inner_name, $inner_name2)),
-                _ => None,
-            }
-        }
-    };
-}
-
 impl Element {
-    implement_internal!(get_number_inner, get_number_inner_mut, Number, Number, num);
-    implement_internal!(get_pow_inner, get_pow_inner_mut, Element, Pow, base, exponent);
-    implement_internal!(get_negate_inner, get_negate_inner_mut, Element, Negate, element);
-    implement_internal!(get_variable_inner, get_variable_inner_mut, String, Variable, name);
-    fn get_mul_inner(&self) -> Option<&Vec<Self>> {
-        if let Element::Multiply(inner) = self { Some(inner) } else { None }
-    }
-    fn get_mul_inner_mut(&mut self) -> Option<&mut Vec<Self>> {
-        if let Element::Multiply(inner) = self { Some(inner) } else { None }
-    }
-
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
         let mut all_optimizations = Vec::new();
         loop {
@@ -278,6 +234,52 @@ impl Element {
             | Element::Number(_)
             | Element::NumberWithExpression(_) => false,
         }
+    }
+}
+
+macro_rules! implement_internal {
+    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
+        fn $name(&self) -> Option<&$return_type> {
+            match self {
+                Element::$enum_name($inner_name) => Some($inner_name),
+                _ => None,
+            }
+        }
+
+        fn $name_mut(&mut self) -> Option<&mut $return_type> {
+            match self {
+                Element::$enum_name($inner_name) => Some($inner_name),
+                _ => None,
+            }
+        }
+    };
+    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident, $inner_name2:ident) => {
+        fn $name(&self) -> Option<(&$return_type, &$return_type)> {
+            match self {
+                Element::$enum_name($inner_name, $inner_name2) => Some((&**$inner_name, &**$inner_name2)),
+                _ => None,
+            }
+        }
+
+        fn $name_mut(&mut self) -> Option<(&mut $return_type, &mut $return_type)> {
+            match self {
+                Element::$enum_name($inner_name, $inner_name2) => Some(($inner_name, $inner_name2)),
+                _ => None,
+            }
+        }
+    };
+}
+
+impl Element {
+    implement_internal!(get_number_inner, get_number_inner_mut, Number, Number, num);
+    implement_internal!(get_pow_inner, get_pow_inner_mut, Element, Pow, base, exponent);
+    implement_internal!(get_negate_inner, get_negate_inner_mut, Element, Negate, element);
+    implement_internal!(get_variable_inner, get_variable_inner_mut, String, Variable, name);
+    fn get_mul_inner(&self) -> Option<&Vec<Self>> {
+        if let Element::Multiply(inner) = self { Some(inner) } else { None }
+    }
+    fn get_mul_inner_mut(&mut self) -> Option<&mut Vec<Self>> {
+        if let Element::Multiply(inner) = self { Some(inner) } else { None }
     }
 }
 #[cfg(test)]

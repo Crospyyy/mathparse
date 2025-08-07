@@ -1,5 +1,5 @@
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, FunctionExpression, Number};
+use crate::{Benchmark, Element, FunctionExpression, Number, benchmark};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -86,21 +86,15 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        benchmark.start();
-        self.expand_formula(&mut formula, &HashSet::new())?;
-        benchmark.complete("Expansion");
+        benchmark!(benchmark, formula.optimize_all(), "Formula Optimization");
+        benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
+        benchmark!(benchmark, formula.optimize_all(), "Formula Optimization");
 
-        dbg!(formula.get_string(ctx));
-        dbg!(formula.get_debug_string());
-        benchmark.start();
-        formula.optimize_all();
-        benchmark.complete("Formula Optimization");
-        dbg!(formula.get_string(ctx));
-        dbg!(formula.get_debug_string());
-
-        benchmark.start();
-        let result = formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))?;
-        benchmark.complete("Evaluation");
+        let result = benchmark!(
+            benchmark,
+            formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))?,
+            "Evaluation"
+        );
 
         Ok(result)
     }

@@ -38,24 +38,25 @@ pub mod implementation {
         pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
             // todo make it possible to write something like `2pi` and have it parsed as `2 * pi`
             let b = benchmark;
-            benchmark!(b, "preprocess_string_minus", let cow = Element::preprocess_string_minus(&input));
-            benchmark!(b, "convert_to_chars", let chars = cow.chars().collect::<Vec<_>>());
+            let cow = benchmark!(b, Element::preprocess_string_minus(&input), "preprocess_string_minus");
+            let chars = benchmark!(b, cow.chars().collect::<Vec<_>>(), "convert_to_chars");
             let mut start = 0;
-            benchmark!(b, "resolve_brackets", let mut formula = Element::resolve_brackets(&chars, &mut start));
-            benchmark!(b, "resolve_functions", formula.resolve_functions());
-            benchmark!(b, "process_plus", formula.process_plus());
-            benchmark!(b, "process_minus", formula.process_minus());
-            benchmark!(b, "process_multiply", formula.process_multiply());
-            benchmark!(b, "process_divide", formula.process_divide());
-            benchmark!(b, "process_minus_2", formula.process_minus());
-            benchmark!(b, "process_pow", formula.process_pow()?);
-            benchmark!(b, "process_minus_3", formula.process_minus());
-            benchmark!(b, "process_numbers_and_variables", formula.process_numbers_and_variables());
-            benchmark!(b, "remove_unneeded_outer_brackets", formula.remove_unneeded_outer_brackets());
+            let mut formula =
+                benchmark!(b, Element::resolve_brackets(&chars, &mut start), "resolve_brackets");
+            benchmark!(b, formula.resolve_functions(), "resolve_functions");
+            benchmark!(b, formula.process_plus(), "process_plus");
+            benchmark!(b, formula.process_minus(), "process_minus");
+            benchmark!(b, formula.process_multiply(), "process_multiply");
+            benchmark!(b, formula.process_divide(), "process_divide");
+            benchmark!(b, formula.process_minus(), "process_minus_2");
+            benchmark!(b, formula.process_pow()?, "process_pow");
+            benchmark!(b, formula.process_minus(), "process_minus_3");
+            benchmark!(b, formula.process_numbers_and_variables(), "process_numbers_and_variables");
+            benchmark!(b, formula.remove_unneeded_outer_brackets(), "remove_unneeded_outer_brackets");
             benchmark!(
                 b,
-                "convert_to_variables_where_possible",
-                formula.convert_to_variables_where_possible()
+                formula.convert_to_variables_where_possible(),
+                "convert_to_variables_where_possible"
             );
             if formula.anything_unparsed() {
                 Err("Parts of the formula could not be parsed".to_string())

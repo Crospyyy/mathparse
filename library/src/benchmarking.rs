@@ -13,11 +13,12 @@ pub enum Benchmark {
 
 #[macro_export]
 macro_rules! benchmark {
-    ($bench:ident,$name:expr,$s:stmt) => {
+    ($bench:ident,$s:expr,$name:expr) => {{
         $bench.start();
-        $s
-        $bench.complete($name)
-    };
+        let return_val = $s;
+        $bench.complete($name);
+        return_val
+    }};
 }
 
 impl Benchmark {
@@ -103,5 +104,15 @@ impl Benchmark {
             Benchmark::Disabled | Benchmark::JustTotalDuration(_) => Benchmark::Disabled,
             Benchmark::Enabled { .. } => Benchmark::new(),
         }
+    }
+
+    pub fn benchmark<T>(&mut self, name: &str, f: impl FnOnce() -> T) -> T {
+        if !self.is_enabled() {
+            return f();
+        }
+        self.start();
+        let result = f();
+        self.complete(name);
+        result
     }
 }
