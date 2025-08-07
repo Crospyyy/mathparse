@@ -382,7 +382,6 @@ impl Number {
                 return other.clone();
             }
             let (a, b) = (self.get_float(ctx), other.get_float(ctx));
-            println!("Multiplying {} and {}", a, b);
             Self::from(inexact_if_needed!(expr!(a * b, &mut *ctx), a, b))
         }
     }

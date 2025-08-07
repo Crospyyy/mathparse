@@ -16,7 +16,6 @@ impl Element {
                 for n in elements {
                     sum = sum.plus(&n.eval(ctx)?, ctx);
                 }
-                println!("Evaluated {} to {}", self.get_debug_string(), sum.get_debug_string());
                 Some(sum)
             },
             Element::Multiply(elements) => {
@@ -24,16 +23,11 @@ impl Element {
                 for n in elements {
                     product = product.mul(&n.eval(ctx)?, ctx);
                 }
-                println!("Evaluated {} to {}", self.get_debug_string(), product.get_debug_string());
                 Some(product)
             },
             Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
             Element::Number(n) => Some(n.clone()),
-            Element::Pow(b, e) => {
-                let number = b.eval(ctx)?.pow(&e.eval(ctx)?, ctx);
-                println!("Evaluated {} to {}", self.get_debug_string(), number.get_debug_string());
-                Some(number)
-            },
+            Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
             Element::NumberWithExpression(fun) => Some(fun(ctx)),
             Element::FunctionWithExpression { arguments, expression, param_count } => match expression {
                 FunctionExpression::SingleArgument(fun) => {

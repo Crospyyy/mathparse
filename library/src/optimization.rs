@@ -69,7 +69,6 @@ impl Element {
         loop {
             let mut any_optimization = false;
             for optimization in Optimization::iter() {
-                dbg!(optimization);
                 if self.optimize(optimization) {
                     all_optimizations.push(optimization);
                     any_optimization = true;
