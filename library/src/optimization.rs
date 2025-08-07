@@ -1,4 +1,6 @@
 use crate::{Element, Number};
+use astro_float::{BigFloat, Error};
+use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
@@ -18,12 +20,56 @@ pub enum Optimization {
     FlattenPower,
 }
 
+impl PartialEq<i32> for Number {
+    fn eq(&self, other: &i32) -> bool {
+        match self {
+            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
+            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
+        }
+    }
+}
+
+impl PartialEq<i32> for &Number {
+    fn eq(&self, other: &i32) -> bool {
+        match self {
+            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
+            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
+        }
+    }
+}
+
+impl PartialEq<i32> for &Element {
+    fn eq(&self, other: &i32) -> bool {
+        self.get_number_inner().is_some_and(|n| n == other)
+    }
+}
+
+impl Element {
+    pub(crate) fn is(&self, other: i32) -> bool {
+        self.get_number_inner().is_some_and(|n| *n == other)
+    }
+
+    pub(crate) fn is_neg(&self, other: i32) -> bool {
+        self.get_negate_inner().is_some_and(|e| e.is(other))
+    }
+}
+
+impl Number {
+    pub(crate) fn is_negative(&self) -> bool {
+        match self {
+            Number::Rational(r) => r.is_negative(),
+            Number::Float(f) => f.is_negative(),
+        }
+    }
+}
+
 impl Element {
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
         let mut all_optimizations = Vec::new();
         loop {
             let mut any_optimization = false;
             for optimization in Optimization::iter() {
+                dbg!(optimization);
                 if self.optimize(optimization) {
                     all_optimizations.push(optimization);
                     any_optimization = true;
@@ -56,21 +102,26 @@ impl Element {
                 }
             },
             Optimization::OneOrZeroToAnyPower => {
-                if let Element::Pow(base, _) = self {
-                    let number = base.get_number_inner();
-                    if number == Some(&Number::from(1)) {
+                if let Element::Pow(base, exp) = self {
+                    if base.is(1) {
                         *self = Element::Number(Number::from(1));
                         found_optimization = true;
-                    } else if number == Some(&Number::from(0)) {
-                        *self = Element::Number(Number::from(0));
+                        return found_optimization;
+                    } else if base.is(0) {
+                        if exp.get_number_inner().is_some_and(|n| n.is_negative()) {
+                            *self = Element::Number(Number::nan(Some(Error::DivisionByZero)));
+                        } else {
+                            *self = Element::Number(Number::from(0));
+                        }
                         found_optimization = true;
+                        return found_optimization;
                     }
                 }
             },
             Optimization::MultiplyByOne => {
                 if let Element::Multiply(elements) = self {
                     let len_before = elements.len();
-                    elements.retain(|e| e.get_number_inner() != Some(&Number::from(1)));
+                    elements.retain(|e| !e.is(1));
                     found_optimization |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(1));
@@ -82,7 +133,7 @@ impl Element {
             Optimization::PlusZero => {
                 if let Element::Plus(elements) = self {
                     let len_before = elements.len();
-                    elements.retain(|e| e.get_number_inner() != Some(&Number::from(0)));
+                    elements.retain(|e| !e.is(0));
                     found_optimization |= len_before != elements.len();
                     if elements.is_empty() {
                         *self = Element::Number(Number::from(0));
@@ -101,13 +152,14 @@ impl Element {
             },
             Optimization::DivideBySame => {
                 fn b_is_inverse_of_a(a: &Element, b: &Element) -> bool {
-                    b.get_pow_inner().is_some_and(|(b_base, b_exponent)| {
-                        b_exponent.get_negate_inner().and_then(|e| e.get_number_inner())
-                            == Some(&Number::from(1))
-                            && *a == *b_base
-                    })
+                    b.get_pow_inner()
+                        .is_some_and(|(b_base, b_exponent)| b_exponent.is_neg(1) && *a == *b_base)
                 }
                 if let Element::Multiply(elements) = self {
+                    if Self::contains_division_by_zero(elements) {
+                        *self = Element::Number(Number::nan(Some(Error::DivisionByZero)));
+                        return found_optimization;
+                    }
                     let mut to_remove = vec![false; elements.len()];
                     let mut found = false;
                     for i in 0..elements.len() {
@@ -148,9 +200,12 @@ impl Element {
             },
             Optimization::MultiplyByZero => {
                 if let Element::Multiply(elements) = self {
-                    let zero = Number::from(0);
-                    if elements.iter().any(|e| e.get_number_inner() == Some(&zero)) {
-                        *self = Element::Number(zero);
+                    if Self::contains_division_by_zero(elements) {
+                        *self = Element::Number(Number::nan(Some(Error::DivisionByZero)));
+                        return found_optimization;
+                    }
+                    if elements.iter().any(|e| e.is(0)) {
+                        *self = Element::Number(Number::from(0));
                         found_optimization = true;
                     }
                 }
@@ -196,7 +251,7 @@ impl Element {
                 }
             },
             Optimization::PowerOfZero => {
-                if self.get_pow_inner().and_then(|(_b, e)| e.get_number_inner()) == Some(&Number::from(0)) {
+                if self.get_pow_inner().is_some_and(|(_b, e)| e.is(0)) {
                     *self = Element::Number(Number::from(1));
                     found_optimization = true;
                 }
@@ -215,6 +270,13 @@ impl Element {
             },
         }
         found_optimization
+    }
+
+    fn contains_division_by_zero(elements: &mut Vec<Element>) -> bool {
+        elements.iter().any(|e| {
+            e.get_pow_inner()
+                .is_some_and(|(b, e)| b == 0 && e.get_number_inner().is_some_and(|n| n.is_negative()))
+        })
     }
 
     fn run_on_children(&mut self, operation: &mut impl Fn(&mut Element) -> bool) -> bool {

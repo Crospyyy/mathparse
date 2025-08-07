@@ -16,6 +16,7 @@ impl Element {
                 for n in elements {
                     sum = sum.plus(&n.eval(ctx)?, ctx);
                 }
+                println!("Evaluated {} to {}", self.get_debug_string(), sum.get_debug_string());
                 Some(sum)
             },
             Element::Multiply(elements) => {
@@ -23,11 +24,16 @@ impl Element {
                 for n in elements {
                     product = product.mul(&n.eval(ctx)?, ctx);
                 }
+                println!("Evaluated {} to {}", self.get_debug_string(), product.get_debug_string());
                 Some(product)
             },
             Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
             Element::Number(n) => Some(n.clone()),
-            Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
+            Element::Pow(b, e) => {
+                let number = b.eval(ctx)?.pow(&e.eval(ctx)?, ctx);
+                println!("Evaluated {} to {}", self.get_debug_string(), number.get_debug_string());
+                Some(number)
+            },
             Element::NumberWithExpression(fun) => Some(fun(ctx)),
             Element::FunctionWithExpression { arguments, expression, param_count } => match expression {
                 FunctionExpression::SingleArgument(fun) => {
@@ -211,7 +217,7 @@ mod tests {
         let mut ctx = create_default_context();
         store.add_symbol_from_string("f(x)=x^2", false).unwrap();
         store.add_symbol_from_string("a=4", false).unwrap();
-        assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16.into());
+        assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16);
         assert!(store.eval("f", &mut ctx).is_err());
     }
 
@@ -300,8 +306,8 @@ mod tests {
         );
 
         store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
-        assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), (1 + 2 + 1 + 2).into());
+        assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2);
         store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
-        assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), (1 + 2 + 1 + 2 + 1).into());
+        assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2 + 1);
     }
 }

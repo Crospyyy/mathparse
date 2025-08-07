@@ -28,11 +28,17 @@ macro_rules! inexact_if_needed {
         result
     }};
     ($expr:expr, $item:ident, $item2:ident) => {{
-        let mut result = $expr;
-        if $item.inexact() || $item2.inexact() {
-            result.set_inexact(true);
+        if $item.is_nan() {
+            $item.clone()
+        } else if $item2.is_nan() {
+            $item2.clone()
+        } else {
+            let mut result = $expr;
+            if $item.inexact() || $item2.inexact() {
+                result.set_inexact(true);
+            }
+            result
         }
-        result
     }};
 }
 
@@ -67,14 +73,14 @@ mod helper_functions {
             // x1/x2 ^ 0 = 1
             return Number::from(BigRational::one()); // any number to the power of 0 is 1
         }
+        if exponent.is_negative() && base.is_zero() {
+            return Number::nan(Some(Error::DivisionByZero));
+        }
         if exponent.is_integer() {
             // x1/x2 ^ n = (x1^n)/(x2^n)
             let Some(exp) = exponent.to_i32() else {
                 safe_return_float_calculation!();
             };
-            if exp.is_negative() && base.is_zero() {
-                return Number::nan(Some(Error::DivisionByZero));
-            }
             return Number::from(base.pow(exp));
         }
 
@@ -370,12 +376,13 @@ impl Number {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             Self::from(a * b)
         } else {
-            if self.get_exact_rational().is_some_and(|r| r.is_zero())
-                || self.get_exact_rational().is_some_and(|r| r.is_zero())
-            {
-                return Number::from(0);
+            if self.is_nan() {
+                return self.clone();
+            } else if other.is_nan() {
+                return other.clone();
             }
             let (a, b) = (self.get_float(ctx), other.get_float(ctx));
+            println!("Multiplying {} and {}", a, b);
             Self::from(inexact_if_needed!(expr!(a * b, &mut *ctx), a, b))
         }
     }
