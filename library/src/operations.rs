@@ -1,6 +1,6 @@
 use crate::operations::helper_functions::{float_to_exact_rational, power_rational_and_rational};
 use crate::printing::{FormattingOptions, ScientificNumber};
-use crate::{Number, NumberContext};
+use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use num_rational::BigRational;
@@ -215,6 +215,50 @@ impl PartialEq for Number {
         }
     }
 }
+
+impl PartialEq<i32> for Number {
+    fn eq(&self, other: &i32) -> bool {
+        match self {
+            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
+            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
+        }
+    }
+}
+
+impl PartialEq<i32> for &Number {
+    fn eq(&self, other: &i32) -> bool {
+        match self {
+            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
+            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
+        }
+    }
+}
+
+impl PartialEq<i32> for &Element {
+    fn eq(&self, other: &i32) -> bool {
+        self.get_number_inner().is_some_and(|n| n == other)
+    }
+}
+
+impl Element {
+    pub(crate) fn is(&self, other: i32) -> bool {
+        self.get_number_inner().is_some_and(|n| *n == other)
+    }
+
+    pub(crate) fn is_neg(&self, other: i32) -> bool {
+        self.get_negate_inner().is_some_and(|e| e.is(other))
+    }
+}
+
+impl Number {
+    pub(crate) fn is_negative(&self) -> bool {
+        match self {
+            Number::Rational(r) => r.is_negative(),
+            Number::Float(f) => f.is_negative(),
+        }
+    }
+}
+
 
 static REGEX_NUMBER_UNDERSCORE_REMOVAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)_(\d)").unwrap());
 

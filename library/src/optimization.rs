@@ -20,49 +20,6 @@ pub enum Optimization {
     FlattenPower,
 }
 
-impl PartialEq<i32> for Number {
-    fn eq(&self, other: &i32) -> bool {
-        match self {
-            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
-            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
-        }
-    }
-}
-
-impl PartialEq<i32> for &Number {
-    fn eq(&self, other: &i32) -> bool {
-        match self {
-            Number::Rational(r) => r.is_integer() && r.to_i32() == Some(*other),
-            Number::Float(f) => f.is_int() && f == &BigFloat::from(*other),
-        }
-    }
-}
-
-impl PartialEq<i32> for &Element {
-    fn eq(&self, other: &i32) -> bool {
-        self.get_number_inner().is_some_and(|n| n == other)
-    }
-}
-
-impl Element {
-    pub(crate) fn is(&self, other: i32) -> bool {
-        self.get_number_inner().is_some_and(|n| *n == other)
-    }
-
-    pub(crate) fn is_neg(&self, other: i32) -> bool {
-        self.get_negate_inner().is_some_and(|e| e.is(other))
-    }
-}
-
-impl Number {
-    pub(crate) fn is_negative(&self) -> bool {
-        match self {
-            Number::Rational(r) => r.is_negative(),
-            Number::Float(f) => f.is_negative(),
-        }
-    }
-}
-
 impl Element {
     pub fn optimize_all(&mut self) -> Vec<Optimization> {
         let mut all_optimizations = Vec::new();
@@ -300,14 +257,14 @@ impl Element {
 
 macro_rules! implement_internal {
     ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
-        fn $name(&self) -> Option<&$return_type> {
+        pub(crate) fn $name(&self) -> Option<&$return_type> {
             match self {
                 Element::$enum_name($inner_name) => Some($inner_name),
                 _ => None,
             }
         }
 
-        fn $name_mut(&mut self) -> Option<&mut $return_type> {
+        pub(crate) fn $name_mut(&mut self) -> Option<&mut $return_type> {
             match self {
                 Element::$enum_name($inner_name) => Some($inner_name),
                 _ => None,
