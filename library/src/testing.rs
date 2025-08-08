@@ -36,7 +36,9 @@ macro_rules! formula {
 
 #[macro_export]
 macro_rules! formula_matches {
+    ($a:expr, num(_)) => {formula_matches!($a, num)};
     ($a:expr, num($n:expr)) => {$a.is($n)};
+    ($a:expr, num) => {matches!($a, Element::Number(_))};
     ($a:expr, plus($($op:ident($args:tt)),*)) => {
         match $a {
             Element::Plus(elements) => {
@@ -73,18 +75,25 @@ macro_rules! formula_matches {
     };
 }
 
-macro_rules! verify_formula_matches {
-    ($($tts:tt)+) => {assert!(formula_matches!(formula!($($tts)+),$($tts)+))};
-}
+#[cfg(test)]
+mod test {
+    use crate::Number;
 
-#[test]
-fn test_formula_macro() {
-    use crate::Element;
+    macro_rules! verify_formula_matches {
+        ($($tts:tt)+) => {assert!(formula_matches!(formula!($($tts)+),$($tts)+))};
+    }
 
-    verify_formula_matches!(num(123));
-    verify_formula_matches!(neg(num(123)));
-    verify_formula_matches!(num(123));
-    verify_formula_matches!(neg(num(123)));
-    verify_formula_matches!(pow(num(123), num(123)));
-    verify_formula_matches!(plus(num(123), num(123)));
+    #[test]
+    fn test_formula_macro() {
+        use crate::Element;
+
+        formula_matches!(formula!(num(123)), num(_));
+        formula_matches!(formula!(num(123)), num);
+        verify_formula_matches!(num(123));
+        verify_formula_matches!(neg(num(123)));
+        verify_formula_matches!(num(123));
+        verify_formula_matches!(neg(num(123)));
+        verify_formula_matches!(pow(num(123), num(123)));
+        verify_formula_matches!(plus(num(123), num(123)));
+    }
 }
