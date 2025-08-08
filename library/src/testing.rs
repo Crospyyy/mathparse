@@ -34,49 +34,57 @@ macro_rules! formula {
     };
 }
 
+#[macro_export]
 macro_rules! formula_matches {
-    ($a:expr, num($n:expr)) => {{
-        let e: &Element = $a;
-        e.is($n)
-    }};
-    ($a:expr, plus($($op:ident($args:tt)),*)) => {{
-        let e: &Element = $a;
-        match e {
+    ($a:expr, num($n:expr)) => {$a.is($n)};
+    ($a:expr, plus($($op:ident($args:tt)),*)) => {
+        match $a {
             Element::Plus(elements) => {
                 let mut elements_iter = elements.iter();
-                (||{$({
-                    let Some(this_element) = elements_iter.next() else {
-                        return false;
-                    };
-                    if !formula_matches!(this_element, $op($args)) {
-                        return false;
-                    }
-                };)*
-                return true;
-                })() && elements_iter.next().is_none()
+                $(elements_iter.next().is_some_and(|e| formula_matches!(e, $op($args))))&& * && elements_iter.next().is_none()
             }
             _ => false,
         }
-    }};
+    };
+    ($a:expr, mul($($op:ident($args:tt)),*)) => {
+        match $a {
+            Element::Multiply(elements) => {
+                let mut elements_iter = elements.iter();
+                $(elements_iter.next().is_some_and(|e| formula_matches!(e, $op($args))))&& * && elements_iter.next().is_none()
+            }
+            _ => false,
+        }
+    };
+    ($a:expr, neg($op:ident($args:tt))) => {
+        match $a {
+            Element::Negate(e) => {
+                formula_matches!(e, $op($args))
+            }
+            _ => false,
+        }
+    };
+    ($a:expr, pow($op1:ident($args1:tt), $op2:ident($args2:tt))) => {
+        match $a {
+            Element::Pow(b, e) => {
+                formula_matches!(b, $op1($args1)) && formula_matches!(e, $op2($args2))
+            }
+            _ => false,
+        }
+    };
+}
+
+macro_rules! verify_formula_matches {
+    ($($tts:tt)+) => {assert!(formula_matches!(formula!($($tts)+),$($tts)+))};
 }
 
 #[test]
 fn test_formula_macro() {
     use crate::Element;
 
-    let some_bool = 'idk: {
-        if false {
-            break 'idk false;
-        }
-        true
-    };
-
-    assert!(formula_matches!(&formula!(plus(num(123), num(123))), plus(num(123), num(123))));
-    assert!(!formula_matches!(&formula!(plus(num(123), num(123))), plus(num(123))));
-    assert!(formula_matches!(&formula!(num(123)), num(123)));
-
-    let elem = formula!(pow(num(1), num(2)));
-    let elem = formula!(num(123));
-    let elem = formula!(neg(num(123)));
-    let elem = formula!(plus(num(42), num(58)));
+    verify_formula_matches!(num(123));
+    verify_formula_matches!(neg(num(123)));
+    verify_formula_matches!(num(123));
+    verify_formula_matches!(neg(num(123)));
+    verify_formula_matches!(pow(num(123), num(123)));
+    verify_formula_matches!(plus(num(123), num(123)));
 }
