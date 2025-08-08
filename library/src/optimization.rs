@@ -255,6 +255,52 @@ impl Element {
     }
 }
 
+impl Element {
+    fn is_negative_of(&self, other: &Element) -> bool {
+        self.get_negate_inner().is_some_and(|n| n == other)
+            || other.get_negate_inner().is_some_and(|n| n == self)
+    }
+}
+
+impl Element {
+    pub(crate) fn optimize_new(&mut self) {
+        self.run_on_children(&mut |child| {
+            child.optimize_new();
+            false
+        });
+        match self {
+            Element::Plus(elements) => {
+                if let Some(e) = elements.iter().find(|e| e.is_nan()) {
+                    *self = e.clone();
+                    return;
+                }
+                if elements.iter().any(|e| e.is(0)) {
+                    elements.retain(|e| !e.is(0));
+                    if elements.is_empty() {
+                        *self = Element::Number(Number::from(0));
+                        return;
+                    } else if elements.len() == 1 {
+                        *self = elements.remove(0);
+                        return;
+                    }
+                }
+            },
+            Element::Negate(_) => {},
+            Element::Multiply(_) => {},
+            Element::Pow(_, _) => {},
+
+            Element::Function { .. }
+            | Element::Variable(_)
+            | Element::VariableOrFunction(_)
+            | Element::FunctionWithExpression { .. }
+            | Element::NumberWithExpression(_)
+            | Element::Number(_)
+            | Element::Brackets(_)
+            | Element::String(_) => {},
+        }
+    }
+}
+
 macro_rules! implement_internal {
     ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
         pub(crate) fn $name(&self) -> Option<&$return_type> {

@@ -248,6 +248,10 @@ impl Element {
     pub(crate) fn is_neg(&self, other: i32) -> bool {
         self.get_negate_inner().is_some_and(|e| e.is(other))
     }
+
+    pub(crate) fn is_nan(&self) -> bool {
+        self.get_number_inner().is_some_and(|n| n.is_nan())
+    }
 }
 
 impl Number {
