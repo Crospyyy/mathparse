@@ -1,4 +1,6 @@
 mod some_future_work {
+    use crate::Element;
+
     macro_rules! write_if_true {
         (true, $($tts:tt),+) => {
             $($tts),+
@@ -20,14 +22,58 @@ mod some_future_work {
         };
     }
 
-    // #[test]
-    // fn idk() {
-    //     let x = any!(false, false);
-    // }
 
     macro_rules! input_contains_var {
         ($($tts:tt),+) => {
             input_contains_var!()
+        };
+    }
+
+    #[macro_export]
+    macro_rules! match_formula {
+        ($a:expr, x()) => {Some($a)};
+        ($a:expr, num(x)) => {match $a {
+            Element::Number(n)=> Some(n),
+            _ => None,
+        }};
+        ($a:expr, plus(x)) => {
+            match $a {
+                Element::Plus(elements) => {
+                    Some(elements)
+                }
+                _ => None,
+            }
+        };
+        ($a:expr, mul(x)) => {
+            match $a {
+                Element::Multiply(elements) => {
+                    Some(elements)
+                }
+                _ => None,
+            }
+        };
+        ($a:expr, pow(x)) => {
+            match $a {
+                Element::Pow(b, e) => {
+                    Some((b, e))
+                }
+                _ => None,
+            }
+        };
+        ($a:expr, plus($($op:ident($args:tt)),*)) => {
+            ||{
+                match $a {
+                    Element::Plus(elements) => {
+                        let mut elements_iter = elements.iter();
+                        let return_val = ($(elements_iter.next().and_then(|e| match_formula!(e, $op($args)))?), *)
+                        if elements_iter.next().is_some() {
+                            return None;
+                        }
+                        Some(return_val)
+                    }
+                    _ => None,
+                }
+            }()
         };
     }
 }
