@@ -200,7 +200,7 @@ mod test {
             };
         }
         let formula = formula!(num(123));
-        let option = match_formula_proc!(formula, num);
+        let option = match_formula_proc!(formula, num(123));
         assert_eq!(option, Some(()));
     }
 }
