@@ -22,7 +22,6 @@ mod some_future_work {
         };
     }
 
-
     macro_rules! input_contains_var {
         ($($tts:tt),+) => {
             input_contains_var!()
@@ -165,7 +164,9 @@ macro_rules! formula_matches {
 
 #[cfg(test)]
 mod test {
+    use crate::Element;
     use crate::Number;
+    use macros::match_formula_proc;
 
     macro_rules! verify_formula_matches {
         ($($tts:tt)+) => {assert!(formula_matches!(formula!($($tts)+),$($tts)+))};
@@ -188,5 +189,18 @@ mod test {
         verify_formula_matches!(neg(num(123)));
         verify_formula_matches!(pow(num(123), num(123)));
         verify_formula_matches!(plus(num(123), num(123)));
+    }
+
+    #[test]
+    fn test_proc_macros() {
+        macro_rules! test_matching {
+            ($l:ident($($formula:tt)*), $matching:expr, $result: expr) => {
+                let formula = formula!($l($($formula)*));
+                assert_eq!(match_formula_proc!(formula, $matching), $result);
+            };
+        }
+        let formula = formula!(num(123));
+        let option = match_formula_proc!(formula, num);
+        assert_eq!(option, Some(()));
     }
 }
