@@ -1,5 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
+use quote::__private::ext::RepToTokensExt;
 use quote::quote;
 use std::str::FromStr;
 
@@ -52,32 +53,32 @@ impl MatchElement {
 #[proc_macro]
 pub fn match_formula_proc(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
-    let mut iter = input.into_iter();
-    // expr bis Komma
-    let mut expr_tokens = Vec::new();
-    while let Some(tt) = iter.next() {
-        if let TokenTree::Punct(p) = &tt {
-            if p.as_char() == ',' {
-                break;
-            }
-        }
-        expr_tokens.push(tt);
+
+    let input_args = split_by_comma(input);
+    if input_args.len() != 2 {
+        panic!("expected exactly two arguments");
     }
-    let expr_ts: TokenStream2 = expr_tokens.into_iter().collect();
+    let mut input_args_iter = input_args.into_iter();
+
+    let formula = input_args_iter.next().unwrap();
+    let match_expr = input_args_iter.next().unwrap();
+
+    let formula_ts: TokenStream2 = formula.into_iter().collect();
+
     // ident
-    let ident = match iter.next() {
+    if match_expr.len() > 2 {
+        panic!("Expected no more than two tokens in match expression");
+    }
+    let match_ident = match match_expr.get(0) {
         Some(TokenTree::Ident(i)) => i,
         _ => panic!("expected identifier"),
     };
-    // optionale innere Tokentrees
-    let inner_elements = iter.next().map(|tt| match tt {
+    let inner_elements = match_expr.get(1).map(|tt| match tt {
         TokenTree::Group(g) => split_by_comma(g.stream()),
         _ => panic!("unexpected token after identifier"),
     });
-    if iter.next().is_some() {
-        panic!("unexpected tokens after inner group");
-    }
-    let name = ident.to_string();
+
+    let name = match_ident.to_string();
     let match_element = MatchElement::from_str(&name).expect("unexpected element to match on");
     if let Some(operation_args) = inner_elements {
         match match_element {
@@ -92,7 +93,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                         }
                         quote! {
                             {
-                                let __expr = #expr_ts;
+                                let __expr = #formula_ts;
                                 match __expr {
                                     Element::Number(n) => Some(n),
                                     _ => None,
@@ -103,7 +104,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                     TokenTree::Literal(l) => {
                         quote! {
                             {
-                                let __expr = #expr_ts;
+                                let __expr = #formula_ts;
                                 match __expr {
                                     Element::Number(n) => {
                                         (n != #l).then_some(())
@@ -125,6 +126,10 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                 let base: TokenStream2 = operation_args[0].clone().into_iter().collect();
                 let exponent: TokenStream2 = operation_args[1].clone().into_iter().collect();
 
+                // todo create some code that works for an arbitrary number of inputs to process and outputs
+                // Naming of the inner variables could be like 'var_0', 'var_1', ..., 'var_n'
+                // Only count the variables, which actually have a value
+
                 let include_base = base.to_string().contains("x");
                 let include_exponent = exponent.to_string().contains("x");
 
@@ -145,7 +150,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                 let output = TokenStream2::from_str(&format!("Some(({}))", string)).unwrap();
                 quote! {
                     (||{
-                        let __expr = &#expr_ts;
+                        let __expr = &#formula_ts;
                         match &__expr {
                             Element::Pow(b, e) => {
                                 let base = #base_input;
@@ -164,7 +169,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
         let match_name = match_element.as_pattern();
         quote! {
             'outer: {
-                let __expr = #expr_ts;
+                let __expr = #formula_ts;
                 if !matches!(__expr, Element::#match_name {..}) { break 'outer None; }
                 Some(())
             }
