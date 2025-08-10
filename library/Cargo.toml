@@ -13,3 +13,4 @@ num-bigint = "0.4.6"
 num-traits = "0.2.19"
 strum = "0.27.2"
 strum_macros = "0.27.2"
+macros = { path = "../macros" }
