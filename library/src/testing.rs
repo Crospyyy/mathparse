@@ -195,16 +195,12 @@ mod test {
     fn test_proc_macros() {
         macro_rules! test_matching {
             ($l:ident($($formula:tt)*), $m:ident($($m_formula:tt)*), $result: pat) => {
-                let formula = formula!($l($($formula)*));
-                assert!(matches!(match_formula_proc!(formula, $m($($m_formula)*)), $result));
+                assert!(matches!(match_formula_proc!(formula!($l($($formula)*)), $m($($m_formula)*)), $result));
             };
         }
-        test_matching!(num(123), num(123), Some(()));
+        assert!(matches!(match_formula_proc!(formula!(num(123)), num(123)), Some(())));
         assert!(match_formula_proc!(formula!(num(123)), num(x)).is_some_and(|x| x == 123));
-        test_matching!(num(123), num(122), None);
+        assert!(matches!(match_formula_proc!(formula!(num(123)), num(122)), None));
         assert!(matches!(match_formula_proc!(formula!(pow(num(123), num(456))), pow), Some(())));
-
-        let f = formula!(pow(num(123), num(456)));
-        let match_result = match_formula_proc!(f, pow(pow(num(x), num(x)), num(x)));
     }
 }

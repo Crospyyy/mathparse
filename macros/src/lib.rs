@@ -80,7 +80,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
 
     let name = match_ident.to_string();
     let match_element = MatchElement::from_str(&name).expect("unexpected element to match on");
-    if let Some(operation_args) = inner_elements {
+    let match_stream: TokenStream2 = if let Some(operation_args) = inner_elements {
         match match_element {
             MatchElement::Number => {
                 if operation_args.len() != 1 || operation_args[0].len() != 1 {
@@ -91,90 +91,92 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                         if i.to_string() != "x" {
                             panic!("expected identifier 'x' as inner element for num, got '{}'", i);
                         }
-                        quote! {
-                            {
-                                let __expr = #formula_ts;
-                                match __expr {
-                                    Element::Number(n) => Some(n),
-                                    _ => None,
-                                }
-                            }
-                        }
+                        quote! { Element::Number(n) => Some(n) }
                     },
                     TokenTree::Literal(l) => {
-                        quote! {
-                            {
-                                let __expr = #formula_ts;
-                                match __expr {
-                                    Element::Number(n) => {
-                                        (n != #l).then_some(())
-                                    },
-                                    _ => None
-                                }
-                            }
-                        }
+                        quote! { Element::Number(n) => { (n == #l).then_some(()) } }
                     },
                     _ => panic!("expected identifier or literal as inner element for num"),
                 }
             },
-            MatchElement::Plus => todo!(),
-            MatchElement::Multiply => todo!(),
+            MatchElement::Plus => {
+                let expected_elements = operation_args.len();
+                let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
+                let variables_ts_stream = create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(args);
+                quote! {
+                    Element::Plus(inputs) => {
+                        if inputs.len() != #expected_elements {
+                            return None;
+                        }
+                        #variables_ts_stream
+                        #outputs_ts_stream
+                    }
+                }
+            },
+            MatchElement::Multiply => {
+                let expected_elements = operation_args.len();
+                let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
+                let variables_ts_stream = create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(args);
+                quote! {
+                    Element::Multiply(inputs) => {
+                        if inputs.len() != #expected_elements {
+                            return None;
+                        }
+                        #variables_ts_stream
+                        #outputs_ts_stream
+                    }
+                }
+            },
             MatchElement::Pow => {
                 if operation_args.len() != 2 {
                     panic!("expected exactly two inner elements for pow");
                 }
-                let base: TokenStream2 = operation_args[0].clone().into_iter().collect();
-                let exponent: TokenStream2 = operation_args[1].clone().into_iter().collect();
-
-                // todo create some code that works for an arbitrary number of inputs to process and outputs
-                // Naming of the inner variables could be like 'var_0', 'var_1', ..., 'var_n'
-                // Only count the variables, which actually have a value
-
-                let include_base = base.to_string().contains("x");
-                let include_exponent = exponent.to_string().contains("x");
-
-                let base_input = if base.to_string() == "x" {
-                    quote! { b }
-                } else {
-                    quote! { match_formula_proc!(b.as_ref(), #base)? }
-                };
-                let exponent_input = if exponent.to_string() == "x" {
-                    quote! { e }
-                } else {
-                    quote! { match_formula_proc!(e.as_ref(), #exponent)? }
-                };
-
-                let outputs = [(include_base, "base"), (include_exponent, "exponent")];
-
-                let string = outputs.iter().filter(|x| x.0).map(|x| x.1).collect::<Vec<_>>().join(", ");
-                let output = TokenStream2::from_str(&format!("Some(({}))", string)).unwrap();
+                let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
+                let var_ts_stream = create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(args);
                 quote! {
-                    (||{
-                        let __expr = &#formula_ts;
-                        match &__expr {
-                            Element::Pow(b, e) => {
-                                let base = #base_input;
-                                let exponent = #exponent_input;
-                                #output
-                            },
-                            _ => None
-                        }
-                    })()
+                    Element::Pow(b, e) => {
+                        let inputs = [b.as_ref(), e.as_ref()];
+                        #var_ts_stream
+                        #outputs_ts_stream
+                    },
                 }
             },
-            MatchElement::Variable => todo!(),
-            MatchElement::Function => todo!(),
+            MatchElement::Variable => {
+                if operation_args.len() != 1 || operation_args[0].len() != 1 {
+                    panic!("expected exactly one inner element for var");
+                }
+                if operation_args[0][0].to_string() != "x" {
+                    panic!("expected identifier 'x' as inner element for var");
+                }
+                quote! { Element::Variable(n) => Some(n) }
+            },
+            MatchElement::Function => {
+                if operation_args.len() != 1 || operation_args[0].len() != 1 {
+                    panic!("expected exactly one inner element for var");
+                }
+                if operation_args[0][0].to_string() != "x" {
+                    panic!("expected identifier 'x' as inner element for var");
+                }
+                quote! { Element::Function(n) => Some(n) }
+            },
         }
     } else {
         let match_name = match_element.as_pattern();
         quote! {
-            'outer: {
-                let __expr = #formula_ts;
-                if !matches!(__expr, Element::#match_name {..}) { break 'outer None; }
-                Some(())
-            }
+            Element::#match_name {..} => Some(())
         }
     }
+        .into();
+    quote! {(||{
+        let __expr = #formula_ts;
+        match __expr {
+            #match_stream,
+            _ => None,
+        }
+    })()}
         .into()
 }
 
@@ -198,4 +200,41 @@ fn split_by_comma(ts: TokenStream2) -> Vec<Vec<TokenTree>> {
         result.push(segment);
     }
     result
+}
+
+fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
+    ts.into_iter()
+        .enumerate()
+        .map(|(i, ts)| {
+            let var_name =
+                TokenStream2::from(TokenTree::Ident(Ident::new(&create_var_name(i), Span::call_site())));
+            if ts.to_string() == "x" {
+                quote! {
+                    let #var_name = inputs[#i];
+                }
+            } else if ts.to_string().contains("x") {
+                quote! {
+                    let #var_name = match_formula_proc!(inputs[#i], #ts)?;
+                }
+            } else {
+                quote! {
+                    match_formula_proc!(inputs[#i], #ts)?;
+                }
+            }
+        })
+        .collect()
+}
+
+fn create_var_name(i: usize) -> String {
+    format!("var_{}", i)
+}
+
+fn create_outputs(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
+    let string = ts
+        .into_iter()
+        .enumerate()
+        .flat_map(|(i, x)| x.to_string().contains("x").then(|| create_var_name(i)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    TokenStream2::from_str(&format!("Some(({}))", string)).expect("could not create output")
 }
