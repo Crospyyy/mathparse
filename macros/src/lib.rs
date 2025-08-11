@@ -6,6 +6,7 @@ use std::str::FromStr;
 
 enum MatchElement {
     Number,
+    Negate,
     Plus,
     Multiply,
     Pow,
@@ -22,6 +23,7 @@ impl MatchElement {
             "pow" => Some(MatchElement::Pow),
             "var" => Some(MatchElement::Variable),
             "fun" => Some(MatchElement::Function),
+            "neg" => Some(MatchElement::Negate),
             _ => None,
         }
     }
@@ -29,6 +31,7 @@ impl MatchElement {
     fn as_str(&self) -> &str {
         match self {
             MatchElement::Number => "num",
+            MatchElement::Negate => "neg",
             MatchElement::Plus => "plus",
             MatchElement::Multiply => "mul",
             MatchElement::Pow => "pow",
@@ -40,6 +43,7 @@ impl MatchElement {
     fn as_pattern(&self) -> TokenTree {
         let name = match self {
             MatchElement::Number => "Number",
+            MatchElement::Negate => "Negate",
             MatchElement::Plus => "Plus",
             MatchElement::Multiply => "Multiply",
             MatchElement::Pow => "Pow",
@@ -141,7 +145,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                         let inputs = [b.as_ref(), e.as_ref()];
                         #var_ts_stream
                         #outputs_ts_stream
-                    },
+                    }
                 }
             },
             MatchElement::Variable => {
@@ -154,13 +158,34 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
                 quote! { Element::Variable(n) => Some(n) }
             },
             MatchElement::Function => {
-                if operation_args.len() != 1 || operation_args[0].len() != 1 {
-                    panic!("expected exactly one inner element for var");
+                let expected_elements = operation_args.len();
+                let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
+                let variables_ts_stream = create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(args);
+                quote! {
+                    Element::Function { arguments: inputs, .. } => {
+                        if inputs.len() != #expected_elements {
+                            return None;
+                        }
+                        #variables_ts_stream
+                        #outputs_ts_stream
+                    }
                 }
-                if operation_args[0][0].to_string() != "x" {
-                    panic!("expected identifier 'x' as inner element for var");
+            },
+            MatchElement::Negate => {
+                if operation_args.len() != 1 {
+                    panic!("expected exactly one inner element for neg");
                 }
-                quote! { Element::Function(n) => Some(n) }
+                let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
+                let variables_ts_stream = create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(args);
+                quote! {
+                    Element::Negate(element) => {
+                        let inputs = [element.as_ref()];
+                        #variables_ts_stream
+                        #outputs_ts_stream
+                    }
+                }
             },
         }
     } else {
@@ -171,7 +196,7 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
     }
         .into();
     quote! {(||{
-        let __expr = #formula_ts;
+        let __expr = &#formula_ts;
         match __expr {
             #match_stream,
             _ => None,
