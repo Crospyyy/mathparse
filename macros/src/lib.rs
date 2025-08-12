@@ -56,21 +56,21 @@ impl MatchElement {
 
 struct MatchInput {
     formula: TokenStream2,
-    match_ident: Ident,
-    inner_elements: Option<Vec<Vec<TokenTree>>>,
+    matcher: TokenStream2,
 }
 
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
-    let MatchInput { formula, match_ident, inner_elements } = process_input(input);
-    let stream = create_code(formula, match_ident, inner_elements);
+
+    let MatchInput { formula, matcher } = process_input(input);
+    let stream = create_code(formula, matcher);
+
     stream.into()
 }
 
-fn create_code(
-    formula: TokenStream2, match_ident: Ident, inner_elements: Option<Vec<Vec<TokenTree>>>,
-) -> TokenStream2 {
+fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
+    let (match_ident, inner_elements) = generate_match_variables(matcher);
     if match_ident.to_string() == "_" && inner_elements.is_none() {
         return quote! {Some(())}.into();
     }
@@ -198,7 +198,7 @@ fn create_code(
 }
 
 fn process_input(input: TokenStream2) -> MatchInput {
-    let input_args = split_by_comma(input);
+    let input_args = split_by_comma_2(input);
     if input_args.len() != 2 {
         panic!("expected exactly two arguments");
     }
@@ -209,6 +209,11 @@ fn process_input(input: TokenStream2) -> MatchInput {
 
     let formula_ts: TokenStream2 = formula.into_iter().collect();
 
+    MatchInput { formula: formula_ts, matcher: match_expr }
+}
+
+fn generate_match_variables(match_expr: TokenStream2) -> (Ident, Option<Vec<Vec<TokenTree>>>) {
+    let match_expr = match_expr.into_iter().collect::<Vec<_>>();
     // ident
     if match_expr.len() > 2 {
         panic!("Expected no more than two tokens in match expression");
@@ -221,7 +226,7 @@ fn process_input(input: TokenStream2) -> MatchInput {
         TokenTree::Group(g) => split_by_comma(g.stream()),
         _ => panic!("unexpected token after identifier"),
     });
-    MatchInput { formula: formula_ts, match_ident, inner_elements }
+    (match_ident, inner_elements)
 }
 
 fn split_by_comma(ts: TokenStream2) -> Vec<Vec<TokenTree>> {
@@ -245,6 +250,27 @@ fn split_by_comma(ts: TokenStream2) -> Vec<Vec<TokenTree>> {
     }
     result
 }
+fn split_by_comma_2(ts: TokenStream2) -> Vec<TokenStream2> {
+    // initialisiere ergebnisvektor
+    let mut result = Vec::new();
+    // sammle tokens bis zum kommatrennzeichen
+    let mut segment = Vec::new();
+    for tt in ts.into_iter() {
+        if let TokenTree::Punct(p) = &tt {
+            if p.as_char() == ',' {
+                result.push(segment.into_iter().collect());
+                segment = Vec::new();
+                continue;
+            }
+        }
+        segment.push(tt);
+    }
+    // letztes segment hinzufügen wenn nicht leer
+    if !segment.is_empty() {
+        result.push(segment.into_iter().collect());
+    }
+    result
+}
 
 fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
     ts.into_iter()
@@ -256,13 +282,16 @@ fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
                 quote! {
                     let #var_name = inputs[#i];
                 }
-            } else if ts.to_string().contains("x") {
-                quote! {
-                    let #var_name = match_formula!(inputs[#i], #ts)?;
-                }
             } else {
-                quote! {
-                    match_formula!(inputs[#i], #ts)?;
+                let inner_call = create_code(quote! {inputs[#i]}, ts.clone());
+                if ts.to_string().contains("x") {
+                    quote! {
+                        let #var_name = #inner_call?;
+                    }
+                } else {
+                    quote! {
+                        #inner_call?;
+                    }
                 }
             }
         })
