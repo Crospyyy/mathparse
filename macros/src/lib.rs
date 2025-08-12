@@ -55,7 +55,7 @@ impl MatchElement {
 }
 
 #[proc_macro]
-pub fn match_formula_proc(item: TokenStream) -> TokenStream {
+pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
 
     let input_args = split_by_comma(input);
@@ -242,11 +242,11 @@ fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
                 }
             } else if ts.to_string().contains("x") {
                 quote! {
-                    let #var_name = match_formula_proc!(inputs[#i], #ts)?;
+                    let #var_name = match_formula!(inputs[#i], #ts)?;
                 }
             } else {
                 quote! {
-                    match_formula_proc!(inputs[#i], #ts)?;
+                    match_formula!(inputs[#i], #ts)?;
                 }
             }
         })

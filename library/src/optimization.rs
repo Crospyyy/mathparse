@@ -1,5 +1,6 @@
 use crate::{Element, Number};
 use astro_float::{BigFloat, Error};
+use macros::match_formula;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use strum::{EnumCount, IntoEnumIterator};
@@ -285,7 +286,12 @@ impl Element {
                     }
                 }
             },
-            Element::Negate(_) => {},
+            Element::Negate(n) => {
+                if let Some((e)) = match_formula!(n.as_ref(), neg(x)) {
+                    *self = e.clone();
+                    return;
+                }
+            },
             Element::Multiply(_) => {},
             Element::Pow(_, _) => {},
 
