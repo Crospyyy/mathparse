@@ -54,33 +54,23 @@ impl MatchElement {
     }
 }
 
+struct MatchInput {
+    formula: TokenStream2,
+    match_ident: Ident,
+    inner_elements: Option<Vec<Vec<TokenTree>>>,
+}
+
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
+    let MatchInput { formula, match_ident, inner_elements } = process_input(input);
+    let stream = create_code(formula, match_ident, inner_elements);
+    stream.into()
+}
 
-    let input_args = split_by_comma(input);
-    if input_args.len() != 2 {
-        panic!("expected exactly two arguments");
-    }
-    let mut input_args_iter = input_args.into_iter();
-
-    let formula = input_args_iter.next().unwrap();
-    let match_expr = input_args_iter.next().unwrap();
-
-    let formula_ts: TokenStream2 = formula.into_iter().collect();
-
-    // ident
-    if match_expr.len() > 2 {
-        panic!("Expected no more than two tokens in match expression");
-    }
-    let match_ident = match match_expr.get(0) {
-        Some(TokenTree::Ident(i)) => i,
-        _ => panic!("expected identifier"),
-    };
-    let inner_elements = match_expr.get(1).map(|tt| match tt {
-        TokenTree::Group(g) => split_by_comma(g.stream()),
-        _ => panic!("unexpected token after identifier"),
-    });
+fn create_code(
+    formula: TokenStream2, match_ident: Ident, inner_elements: Option<Vec<Vec<TokenTree>>>,
+) -> TokenStream2 {
     if match_ident.to_string() == "_" && inner_elements.is_none() {
         return quote! {Some(())}.into();
     }
@@ -199,13 +189,39 @@ pub fn match_formula(item: TokenStream) -> TokenStream {
     }
         .into();
     quote! {(||{
-        let __expr = &#formula_ts;
+        let __expr = &#formula;
         match __expr {
             #match_stream,
             _ => None,
         }
     })()}
-        .into()
+}
+
+fn process_input(input: TokenStream2) -> MatchInput {
+    let input_args = split_by_comma(input);
+    if input_args.len() != 2 {
+        panic!("expected exactly two arguments");
+    }
+    let mut input_args_iter = input_args.into_iter();
+
+    let formula = input_args_iter.next().unwrap();
+    let match_expr = input_args_iter.next().unwrap();
+
+    let formula_ts: TokenStream2 = formula.into_iter().collect();
+
+    // ident
+    if match_expr.len() > 2 {
+        panic!("Expected no more than two tokens in match expression");
+    }
+    let match_ident = match match_expr.get(0) {
+        Some(TokenTree::Ident(i)) => i.clone(),
+        _ => panic!("expected identifier"),
+    };
+    let inner_elements = match_expr.get(1).map(|tt| match tt {
+        TokenTree::Group(g) => split_by_comma(g.stream()),
+        _ => panic!("unexpected token after identifier"),
+    });
+    MatchInput { formula: formula_ts, match_ident, inner_elements }
 }
 
 fn split_by_comma(ts: TokenStream2) -> Vec<Vec<TokenTree>> {

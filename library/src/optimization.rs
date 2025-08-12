@@ -293,7 +293,9 @@ impl Element {
                 }
             },
             Element::Multiply(_) => {},
-            Element::Pow(_, _) => {},
+            Element::Pow(b, e) => {
+                // if match_formula!(b.as_ref(), num(1)) {  }
+            },
 
             Element::Function { .. }
             | Element::Variable(_)
