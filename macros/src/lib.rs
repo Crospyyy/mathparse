@@ -81,6 +81,9 @@ pub fn match_formula_proc(item: TokenStream) -> TokenStream {
         TokenTree::Group(g) => split_by_comma(g.stream()),
         _ => panic!("unexpected token after identifier"),
     });
+    if match_ident.to_string() == "_" && inner_elements.is_none() {
+        return quote! {Some(())}.into();
+    }
 
     let name = match_ident.to_string();
     let match_element = MatchElement::from_str(&name).expect("unexpected element to match on");

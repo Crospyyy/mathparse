@@ -247,7 +247,24 @@ mod test {
         }
 
         // any matcht immer
-        // assert!(matches!(match_formula_proc!(formula!(num(9)), any), Some(())));
+        let formulas = [
+            formula!(num(9)),
+            formula!(pow(num(1), num(2))),
+            formula!(plus(num(1), num(2))),
+            formula!(multiply(num(3), num(4))),
+            formula!(neg(num(5))),
+        ];
+        for f in formulas {
+            println!("Checking formula: {}", f.get_debug_string());
+            assert!(matches!(match_formula_proc!(f, _), Some(())));
+        }
+
+        let f = formula!(pow(num(1), num(2)));
+        assert!(matches!(match_formula_proc!(f, _), Some(())));
+        assert!(matches!(match_formula_proc!(f, pow(_, _)), Some(())));
+        assert!(matches!(match_formula_proc!(f, pow(num(1), _)), Some(())));
+        assert!(matches!(match_formula_proc!(f, pow(_, num(2))), Some(())));
+        assert!(matches!(match_formula_proc!(f, pow(num(1), num(2))), Some(())));
 
         // fehlgeschlagene patterns
         assert!(matches!(match_formula_proc!(formula!(num(10)), num(11)), None));
