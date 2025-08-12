@@ -94,17 +94,17 @@ macro_rules! fancy_assert_eq {
 
 #[macro_export]
 macro_rules! formula {
-    (plus($($op:ident($args:tt)),*)) => {
-        Element::Plus(vec![$(formula!($op($args))),*])
+    (plus($($op:ident($($args:tt)*)),*)) => {
+        Element::Plus(vec![$(formula!($op($($args)*))),*])
     };
-    (neg($op:ident($args:tt))) => {
-        Element::Negate(Box::new(formula!($op($args))))
+    (neg($op:ident($($args:tt)*))) => {
+        Element::Negate(Box::new(formula!($op($($args)*))))
     };
-    (pow($op:ident($args:tt), $op2:ident($args2:tt))) => {
-        Element::Pow(Box::new(formula!($op($args))), Box::new(formula!($op2($args2))))
+    (pow($op:ident($($args:tt)*), $op2:ident($($args2:tt)*))) => {
+        Element::Pow(Box::new(formula!($op($($args)*))), Box::new(formula!($op2($($args2)*))))
     };
-    (multiply($($op:ident($args:tt)),*)) => {
-        Element::Multiply(vec![$(formula!($op($args))),*])
+    (multiply($($op:ident($($args:tt)*)),*)) => {
+        Element::Multiply(vec![$(formula!($op($($args)*))),*])
     };
     (num($n:expr)) => {
         Element::Number(Number::from($n))
@@ -265,6 +265,15 @@ mod test {
         assert!(matches!(match_formula_proc!(f, pow(num(1), _)), Some(())));
         assert!(matches!(match_formula_proc!(f, pow(_, num(2))), Some(())));
         assert!(matches!(match_formula_proc!(f, pow(num(1), num(2))), Some(())));
+        assert!(matches!(match_formula_proc!(f, pow(num(1), num(2))), Some(())));
+        let f = formula!(pow(num(1), pow(num(2), num(3))));
+        let (n1, (n2, n3)) =
+            match_formula_proc!(f, pow(num(x), pow(num(x), num(x)))).expect("This should not fail");
+        {
+            assert_eq!(n1, &Number::from(1));
+            assert_eq!(n2, &Number::from(2));
+            assert_eq!(n3, &Number::from(3));
+        }
 
         // fehlgeschlagene patterns
         assert!(matches!(match_formula_proc!(formula!(num(10)), num(11)), None));
