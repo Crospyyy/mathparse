@@ -3,48 +3,48 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
 use quote::{TokenStreamExt, quote};
 use std::str::FromStr;
 
-/// Usage:\
-/// Element matcher: \[EM\]
-/// - Expression
-///     - `{some_expr}`: only match if the compared element is equal to the result of `some_expr`
-///     - `{some_expr}..`: only match if all the compared elements are equal to the elements inside the array `some_expr`
-/// - Get Element
-///     - `x`: get the value of one Element
-///     - `x..`: get the values of all the Elements as an array
-///     - `x, x, x`: get the values of multiple Elements as an array
-/// - Match Any
-///     - `_`: match any element
-/// - Number
-///     - `num`: match any number element
-///     - `num([NM])`: match the inner value of the number element
-/// - Variable
-///     - `var`: match any variable element
-///     - `var([SM])`: match the inner value of the variable element
-/// - Negate
-///     - `neg`: match any negate element
-///     - `neg([EM])`: match the inner element of the negate element
-/// - Plus
-///     - `plus`: match any plus element
-///     - `plus([EM]..)`: match the elements inside the plus element
-/// - Multiply
-///     - `mul`: match any multiply element
-///     - `mul([EM]..)`: match the elements inside the multiply element
-/// - Pow
-///     - `pow`: match any power element
-///     - `pow([EM]..)`: match the base and exponent of the power element
-/// - Function
-///     - `fun`: match any function element
-///     - `fun([SM], [EM]..)`: match the function name and the elements inside the function element
-/// Number matcher: \[NM\]
-/// - Get Number
-///     - `x`: get the value of one number element
-/// - Compare Number
-///     - `{some_expr}`: only match if the compared number is equal to the result of `some_expr`
-/// String matcher: \[SM\]
-/// - Get String
-///     - `x`: get the value of one string element
-/// - Compare String
-///     - `{some_expr}`: only match if the compared string is equal to the result of `some_expr`
+/// # Usage
+/// ## Element matcher \[EM\]
+/// - **Expression**
+///     - `{some_expr}` Only match if the compared element is equal to the result of `some_expr`
+///     - `{some_expr}..` Only match if all the compared elements are equal to the elements inside the array `some_expr`
+/// - **Get Element**
+///     - `x` Get the value of one Element
+///     - `x..` Get the values of all the Elements as an array
+///     - `x, x, x` Get the values of multiple Elements as an array
+/// - **Match Any**
+///     - `_` Match any element
+/// - **Number**
+///     - `num` Match any number element
+///     - `num([NM])` Match the inner value of the number element
+/// - **Variable**
+///     - `var` Match any variable element
+///     - `var([SM])` Match the inner value of the variable element
+/// - **Negate**
+///     - `neg` Match any negate element
+///     - `neg([EM])` Match the inner element of the negate element
+/// - **Plus**
+///     - `plus` Match any plus element
+///     - `plus([EM]..)` Match the elements inside the plus element
+/// - **Multiply**
+///     - `mul` Match any multiply element
+///     - `mul([EM]..)` Match the elements inside the multiply element
+/// - **Pow**
+///     - `pow` Match any power element
+///     - `pow([EM]..)` Match the base and exponent of the power element
+/// - **Function**
+///     - `fun` Match any function element
+///     - `fun([SM], [EM]..)` Match the function name and the elements inside the function element
+/// ## Number matcher \[NM\]
+/// - **Get Number**
+///     - `x` Get the value of one number element
+/// - **Compare Number**
+///     - `{some_expr}` Only match if the compared number is equal to the result of `some_expr`
+/// ## String matcher \[SM\]
+/// - **Get String**
+///     - `x` get the value of one string element
+/// - **Compare String**
+///     - `{some_expr}` only match if the compared string is equal to the result of `some_expr`
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
