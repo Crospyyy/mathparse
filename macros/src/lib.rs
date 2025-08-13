@@ -6,8 +6,8 @@ use std::str::FromStr;
 /// Usage:\
 /// Element matcher: \[EM\]
 /// - Expression
-///     - `some_expr`: only match if the compared element is equal to the result of `some_expr`
-///     - `some_expr..`: only match if all the compared elements are equal to the elements inside the array `some_expr`
+///     - `{some_expr}`: only match if the compared element is equal to the result of `some_expr`
+///     - `{some_expr}..`: only match if all the compared elements are equal to the elements inside the array `some_expr`
 /// - Get Element
 ///     - `x`: get the value of one Element
 ///     - `x..`: get the values of all the Elements as an array
@@ -39,12 +39,12 @@ use std::str::FromStr;
 /// - Get Number
 ///     - `x`: get the value of one number element
 /// - Compare Number
-///     - `some_expr`: only match if the compared number is equal to the result of `some_expr`
+///     - `{some_expr}`: only match if the compared number is equal to the result of `some_expr`
 /// String matcher: \[SM\]
 /// - Get String
 ///     - `x`: get the value of one string element
 /// - Compare String
-///     - `"some_string"`: only match if the compared string is equal to `"some_string"`
+///     - `{some_expr}`: only match if the compared string is equal to the result of `some_expr`
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
