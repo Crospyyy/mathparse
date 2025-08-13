@@ -167,7 +167,8 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> MatchOutput {
                     quote! { Element::Variable(n) => Some(n) }
                 } else {
                     if is_in_quotes(&inner) {
-                        quote! { Element::Variable(n) => { (n == #inner).then_some(()) } }
+                        let inner_without_qoutes = inner[1..inner.len() - 1].to_string();
+                        quote! { Element::Variable(n) => { (n == #inner_without_qoutes).then_some(()) } }
                     } else {
                         panic!(
                             "expected identifier 'x' or a string literal as inner element for var, got '{}'",
@@ -367,7 +368,7 @@ fn create_outputs(var_counts: &[usize]) -> TokenStream2 {
 
 fn is_in_quotes(str: &String) -> bool {
     let chars = str.chars().collect::<Vec<_>>();
-    (str.starts_with('"') && str.ends_with('"') | str.starts_with('\'') && str.ends_with('\''))
+    (str.starts_with('"') && str.ends_with('"') | (str.starts_with('\'') && str.ends_with('\'')))
         && str.len() > 2
         && chars[1..chars.len() - 1].iter().all(|c| !"\"'".contains(*c))
 }

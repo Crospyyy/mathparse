@@ -61,6 +61,9 @@ macro_rules! formula {
     (num($n:expr)) => {
         Element::Number(Number::from($n))
     };
+    (var($s:expr)) => {
+        Element::Variable($s.to_string())
+    };
 }
 
 #[macro_export]
@@ -230,5 +233,10 @@ mod test {
         // fehlgeschlagene patterns
         assert!(!match_formula!(formula!(num(10)), num(11)));
         assert!(!match_formula!(formula!(pow(num(1), num(2))), pow(num(1), num(3))));
+        assert!(match_formula!(formula!(var("hallo")), var("hallo")));
+        assert!(!match_formula!(formula!(var("hallo")), var("tschüss")));
+        let f = formula!(var("hallo"));
+        let m_str = match_formula!(f, var(x));
+        assert!(matches!(m_str, Some(s) if s == "hallo"));
     }
 }
