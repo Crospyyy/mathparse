@@ -1,4 +1,4 @@
-use crate::{Element, Number};
+use crate::{Element, Number, formula};
 use astro_float::{BigFloat, Error};
 use macros::match_formula;
 use num_traits::{Signed, ToPrimitive};
@@ -287,14 +287,21 @@ impl Element {
                 }
             },
             Element::Negate(n) => {
-                if let Some((e)) = match_formula!(n.as_ref(), neg(x)) {
+                if let Some(e) = match_formula!(n.as_ref(), neg(x)) {
                     *self = e.clone();
                     return;
                 }
             },
-            Element::Multiply(_) => {},
+            Element::Multiply(e) => {},
             Element::Pow(b, e) => {
-                // if match_formula!(b.as_ref(), num(1)) {  }
+                if match_formula!(b.as_ref(), num(1)) {
+                    *self = Element::Number(Number::from(1));
+                    return;
+                }
+                if let Some((inner_base, inner_exp)) = match_formula!(b.as_ref(), pow(x, x)) {
+                    let e = e.as_ref();
+                    *self = formula!(pow(inner_base, mul(inner_exp, e)))
+                }
             },
 
             Element::Function { .. }

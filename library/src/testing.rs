@@ -46,23 +46,34 @@ macro_rules! fancy_assert_eq {
 
 #[macro_export]
 macro_rules! formula {
-    (plus($($op:ident($($args:tt)*)),*)) => {
-        Element::Plus(vec![$(formula!($op($($args)*))),*])
+    (plus($($op:ident $( ( $($args:tt)* ) )?),*)) => {
+        Element::Plus(vec![$(formula!($op$(($($args)*))?)),*])
     };
-    (neg($op:ident($($args:tt)*))) => {
-        Element::Negate(Box::new(formula!($op($($args)*))))
+    (neg($op:ident $( ( $($args:tt)* ) )?)) => {
+        Element::Negate(Box::new(formula!($op$(($($args)*))?)))
     };
-    (pow($op:ident($($args:tt)*), $op2:ident($($args2:tt)*))) => {
-        Element::Pow(Box::new(formula!($op($($args)*))), Box::new(formula!($op2($($args2)*))))
-    };
-    (multiply($($op:ident($($args:tt)*)),*)) => {
-        Element::Multiply(vec![$(formula!($op($($args)*))),*])
+	(pow(
+		$op:ident $( ( $($args:tt)* ) )?,
+		$op2:ident $( ( $($args2:tt)* ) )?
+	)) => {
+		Element::Pow(
+			// linke Seite
+			Box::new(formula!($op$(($($args)*))?)),
+			// rechte Seite
+			Box::new(formula!($op2$(($($args2)*))?))
+		)
+	};
+    (mul($( $op:ident  $( ( $($args:tt)* ) )? ),*)) => {
+        Element::Multiply(vec![$(formula!($op$(($($args)*))?)),*])
     };
     (num($n:expr)) => {
         Element::Number(Number::from($n))
     };
     (var($s:expr)) => {
         Element::Variable($s.to_string())
+    };
+    ($e:expr) => {
+        $e.clone()
     };
 }
 
@@ -177,11 +188,11 @@ mod test {
         assert!(match_formula!(f, neg(x)).is_some_and(|x| x == &Element::Number(Number::from(4))));
 
         // multiply ohne extraktion matcht
-        let f = formula!(multiply(num(5), num(6)));
+        let f = formula!(mul(num(5), num(6)));
         assert!(match_formula!(f, mul));
 
         // multiply extraction
-        let f = formula!(multiply(num(7), num(8)));
+        let f = formula!(mul(num(7), num(8)));
         if let Some((a, b)) = match_formula!(f, mul(num(x), num(x))) {
             assert_eq!(*a, Number::from(7));
             assert_eq!(*b, Number::from(8));
@@ -207,7 +218,7 @@ mod test {
             formula!(num(9)),
             formula!(pow(num(1), num(2))),
             formula!(plus(num(1), num(2))),
-            formula!(multiply(num(3), num(4))),
+            formula!(mul(num(3), num(4))),
             formula!(neg(num(5))),
         ];
         for f in formulas {
