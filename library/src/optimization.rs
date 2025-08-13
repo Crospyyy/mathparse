@@ -285,6 +285,40 @@ impl Element {
                         return;
                     }
                 }
+                let mut to_remove = vec![false; elements.len()];
+                for i in 0..elements.len() - 1 {
+                    if to_remove[i] {
+                        continue;
+                    }
+                    for j in i + 1..elements.len() {
+                        if to_remove[j] {
+                            continue;
+                        }
+                        // if match_formula!(e[i], neg(e[i])) {
+                        //     todo!("make this possible through the macro");
+                        // }
+                        if match_formula!(elements[i], neg(x)) == Some(&elements[j])
+                            || match_formula!(elements[j], neg(x)) == Some(&elements[i])
+                        {
+                            to_remove[i] = true;
+                            to_remove[j] = true;
+                        }
+                    }
+                }
+                for (i, r) in to_remove.iter().copied().enumerate().rev() {
+                    if r {
+                        elements.remove(i);
+                    }
+                }
+                if to_remove.iter().any(|r| *r) {
+                    if elements.is_empty() {
+                        *self = Element::Number(Number::from(0));
+                        return;
+                    } else if elements.len() == 1 {
+                        *self = elements.remove(0);
+                        return;
+                    }
+                }
             },
             Element::Negate(n) => {
                 if let Some(e) = match_formula!(n.as_ref(), neg(x)) {
@@ -292,15 +326,7 @@ impl Element {
                     return;
                 }
             },
-            Element::Multiply(e) => {
-                for i in 0..e.len() - 1 {
-                    for j in i + 1..e.len() {
-                        // if match_formula!(e[i], neg(e[i])) {
-                        //     todo!("make this possible through the macro");
-                        // }
-                    }
-                }
-            },
+            Element::Multiply(e) => {},
             Element::Pow(b, e) => {
                 if match_formula!(b.as_ref(), num(1)) {
                     *self = Element::Number(Number::from(1));
