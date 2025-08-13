@@ -1,7 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
-use quote::__private::ext::RepToTokensExt;
-use quote::quote;
+use quote::{TokenStreamExt, quote};
 use std::str::FromStr;
 
 enum MatchElement {
@@ -65,21 +64,11 @@ pub fn match_formula(item: TokenStream) -> TokenStream {
 
     let MatchInput { formula, matcher } = process_input(input);
     let MatchOutput { tokens, var_count } = create_code(formula, matcher);
+    let mut tokens = quote! { (||#tokens)() };
     if var_count == 0 {
-        quote! {
-            (||{
-                #tokens
-            })().is_some()
-        }
-            .into()
-    } else {
-        quote! {
-            (||{
-                #tokens
-            })()
-        }
-            .into()
+        tokens.append_all(quote! { .is_some() })
     }
+    tokens.into()
 }
 
 struct MatchOutput {
@@ -112,7 +101,7 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> MatchOutput {
                         quote! { Element::Number(n) => Some(n) }
                     },
                     TokenTree::Literal(l) => {
-                        quote! { Element::Number(n) => { (n == #l).then_some(()) } }
+                        quote! { Element::Number(n) => (n == #l).then_some(()) }
                     },
                     _ => panic!("expected identifier or literal as inner element for num"),
                 }
@@ -232,8 +221,7 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> MatchOutput {
     }
         .into();
     let tokens = quote! {{
-        let __expr = &#formula;
-        match __expr {
+        match &#formula {
             #match_stream,
             _ => None,
         }
