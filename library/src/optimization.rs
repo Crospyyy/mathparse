@@ -1,4 +1,4 @@
-use crate::{Element, Number, formula};
+use crate::{Element, Number, formula, formula_matches};
 use astro_float::{BigFloat, Error};
 use macros::match_formula;
 use num_traits::{Signed, ToPrimitive};
@@ -292,7 +292,15 @@ impl Element {
                     return;
                 }
             },
-            Element::Multiply(e) => {},
+            Element::Multiply(e) => {
+                for i in 0..e.len() - 1 {
+                    for j in i + 1..e.len() {
+                        // if match_formula!(e[i], neg(e[i])) {
+                        //     todo!("make this possible through the macro");
+                        // }
+                    }
+                }
+            },
             Element::Pow(b, e) => {
                 if match_formula!(b.as_ref(), num(1)) {
                     *self = Element::Number(Number::from(1));
