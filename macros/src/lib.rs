@@ -3,6 +3,61 @@ use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
 use quote::{TokenStreamExt, quote};
 use std::str::FromStr;
 
+/// Usage:\
+/// Element matcher: \[EM\]
+/// - Expression
+///     - `some_expr`: only match if the compared element is equal to the result of `some_expr`
+///     - `some_expr..`: only match if all the compared elements are equal to the elements inside the array `some_expr`
+/// - Get Element
+///     - `x`: get the value of one Element
+///     - `x..`: get the values of all the Elements as an array
+///     - `x, x, x`: get the values of multiple Elements as an array
+/// - Match Any
+///     - `_`: match any element
+/// - Number
+///     - `num`: match any number element
+///     - `num([NM])`: match the inner value of the number element
+/// - Variable
+///     - `var`: match any variable element
+///     - `var([SM])`: match the inner value of the variable element
+/// - Negate
+///     - `neg`: match any negate element
+///     - `neg([EM])`: match the inner element of the negate element
+/// - Plus
+///     - `plus`: match any plus element
+///     - `plus([EM]..)`: match the elements inside the plus element
+/// - Multiply
+///     - `mul`: match any multiply element
+///     - `mul([EM]..)`: match the elements inside the multiply element
+/// - Pow
+///     - `pow`: match any power element
+///     - `pow([EM]..)`: match the base and exponent of the power element
+/// - Function
+///     - `fun`: match any function element
+///     - `fun([SM], [EM]..)`: match the function name and the elements inside the function element
+/// Number matcher: \[NM\]
+/// - Get Number
+///     - `x`: get the value of one number element
+/// - Compare Number
+///     - `some_expr`: only match if the compared number is equal to the result of `some_expr`
+/// String matcher: \[SM\]
+/// - Get String
+///     - `x`: get the value of one string element
+/// - Compare String
+///     - `"some_string"`: only match if the compared string is equal to `"some_string"`
+#[proc_macro]
+pub fn match_formula(item: TokenStream) -> TokenStream {
+    let input: TokenStream2 = item.into();
+
+    let MatchInput { formula, matcher } = process_input(input);
+    let MatchOutput { tokens, var_count } = create_code(formula, matcher);
+    let mut tokens = quote! { (||#tokens)() };
+    if var_count == 0 {
+        tokens.append_all(quote! { .is_some() })
+    }
+    tokens.into()
+}
+
 enum MatchElement {
     Number,
     Negate,
@@ -56,19 +111,6 @@ impl MatchElement {
 struct MatchInput {
     formula: TokenStream2,
     matcher: TokenStream2,
-}
-
-#[proc_macro]
-pub fn match_formula(item: TokenStream) -> TokenStream {
-    let input: TokenStream2 = item.into();
-
-    let MatchInput { formula, matcher } = process_input(input);
-    let MatchOutput { tokens, var_count } = create_code(formula, matcher);
-    let mut tokens = quote! { (||#tokens)() };
-    if var_count == 0 {
-        tokens.append_all(quote! { .is_some() })
-    }
-    tokens.into()
 }
 
 struct MatchOutput {
