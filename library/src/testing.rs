@@ -151,11 +151,11 @@ mod test {
                 assert!(matches!(match_formula_proc!(formula!($l($($formula)*)), $m($($m_formula)*)), $result));
             };
         }
-        assert!(matches!(match_formula!(formula!(num(123)), num(123)), Some(())));
+        assert!(match_formula!(formula!(num(123)), num(123)));
         let f = formula!(num(123));
         assert!(match_formula!(f, num(x)).is_some_and(|x| x == 123));
-        assert!(matches!(match_formula!(formula!(num(123)), num(122)), None));
-        assert!(matches!(match_formula!(formula!(pow(num(123), num(456))), pow), Some(())));
+        assert!(!match_formula!(formula!(num(123)), num(122)));
+        assert!(match_formula!(formula!(pow(num(123), num(456))), pow));
 
         // extrahiere basis und exponent aus pow
         let f = formula!(pow(num(2), num(3)));
@@ -167,7 +167,7 @@ mod test {
         }
 
         // pow ohne extraktion matcht
-        assert!(matches!(match_formula!(formula!(pow(num(2), num(3))), pow), Some(())));
+        assert!(match_formula!(formula!(pow(num(2), num(3))), pow));
 
         // neg extraction
         let f = formula!(neg(num(4)));
@@ -175,7 +175,7 @@ mod test {
 
         // multiply ohne extraktion matcht
         let f = formula!(multiply(num(5), num(6)));
-        assert!(matches!(match_formula!(f, mul), Some(())));
+        assert!(match_formula!(f, mul));
 
         // multiply extraction
         let f = formula!(multiply(num(7), num(8)));
@@ -187,7 +187,7 @@ mod test {
         }
 
         // plus ohne extraktion matcht
-        assert!(matches!(match_formula!(formula!(plus(num(1), num(2), num(3))), plus), Some(())));
+        assert!(match_formula!(formula!(plus(num(1), num(2), num(3))), plus));
 
         // plus extraction
         let f = formula!(plus(num(1), num(2), num(3)));
@@ -209,19 +209,18 @@ mod test {
         ];
         for f in formulas {
             println!("Checking formula: {}", f.get_debug_string());
-            assert!(matches!(match_formula!(f, _), Some(())));
+            assert!(match_formula!(f, _));
         }
 
         let f = formula!(pow(num(1), num(2)));
-        assert!(matches!(match_formula!(f, _), Some(())));
-        assert!(matches!(match_formula!(f, pow(_, _)), Some(())));
-        assert!(matches!(match_formula!(f, pow(num(1), _)), Some(())));
-        assert!(matches!(match_formula!(f, pow(_, num(2))), Some(())));
-        assert!(matches!(match_formula!(f, pow(num(1), num(2))), Some(())));
-        assert!(matches!(match_formula!(f, pow(num(1), num(2))), Some(())));
+        assert!(match_formula!(f, _));
+        assert!(match_formula!(f, pow(_, _)));
+        assert!(match_formula!(f, pow(num(1), _)));
+        assert!(match_formula!(f, pow(_, num(2))));
+        assert!(match_formula!(f, pow(num(1), num(2))));
+        assert!(match_formula!(f, pow(num(1), num(2))));
         let f = formula!(pow(num(1), pow(num(2), num(3))));
-        let (n1, (n2, n3)) =
-            match_formula!(f, pow(num(x), pow(num(x), num(x)))).expect("This should not fail");
+        let (n1, n2, n3) = match_formula!(f, pow(num(x), pow(num(x), num(x)))).expect("This should not fail");
         {
             assert_eq!(n1, &Number::from(1));
             assert_eq!(n2, &Number::from(2));
@@ -229,7 +228,7 @@ mod test {
         }
 
         // fehlgeschlagene patterns
-        assert!(matches!(match_formula!(formula!(num(10)), num(11)), None));
-        assert!(matches!(match_formula!(formula!(pow(num(1), num(2))), pow(num(1), num(3))), None));
+        assert!(!match_formula!(formula!(num(10)), num(11)));
+        assert!(!match_formula!(formula!(pow(num(1), num(2))), pow(num(1), num(3))));
     }
 }

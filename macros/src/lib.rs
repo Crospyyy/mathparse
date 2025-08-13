@@ -64,16 +64,36 @@ pub fn match_formula(item: TokenStream) -> TokenStream {
     let input: TokenStream2 = item.into();
 
     let MatchInput { formula, matcher } = process_input(input);
-    let stream = create_code(formula, matcher);
-
-    stream.into()
+    let MatchOutput { tokens, var_count } = create_code(formula, matcher);
+    if var_count == 0 {
+        quote! {
+            (||{
+                #tokens
+            })().is_some()
+        }
+            .into()
+    } else {
+        quote! {
+            (||{
+                #tokens
+            })()
+        }
+            .into()
+    }
 }
 
-fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
+struct MatchOutput {
+    tokens: TokenStream2,
+    var_count: usize,
+}
+
+fn create_code(formula: TokenStream2, matcher: TokenStream2) -> MatchOutput {
     let (match_ident, inner_elements) = generate_match_variables(matcher);
     if match_ident.to_string() == "_" && inner_elements.is_none() {
-        return quote! {Some(())}.into();
+        return MatchOutput { tokens: quote! { Some(()) }, var_count: 0 };
     }
+
+    let mut var_count = 0usize;
 
     let name = match_ident.to_string();
     let match_element = MatchElement::from_str(&name).expect("unexpected element to match on");
@@ -88,6 +108,7 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
                         if i.to_string() != "x" {
                             panic!("expected identifier 'x' as inner element for num, got '{}'", i);
                         }
+                        var_count += 1;
                         quote! { Element::Number(n) => Some(n) }
                     },
                     TokenTree::Literal(l) => {
@@ -99,8 +120,10 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
             MatchElement::Plus => {
                 let expected_elements = operation_args.len();
                 let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
-                let variables_ts_stream = create_variables(args.clone());
-                let outputs_ts_stream = create_outputs(args);
+                let VariablesOutput { tokens: variables_ts_stream, var_counts } =
+                    create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(&var_counts);
+                var_count += var_counts.iter().copied().sum::<usize>();
                 quote! {
                     Element::Plus(inputs) => {
                         if inputs.len() != #expected_elements {
@@ -114,8 +137,10 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
             MatchElement::Multiply => {
                 let expected_elements = operation_args.len();
                 let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
-                let variables_ts_stream = create_variables(args.clone());
-                let outputs_ts_stream = create_outputs(args);
+                let VariablesOutput { tokens: variables_ts_stream, var_counts } =
+                    create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(&var_counts);
+                var_count += var_counts.iter().copied().sum::<usize>();
                 quote! {
                     Element::Multiply(inputs) => {
                         if inputs.len() != #expected_elements {
@@ -131,30 +156,45 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
                     panic!("expected exactly two inner elements for pow");
                 }
                 let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
-                let var_ts_stream = create_variables(args.clone());
-                let outputs_ts_stream = create_outputs(args);
+                let VariablesOutput { tokens: variables_ts_stream, var_counts } =
+                    create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(&var_counts);
+                var_count += var_counts.iter().copied().sum::<usize>();
                 quote! {
                     Element::Pow(b, e) => {
                         let inputs = [b.as_ref(), e.as_ref()];
-                        #var_ts_stream
+                        #variables_ts_stream
                         #outputs_ts_stream
                     }
                 }
             },
             MatchElement::Variable => {
-                if operation_args.len() != 1 || operation_args[0].len() != 1 {
+                if operation_args.len() != 1 {
                     panic!("expected exactly one inner element for var");
                 }
-                if operation_args[0][0].to_string() != "x" {
-                    panic!("expected identifier 'x' as inner element for var");
+                let inner = operation_args[0].iter().map(|e| e.to_string()).collect::<String>();
+                if inner == "x" {
+                    var_count += 1;
+                    quote! { Element::Variable(n) => Some(n) }
+                } else {
+                    if is_in_quotes(&inner) {
+                        quote! { Element::Variable(n) => { (n == #inner).then_some(()) } }
+                    } else {
+                        panic!(
+                            "expected identifier 'x' or a string literal as inner element for var, got '{}'",
+                            inner
+                        );
+                    }
                 }
-                quote! { Element::Variable(n) => Some(n) }
             },
             MatchElement::Function => {
                 let expected_elements = operation_args.len();
                 let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
-                let variables_ts_stream = create_variables(args.clone());
-                let outputs_ts_stream = create_outputs(args);
+                let VariablesOutput { tokens: variables_ts_stream, var_counts } =
+                    create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(&var_counts);
+                var_count += var_counts.iter().copied().sum::<usize>();
+
                 quote! {
                     Element::Function { arguments: inputs, .. } => {
                         if inputs.len() != #expected_elements {
@@ -170,8 +210,11 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
                     panic!("expected exactly one inner element for neg");
                 }
                 let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
-                let variables_ts_stream = create_variables(args.clone());
-                let outputs_ts_stream = create_outputs(args);
+                let VariablesOutput { tokens: variables_ts_stream, var_counts } =
+                    create_variables(args.clone());
+                let outputs_ts_stream = create_outputs(&var_counts);
+                var_count += var_counts.iter().copied().sum::<usize>();
+
                 quote! {
                     Element::Negate(element) => {
                         let inputs = [element.as_ref()];
@@ -188,13 +231,14 @@ fn create_code(formula: TokenStream2, matcher: TokenStream2) -> TokenStream2 {
         }
     }
         .into();
-    quote! {(||{
+    let tokens = quote! {{
         let __expr = &#formula;
         match __expr {
             #match_stream,
             _ => None,
         }
-    })()}
+    }};
+    MatchOutput { tokens, var_count }
 }
 
 fn process_input(input: TokenStream2) -> MatchInput {
@@ -272,42 +316,70 @@ fn split_by_comma_2(ts: TokenStream2) -> Vec<TokenStream2> {
     result
 }
 
-fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
-    ts.into_iter()
+struct VariablesOutput {
+    tokens: TokenStream2,
+    var_counts: Vec<usize>,
+}
+
+fn create_variables(ts: impl IntoIterator<Item=TokenStream2>) -> VariablesOutput {
+    let mut var_counts = Vec::new();
+    let tokens = ts
+        .into_iter()
         .enumerate()
         .map(|(i, ts)| {
             let var_name =
                 TokenStream2::from(TokenTree::Ident(Ident::new(&create_var_name(i), Span::call_site())));
             if ts.to_string() == "x" {
+                var_counts.push(1);
                 quote! {
                     let #var_name = inputs[#i];
                 }
             } else {
                 let inner_call = create_code(quote! {inputs[#i]}, ts.clone());
-                if ts.to_string().contains("x") {
+                var_counts.push(inner_call.var_count);
+                let tokens_inner_call = inner_call.tokens;
+                if inner_call.var_count != 0 {
                     quote! {
-                        let #var_name = #inner_call?;
+                        let #var_name = #tokens_inner_call?;
                     }
                 } else {
                     quote! {
-                        #inner_call?;
+                        #tokens_inner_call?;
                     }
                 }
             }
         })
-        .collect()
+        .collect();
+    VariablesOutput { tokens, var_counts }
 }
 
 fn create_var_name(i: usize) -> String {
     format!("var_{}", i)
 }
 
-fn create_outputs(ts: impl IntoIterator<Item=TokenStream2>) -> TokenStream2 {
-    let string = ts
-        .into_iter()
+fn create_flattened_var(name: &str, count: usize) -> String {
+    (0..count).map(|i| format!("{}.{}", name, i)).collect::<Vec<_>>().join(", ")
+}
+
+fn create_outputs(var_counts: &[usize]) -> TokenStream2 {
+    let string = var_counts
+        .iter()
+        .copied()
         .enumerate()
-        .flat_map(|(i, x)| x.to_string().contains("x").then(|| create_var_name(i)))
+        .flat_map(|(i, var_count)| {
+            (var_count != 0).then(|| {
+                let name = create_var_name(i);
+                if var_count == 1 { name } else { create_flattened_var(&name, var_count) }
+            })
+        })
         .collect::<Vec<_>>()
         .join(", ");
     TokenStream2::from_str(&format!("Some(({}))", string)).expect("could not create output")
+}
+
+fn is_in_quotes(str: &String) -> bool {
+    let chars = str.chars().collect::<Vec<_>>();
+    (str.starts_with('"') && str.ends_with('"') | str.starts_with('\'') && str.ends_with('\''))
+        && str.len() > 2
+        && chars[1..chars.len() - 1].iter().all(|c| !"\"'".contains(*c))
 }
