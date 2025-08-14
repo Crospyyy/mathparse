@@ -119,27 +119,6 @@ mod old {
         }
         result
     }
-    fn split_by_comma_2(ts: TokenStream2) -> Vec<TokenStream2> {
-        // initialisiere ergebnisvektor
-        let mut result = Vec::new();
-        // sammle tokens bis zum kommatrennzeichen
-        let mut segment = Vec::new();
-        for tt in ts.into_iter() {
-            if let TokenTree::Punct(p) = &tt {
-                if p.as_char() == ',' {
-                    result.push(segment.into_iter().collect());
-                    segment = Vec::new();
-                    continue;
-                }
-            }
-            segment.push(tt);
-        }
-        // letztes segment hinzufügen wenn nicht leer
-        if !segment.is_empty() {
-            result.push(segment.into_iter().collect());
-        }
-        result
-    }
 
     pub(super) fn generate_match(formula: TokenStream2, matcher: TokenStream2) -> MatchOutput {
         let (match_ident, inner_elements) = parse_element_matcher(matcher);
@@ -630,7 +609,12 @@ mod new {
 
     impl Matcher for NumberMatcher {
         fn perform_match(&self, formula: TokenStream) -> MatchOutput {
-            todo!()
+            match self {
+                NumberMatcher::GetValue => MatchOutput::with_output(formula, 1),
+                NumberMatcher::CompareTo(comp_val) => MatchOutput::no_output(quote! {
+                    (#formula == #comp_val).then_some(())
+                }),
+            }
         }
     }
 
@@ -641,12 +625,66 @@ mod new {
 
     impl Matcher for StringMatcher {
         fn perform_match(&self, formula: TokenStream) -> MatchOutput {
-            todo!()
+            match self {
+                StringMatcher::GetValue => MatchOutput::with_output(formula, 1),
+                StringMatcher::CompareTo(comp_val) => MatchOutput::no_output(quote! {
+                    (#formula == #comp_val).then_some(())
+                }),
+            }
         }
     }
 
+    fn split_by_comma_2(ts: TokenStream) -> Vec<TokenStream> {
+        // initialisiere ergebnisvektor
+        let mut result = Vec::new();
+        // sammle tokens bis zum kommatrennzeichen
+        let mut segment = Vec::new();
+        for tt in ts.into_iter() {
+            if let TokenTree::Punct(p) = &tt {
+                if p.as_char() == ',' {
+                    result.push(segment.into_iter().collect());
+                    segment = Vec::new();
+                    continue;
+                }
+            }
+            segment.push(tt);
+        }
+        // letztes segment hinzufügen wenn nicht leer
+        if !segment.is_empty() {
+            result.push(segment.into_iter().collect());
+        }
+        result
+    }
+
+    fn parse_element_matcher(match_expr: TokenStream) -> (Ident, Option<Vec<TokenStream>>) {
+        let match_expr = match_expr.into_iter().collect::<Vec<_>>();
+        // ident
+        if match_expr.len() > 2 {
+            panic!("Expected no more than two tokens in match expression");
+        }
+        let match_ident = match match_expr.get(0) {
+            Some(TokenTree::Ident(i)) => i.clone(),
+            _ => panic!("expected identifier"),
+        };
+        let inner_elements = match_expr.get(1).map(|tt| match tt {
+            TokenTree::Group(g) => split_by_comma_2(g.stream()),
+            _ => panic!("unexpected token after identifier"),
+        });
+        (match_ident, inner_elements)
+    }
+
     fn parse_match(match_expr: TokenStream) -> ElementMatcher {
-        todo!()
+        let string = match_expr.to_string();
+        if string == "_" {
+            return ElementMatcher::Any;
+        }
+        if string == "x" {
+            return ElementMatcher::X;
+        }
+        let (match_ident, inner_elements) = parse_element_matcher(match_expr);
+        let match_ident_str = match_ident.to_string();
+        let match_element = MatchElement::from_str(&match_ident_str).expect("unexpected element to match on");
+        inner_elements.map_or_else(|| ElementMatcher::WithoutInner(match_element), |e| todo!())
     }
 
     fn outer(input: TokenStreamOld) -> TokenStreamOld {
