@@ -395,9 +395,18 @@ mod new {
             }
         }
 
-        fn create_code(matches: &[ElementMatcher], formula: TokenStream) -> MatchOutput {
-            let match_tokens: Vec<_> =
-                matches.iter().enumerate().map(|(i, m)| m.perform_match(quote! { &#formula[#i] })).collect();
+        fn create_code(matches: &[ElementMatcher], formula: TokenStream, use_reference: bool) -> MatchOutput {
+            let match_tokens: Vec<_> = matches
+                .iter()
+                .enumerate()
+                .map(|(i, m)| {
+                    m.perform_match(if use_reference {
+                        quote! { &#formula[#i] }
+                    } else {
+                        quote! { #formula[#i] }
+                    })
+                })
+                .collect();
             let variables =
                 match_tokens.iter().enumerate().map(|(i, m)| m.generate_variable(i)).collect::<TokenStream>();
             let var_count = match_tokens.iter().map(|m| m.var_count).sum();
@@ -522,7 +531,9 @@ mod new {
                 },
                 ElementMatcher::WithoutInner(element) => {
                     let element_string = element.as_pattern();
-                    MatchOutput::no_output(quote! { matches!(#formula, Element::#element_string {..}).then_some(()) })
+                    MatchOutput::no_output(
+                        quote! { matches!(#formula, Element::#element_string {..}).then_some(()) },
+                    )
                 },
                 ElementMatcher::Number(n) => {
                     let inner = n.perform_match(quote! { n });
@@ -549,7 +560,7 @@ mod new {
                     )
                 },
                 ElementMatcher::Plus(n) => {
-                    let inner = n.as_ref().perform_match(quote! { inputs });
+                    let inner = n.as_ref().perform_match(quote! { inputs }, true);
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
                         quote! { if let Element::Plus(inputs) = #formula { #inner_tokens } else { None } },
@@ -557,7 +568,7 @@ mod new {
                     )
                 },
                 ElementMatcher::Multiply(n) => {
-                    let inner = n.as_ref().perform_match(quote! { inputs });
+                    let inner = n.as_ref().perform_match(quote! { inputs }, true);
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
                         quote! { if let Element::Multiply(inputs) = #formula { #inner_tokens } else { None } },
@@ -565,7 +576,7 @@ mod new {
                     )
                 },
                 ElementMatcher::Pow(n) => {
-                    let inner = n.as_ref().perform_match(quote! { inputs });
+                    let inner = n.as_ref().perform_match(quote! { inputs }, false);
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
                         quote! {
@@ -579,7 +590,7 @@ mod new {
                 },
                 ElementMatcher::Function(s, n) => {
                     let name_inner = s.perform_match(quote! { name });
-                    let args_inner = n.perform_match(quote! { arguments });
+                    let args_inner = n.perform_match(quote! { arguments }, true);
                     let name_var = name_inner.generate_variable(0);
                     let args_var = args_inner.generate_variable(1);
                     let outputs = create_outputs(&[name_inner.var_count, args_inner.var_count]);
@@ -598,18 +609,24 @@ mod new {
         }
     }
 
-    impl Matcher for SingleOrMultipleElementMatcher {
-        fn perform_match(&self, formula: TokenStream) -> MatchOutput {
+    impl SingleOrMultipleElementMatcher {
+        fn perform_match(&self, formula: TokenStream, use_reference: bool) -> MatchOutput {
             match self {
                 SingleOrMultipleElementMatcher::EachMatch(matches) => {
-                    MatchOutput::create_code(matches, formula)
+                    MatchOutput::create_code(matches, formula, use_reference)
                 },
                 SingleOrMultipleElementMatcher::Flatten(matcher) => {
                     let inner = matcher.perform_match(quote! { e });
                     let tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! {
-                            #formula.iter().map(|e| #tokens).collect::<Option<Vec<_>>>()
+                        if use_reference {
+                            quote! {
+                                #formula.iter().map(|e| #tokens).collect::<Option<Vec<_>>>()
+                            }
+                        } else {
+                            quote! {
+                                #formula.into_iter().map(|e| #tokens).collect::<Option<Vec<_>>>()
+                            }
                         },
                         1,
                     )
