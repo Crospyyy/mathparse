@@ -58,8 +58,17 @@ pub fn match_formula(item: TokenStream) -> TokenStream {
     tokens.into()
 }
 
+#[proc_macro]
+pub fn return_tokens(item: TokenStream) -> TokenStream {
+    let strings: Vec<_> = item.into_iter().map(|e| format!("{:?}", e)).collect();
+    let string = strings.join(", ");
+    quote! {#string}.into()
+}
+
 mod old {
-    use crate::new::{MatchElement, MatchInput, MatchOutput, create_outputs, create_var_name};
+    use crate::new::{
+        MatchElement, MatchInput, MatchOutput, create_outputs, create_var_name, split_by_comma_2,
+    };
     use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
     use quote::quote;
     use std::str::FromStr;
@@ -143,13 +152,13 @@ mod old {
                             }
                             var_count += 1;
                             quote! { Element::Number(n) => Some(n) }
-                        },
+                        }
                         TokenTree::Literal(l) => {
                             quote! { Element::Number(n) => (n == #l).then_some(()) }
-                        },
+                        }
                         _ => panic!("expected identifier or literal as inner element for num"),
                     }
-                },
+                }
                 MatchElement::Plus => {
                     let expected_elements = operation_args.len();
                     let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
@@ -166,7 +175,7 @@ mod old {
                         #outputs_ts_stream
                     }
                 }
-                },
+                }
                 MatchElement::Multiply => {
                     let expected_elements = operation_args.len();
                     let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
@@ -183,7 +192,7 @@ mod old {
                         #outputs_ts_stream
                     }
                 }
-                },
+                }
                 MatchElement::Pow => {
                     if operation_args.len() != 2 {
                         panic!("expected exactly two inner elements for pow");
@@ -200,7 +209,7 @@ mod old {
                         #outputs_ts_stream
                     }
                 }
-                },
+                }
                 MatchElement::Variable => {
                     if operation_args.len() != 1 {
                         panic!("expected exactly one inner element for var");
@@ -220,7 +229,7 @@ mod old {
                             );
                         }
                     }
-                },
+                }
                 MatchElement::Function => {
                     let expected_elements = operation_args.len();
                     let args = operation_args.iter().cloned().map(|a| a.into_iter().collect::<TokenStream2>());
@@ -238,7 +247,7 @@ mod old {
                         #outputs_ts_stream
                     }
                 }
-                },
+                }
                 MatchElement::Negate => {
                     if operation_args.len() != 1 {
                         panic!("expected exactly one inner element for neg");
@@ -256,7 +265,7 @@ mod old {
                         #outputs_ts_stream
                     }
                 }
-                },
+                }
             }
         } else {
             let match_name = match_element.as_pattern();
@@ -620,7 +629,7 @@ mod new {
 
     enum StringMatcher {
         GetValue,
-        CompareTo(String),
+        CompareTo(TokenStream),
     }
 
     impl Matcher for StringMatcher {
@@ -634,7 +643,7 @@ mod new {
         }
     }
 
-    fn split_by_comma_2(ts: TokenStream) -> Vec<TokenStream> {
+    pub(super) fn split_by_comma_2(ts: TokenStream) -> Vec<TokenStream> {
         // initialisiere ergebnisvektor
         let mut result = Vec::new();
         // sammle tokens bis zum kommatrennzeichen
@@ -656,7 +665,7 @@ mod new {
         result
     }
 
-    fn parse_element_matcher(match_expr: TokenStream) -> (Ident, Option<Vec<TokenStream>>) {
+    fn parse_element_matcher(match_expr: TokenStream) -> (Ident, Option<TokenStream>) {
         let match_expr = match_expr.into_iter().collect::<Vec<_>>();
         // ident
         if match_expr.len() > 2 {
@@ -667,31 +676,106 @@ mod new {
             _ => panic!("expected identifier"),
         };
         let inner_elements = match_expr.get(1).map(|tt| match tt {
-            TokenTree::Group(g) => split_by_comma_2(g.stream()),
+            TokenTree::Group(g) => g.stream(),
             _ => panic!("unexpected token after identifier"),
         });
         (match_ident, inner_elements)
     }
 
-    fn parse_match(match_expr: TokenStream) -> ElementMatcher {
-        let string = match_expr.to_string();
-        if string == "_" {
-            return ElementMatcher::Any;
+    trait MatchParsing {
+        fn parse(match_expr: TokenStream) -> Self;
+    }
+
+    impl MatchParsing for ElementMatcher {
+        fn parse(match_expr: TokenStream) -> ElementMatcher {
+            let string = match_expr.to_string();
+            if string == "_" {
+                return ElementMatcher::Any;
+            }
+            if string == "x" {
+                return ElementMatcher::X;
+            }
+            let (match_ident, inner_elements) = parse_element_matcher(match_expr);
+            let match_ident_str = match_ident.to_string();
+            let match_element =
+                MatchElement::from_str(&match_ident_str).expect("unexpected element to match on");
+            if let Some(inner) = inner_elements {
+                match match_element {
+                    MatchElement::Number => ElementMatcher::Number(NumberMatcher::parse(inner)),
+                    MatchElement::Negate => ElementMatcher::Negate(Box::new(ElementMatcher::parse(inner))),
+                    MatchElement::Plus => {
+                        ElementMatcher::Plus(Box::new(SingleOrMultipleElementMatcher::parse(inner)))
+                    },
+                    MatchElement::Multiply => {
+                        ElementMatcher::Multiply(Box::new(SingleOrMultipleElementMatcher::parse(inner)))
+                    },
+                    MatchElement::Pow => {
+                        ElementMatcher::Pow(Box::new(SingleOrMultipleElementMatcher::parse(inner)))
+                    },
+                    MatchElement::Variable => ElementMatcher::Variable(StringMatcher::parse(inner)),
+                    MatchElement::Function => {
+                        let split = split_by_comma_2(inner);
+                        if split.len() != 2 {
+                            panic!("expected exactly two inner elements for function matcher");
+                        }
+                        ElementMatcher::Function(
+                            StringMatcher::parse(split[0].clone()),
+                            Box::new(SingleOrMultipleElementMatcher::parse(split[1].clone())),
+                        )
+                    },
+                }
+            } else {
+                ElementMatcher::WithoutInner(match_element)
+            }
         }
-        if string == "x" {
-            return ElementMatcher::X;
+    }
+
+    impl MatchParsing for NumberMatcher {
+        fn parse(match_expr: TokenStream) -> NumberMatcher {
+            if match_expr.to_string() == "x" {
+                NumberMatcher::GetValue
+            } else {
+                NumberMatcher::CompareTo(match_expr)
+            }
         }
-        let (match_ident, inner_elements) = parse_element_matcher(match_expr);
-        let match_ident_str = match_ident.to_string();
-        let match_element = MatchElement::from_str(&match_ident_str).expect("unexpected element to match on");
-        inner_elements.map_or_else(|| ElementMatcher::WithoutInner(match_element), |e| todo!())
+    }
+
+    impl MatchParsing for StringMatcher {
+        fn parse(match_expr: TokenStream) -> Self {
+            if match_expr.to_string() == "x" {
+                StringMatcher::GetValue
+            } else {
+                StringMatcher::CompareTo(match_expr)
+            }
+        }
+    }
+
+    impl MatchParsing for SingleOrMultipleElementMatcher {
+        fn parse(match_expr: TokenStream) -> Self {
+            let split = split_by_comma_2(match_expr.clone());
+            match split.len() {
+                0 => panic!("no token provided for matching"),
+                1 => {
+                    let arr: Vec<_> = match_expr.clone().into_iter().collect();
+                    if match_expr.to_string().ends_with("..") {
+                        let tokens: TokenStream = arr[..(arr.len() - 2)].iter().cloned().collect();
+                        SingleOrMultipleElementMatcher::Flatten(ElementMatcher::parse(tokens))
+                    } else {
+                        SingleOrMultipleElementMatcher::EachMatch(vec![ElementMatcher::parse(match_expr)])
+                    }
+                },
+                2.. => SingleOrMultipleElementMatcher::EachMatch(
+                    split.into_iter().map(|t| ElementMatcher::parse(t)).collect(),
+                ),
+            }
+        }
     }
 
     fn outer(input: TokenStreamOld) -> TokenStreamOld {
         let new_stream = input.into();
 
         let MatchInput { formula, matcher } = MatchInput::parse(new_stream);
-        let matcher = parse_match(matcher);
+        let matcher = ElementMatcher::parse(matcher);
         let MatchOutput { tokens, var_count } = matcher.perform_match(formula);
         let mut tokens = quote! { (||#tokens)() };
         if var_count == 0 {

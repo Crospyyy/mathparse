@@ -133,7 +133,7 @@ mod test {
     use crate::Element;
     use crate::Number;
     use astro_float::expr;
-    use macros::match_formula;
+    use macros::{match_formula, return_tokens};
 
     macro_rules! verify_formula_matches {
         ($($tts:tt)+) => {assert!(formula_matches!(formula!($($tts)+),$($tts)+))};
@@ -249,5 +249,6 @@ mod test {
         let f = formula!(var("hallo"));
         let m_str = match_formula!(f, var(x));
         assert!(matches!(m_str, Some(s) if s == "hallo"));
+        return_tokens!(outer(inner)..);
     }
 }
