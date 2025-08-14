@@ -1,4 +1,5 @@
 use crate::new::{MatchInput, MatchOutput};
+use crate::old::outer;
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{TokenStreamExt, quote};
@@ -47,15 +48,7 @@ use quote::{TokenStreamExt, quote};
 ///     - `{some_expr}` only match if the compared string is equal to the result of `some_expr`
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
-    let input: TokenStream2 = item.into();
-
-    let MatchInput { formula, matcher } = MatchInput::parse(input);
-    let MatchOutput { tokens, var_count } = old::generate_match(formula, matcher);
-    let mut tokens = quote! { (||#tokens)() };
-    if var_count == 0 {
-        tokens.append_all(quote! { .is_some() })
-    }
-    tokens.into()
+    outer(item)
 }
 
 #[proc_macro]
@@ -69,9 +62,23 @@ mod old {
     use crate::new::{
         MatchElement, MatchInput, MatchOutput, create_outputs, create_var_name, split_by_comma_2,
     };
+    use crate::old;
+    use proc_macro::TokenStream;
     use proc_macro2::{Ident, Span, TokenStream as TokenStream2, TokenTree};
-    use quote::quote;
+    use quote::{TokenStreamExt, quote};
     use std::str::FromStr;
+
+    pub(super) fn outer(item: TokenStream) -> TokenStream {
+        let input: TokenStream2 = item.into();
+
+        let MatchInput { formula, matcher } = MatchInput::parse(input);
+        let MatchOutput { tokens, var_count } = old::generate_match(formula, matcher);
+        let mut tokens = quote! { (||#tokens)() };
+        if var_count == 0 {
+            tokens.append_all(quote! { .is_some() })
+        }
+        tokens.into()
+    }
 
     impl MatchInput {
         pub(super) fn parse(input: TokenStream2) -> MatchInput {
