@@ -194,21 +194,22 @@ mod test {
         // multiply extraction
         let f = formula!(mul(num(7), num(8)));
         if let Some((a, b)) = match_formula!(f, mul(num(x), num(x))) {
-            assert_eq!(*a, Number::from(7));
-            assert_eq!(*b, Number::from(8));
+            assert_eq!(a, &Number::from(7));
+            assert_eq!(b, &Number::from(8));
         } else {
             panic!("erwartetes match für multiply(num(7), num(8)) mit mul(num(x), num(y)))")
         }
 
         // plus ohne extraktion matcht
-        assert!(match_formula!(formula!(plus(num(1), num(2), num(3))), plus));
+        let r = match_formula!(formula!(plus(num(1), num(2), num(3))), plus);
+        assert!(r);
 
         // plus extraction
         let f = formula!(plus(num(1), num(2), num(3)));
         if let Some((a, b, c)) = match_formula!(f, plus(num(x), num(x), num(x))) {
-            assert_eq!(*a, Number::from(1));
-            assert_eq!(*b, Number::from(2));
-            assert_eq!(*c, Number::from(3));
+            assert_eq!(a, &Number::from(1));
+            assert_eq!(b, &Number::from(2));
+            assert_eq!(c, &Number::from(3));
         } else {
             panic!("erwartetes match für plus(num(1), num(2), num(3)) mit plus(num(x), num(y), num(z)))")
         }
@@ -229,7 +230,8 @@ mod test {
         let f = formula!(pow(num(1), num(2)));
         assert!(match_formula!(f, _));
         assert!(match_formula!(f, pow(_, _)));
-        assert!(match_formula!(f, pow(num(1), _)));
+        let m = match_formula!(f, pow(num(1), _));
+        assert!(m);
         assert!(match_formula!(f, pow(_, num(2))));
         assert!(match_formula!(f, pow(num(1), num(2))));
         assert!(match_formula!(f, pow(num(1), num(2))));

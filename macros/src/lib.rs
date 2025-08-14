@@ -1,7 +1,4 @@
-use crate::new::{MatchInput, MatchOutput};
-use crate::old::outer;
 use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
 use quote::{TokenStreamExt, quote};
 
 /// # Usage
@@ -48,7 +45,7 @@ use quote::{TokenStreamExt, quote};
 ///     - `{some_expr}` only match if the compared string is equal to the result of `some_expr`
 #[proc_macro]
 pub fn match_formula(item: TokenStream) -> TokenStream {
-    outer(item)
+    new::outer(item)
 }
 
 #[proc_macro]
@@ -174,14 +171,14 @@ mod old {
                     let outputs_ts_stream = create_outputs(&var_counts);
                     var_count += var_counts.iter().copied().sum::<usize>();
                     quote! {
-                    Element::Plus(inputs) => {
-                        if inputs.len() != #expected_elements {
-                            return None;
+                        Element::Plus(inputs) => {
+                            if inputs.len() != #expected_elements {
+                                return None;
+                            }
+                            #variables_ts_stream
+                            #outputs_ts_stream
                         }
-                        #variables_ts_stream
-                        #outputs_ts_stream
                     }
-                }
                 }
                 MatchElement::Multiply => {
                     let expected_elements = operation_args.len();
@@ -389,17 +386,18 @@ mod new {
         }
 
         fn generate_variable(&self, index: usize) -> TokenStream {
+            let tokens = &self.tokens;
             if self.var_count != 0 {
                 let var_name = TokenStream::from_str(&create_var_name(index)).unwrap();
-                quote! { let #var_name = #{self.tokens}?; }
+                quote! { let #var_name = #tokens?; }
             } else {
-                quote! { #{self.tokens}?; }
+                quote! { #tokens?; }
             }
         }
 
         fn create_code(matches: &[ElementMatcher], formula: TokenStream) -> MatchOutput {
             let match_tokens: Vec<_> =
-                matches.iter().enumerate().map(|(i, m)| m.perform_match(quote! { #formula[#i] })).collect();
+                matches.iter().enumerate().map(|(i, m)| m.perform_match(quote! { &#formula[#i] })).collect();
             let variables =
                 match_tokens.iter().enumerate().map(|(i, m)| m.generate_variable(i)).collect::<TokenStream>();
             let var_count = match_tokens.iter().map(|m| m.var_count).sum();
@@ -414,10 +412,11 @@ mod new {
         }
         fn create_code_variable_input_len(matcher: ElementMatcher) -> MatchOutput {
             let match_output = matcher.perform_match(quote! { i });
+            let tokens = match_output.tokens;
             if match_output.var_count == 0 {
                 MatchOutput::no_output(quote! {
                     for i in inputs {
-                        #{match_output.tokens}?;
+                        #tokens?;
                     }
                     Some(())
                 })
@@ -425,7 +424,7 @@ mod new {
                 MatchOutput::with_output(
                     quote! {
                         Some(inputs.iter().map(|i| {
-                            #{match_output.tokens}?
+                            #tokens?
                         }).collect::<Option<Vec<_>>>()?);
                     },
                     1,
@@ -523,13 +522,13 @@ mod new {
                 },
                 ElementMatcher::WithoutInner(element) => {
                     let element_string = element.as_pattern();
-                    MatchOutput::no_output(quote! { matches!(#formula, #element_string {..}).then_some(()) })
+                    MatchOutput::no_output(quote! { matches!(#formula, Element::#element_string {..}).then_some(()) })
                 },
                 ElementMatcher::Number(n) => {
-                    let inner = n.perform_match(quote! { n.as_ref() });
+                    let inner = n.perform_match(quote! { n });
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! { if let Element::Number(n) = #formula { #inner_tokens? } else { None } },
+                        quote! { if let Element::Number(n) = #formula { #inner_tokens } else { None } },
                         inner.var_count,
                     )
                 },
@@ -537,7 +536,7 @@ mod new {
                     let inner = n.perform_match(quote! { n });
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! { if let Element::Variable(n) = #formula { #inner_tokens? } else { None } },
+                        quote! { if let Element::Variable(n) = #formula { #inner_tokens } else { None } },
                         inner.var_count,
                     )
                 },
@@ -545,7 +544,7 @@ mod new {
                     let inner = n.perform_match(quote! { n.as_ref() });
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! { if let Element::Negate(n) = #formula { #inner_tokens? } else { None } },
+                        quote! { if let Element::Negate(n) = #formula { #inner_tokens } else { None } },
                         inner.var_count,
                     )
                 },
@@ -553,7 +552,7 @@ mod new {
                     let inner = n.as_ref().perform_match(quote! { inputs });
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! { if let Element::Plus(inputs) = #formula { #inner_tokens? } else { None } },
+                        quote! { if let Element::Plus(inputs) = #formula { #inner_tokens } else { None } },
                         inner.var_count,
                     )
                 },
@@ -561,7 +560,7 @@ mod new {
                     let inner = n.as_ref().perform_match(quote! { inputs });
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
-                        quote! { if let Element::Multiply(inputs) = #formula { #inner_tokens? } else { None } },
+                        quote! { if let Element::Multiply(inputs) = #formula { #inner_tokens } else { None } },
                         inner.var_count,
                     )
                 },
@@ -570,10 +569,11 @@ mod new {
                     let inner_tokens = inner.tokens;
                     MatchOutput::with_output(
                         quote! {
-                        if let Element::Pow(b, e) = #formula {
-                            let inputs = [b.as_ref(), e.as_ref()];
-                            #inner_tokens
-                        } else { None } },
+                            if let Element::Pow(b, e) = #formula {
+                                let inputs = [b.as_ref(), e.as_ref()];
+                                #inner_tokens
+                            } else { None }
+                        },
                         inner.var_count,
                     )
                 },
@@ -626,7 +626,7 @@ mod new {
     impl Matcher for NumberMatcher {
         fn perform_match(&self, formula: TokenStream) -> MatchOutput {
             match self {
-                NumberMatcher::GetValue => MatchOutput::with_output(formula, 1),
+                NumberMatcher::GetValue => MatchOutput::with_output(quote! { Some(#formula) }, 1),
                 NumberMatcher::CompareTo(comp_val) => MatchOutput::no_output(quote! {
                     (#formula == #comp_val).then_some(())
                 }),
@@ -642,7 +642,7 @@ mod new {
     impl Matcher for StringMatcher {
         fn perform_match(&self, formula: TokenStream) -> MatchOutput {
             match self {
-                StringMatcher::GetValue => MatchOutput::with_output(formula, 1),
+                StringMatcher::GetValue => MatchOutput::with_output(quote! { Some(#formula) }, 1),
                 StringMatcher::CompareTo(comp_val) => MatchOutput::no_output(quote! {
                     (#formula == #comp_val).then_some(())
                 }),
@@ -778,12 +778,12 @@ mod new {
         }
     }
 
-    fn outer(input: TokenStreamOld) -> TokenStreamOld {
+    pub(super) fn outer(input: TokenStreamOld) -> TokenStreamOld {
         let new_stream = input.into();
 
         let MatchInput { formula, matcher } = MatchInput::parse(new_stream);
         let matcher = ElementMatcher::parse(matcher);
-        let MatchOutput { tokens, var_count } = matcher.perform_match(formula);
+        let MatchOutput { tokens, var_count } = matcher.perform_match(quote! { &#formula });
         let mut tokens = quote! { (||#tokens)() };
         if var_count == 0 {
             tokens.append_all(quote! { .is_some() });
