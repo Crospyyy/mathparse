@@ -527,7 +527,7 @@ mod new {
                 ElementMatcher::Any => MatchOutput::no_output(quote! { Some(()) }),
                 ElementMatcher::X => MatchOutput::with_output(quote! { Some(#formula) }, 1),
                 ElementMatcher::Expression(expr) => {
-                    MatchOutput::no_output(quote! { (#formula == #expr).then_some(()) })
+                    MatchOutput::no_output(quote! { (#formula == (#expr)).then_some(()) })
                 },
                 ElementMatcher::WithoutInner(element) => {
                     let element_string = element.as_pattern();
@@ -645,7 +645,7 @@ mod new {
             match self {
                 NumberMatcher::GetValue => MatchOutput::with_output(quote! { Some(#formula) }, 1),
                 NumberMatcher::CompareTo(comp_val) => MatchOutput::no_output(quote! {
-                    (#formula == #comp_val).then_some(())
+                    (#formula == (#comp_val)).then_some(())
                 }),
             }
         }
@@ -718,6 +718,15 @@ mod new {
             }
             if string == "x" {
                 return ElementMatcher::X;
+            }
+            if string.starts_with("{") && string.ends_with("}") {
+                let mut tokens = match_expr.clone().into_iter().collect::<Vec<_>>();
+                if tokens.len() != 1 {
+                    panic!("expected exactly one token inside braces, got {}", tokens.len());
+                }
+                let group = tokens.pop().unwrap();
+                let TokenTree::Group(g) = group else { panic!("expected a group inside braces") };
+                return ElementMatcher::Expression(g.stream());
             }
             let (match_ident, inner_elements) = parse_element_matcher(match_expr);
             let match_ident_str = match_ident.to_string();

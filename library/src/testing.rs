@@ -1,3 +1,5 @@
+use crate::Number;
+
 mod some_future_work {
     use crate::Element;
 
@@ -168,11 +170,14 @@ mod test {
         assert!(match_formula!(formula!(num(123)), num(123)));
         let f = formula!(num(123));
         assert!(match_formula!(f, num(x)).is_some_and(|x| x == 123));
+        assert!(match_formula!(formula!(num(123)), num(123)));
+        assert!(match_formula!(formula!(num(123)), num(122 + 1)));
         assert!(!match_formula!(formula!(num(123)), num(122)));
         assert!(match_formula!(formula!(pow(num(123), num(456))), pow));
 
         // extrahiere basis und exponent aus pow
         let f = formula!(pow(num(2), num(3)));
+        assert!(match_formula!(f, { &f }));
         if let Some((base, exp)) = match_formula!(f, pow(num(x), num(x))) {
             assert_eq!(base, &Number::from(2));
             assert_eq!(exp, &Number::from(3));
