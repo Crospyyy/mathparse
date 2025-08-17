@@ -278,7 +278,7 @@ impl Element {
                 if elements.iter().any(|e| e.is(0)) {
                     elements.retain(|e| !e.is(0));
                     if elements.is_empty() {
-                        *self = Element::Number(Number::from(0));
+                        *self = formula!(num(0));
                         return;
                     } else if elements.len() == 1 {
                         *self = elements.remove(0);
@@ -286,38 +286,30 @@ impl Element {
                     }
                 }
                 let mut to_remove = vec![false; elements.len()];
-                for i in 0..elements.len() - 1 {
-                    if to_remove[i] {
-                        continue;
-                    }
+                'outer: for i in 0..elements.len() - 1 {
                     for j in i + 1..elements.len() {
                         if to_remove[j] {
                             continue;
                         }
-                        // if match_formula!(e[i], neg(e[i])) {
-                        //     todo!("make this possible through the macro");
-                        // }
-                        if match_formula!(elements[i], neg(x)) == Some(&elements[j])
-                            || match_formula!(elements[j], neg(x)) == Some(&elements[i])
+                        if match_formula!(elements[i], neg({ &elements[j] }))
+                            || match_formula!(elements[j], neg({ &elements[i] }))
                         {
                             to_remove[i] = true;
                             to_remove[j] = true;
+                            continue 'outer;
                         }
                     }
                 }
-                for (i, r) in to_remove.iter().copied().enumerate().rev() {
-                    if r {
-                        elements.remove(i);
-                    }
+                for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
+                    elements.remove(i);
                 }
-                if to_remove.iter().any(|r| *r) {
-                    if elements.is_empty() {
-                        *self = Element::Number(Number::from(0));
-                        return;
-                    } else if elements.len() == 1 {
-                        *self = elements.remove(0);
-                        return;
-                    }
+
+                if elements.is_empty() {
+                    *self = formula!(num(0));
+                    return;
+                } else if elements.len() == 1 {
+                    *self = elements.remove(0);
+                    return;
                 }
             },
             Element::Negate(n) => {
@@ -326,18 +318,44 @@ impl Element {
                     return;
                 }
             },
-            Element::Multiply(e) => {},
-            Element::Pow(b, e) => {
-                if match_formula!(b.as_ref(), num(1)) {
-                    *self = Element::Number(Number::from(1));
+            Element::Multiply(elements) => {
+                let mut to_remove = vec![false; elements.len()];
+                'outer: for i in 0..elements.len() - 1 {
+                    for j in i + 1..elements.len() {
+                        if to_remove[j] {
+                            continue;
+                        }
+                        if match_formula!(elements[i], pow({ &elements[j] }, neg(num(1))))
+                            || match_formula!(elements[j], pow({ &elements[i] }, neg(num(1))))
+                        {
+                            to_remove[i] = true;
+                            to_remove[j] = true;
+                            continue 'outer;
+                        }
+                    }
+                }
+                for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
+                    elements.remove(i);
+                }
+                if elements.is_empty() {
+                    *self = formula!(num(1));
+                    return;
+                } else if elements.len() == 1 {
+                    *self = elements.remove(0);
                     return;
                 }
-                if let Some((inner_base, inner_exp)) = match_formula!(b.as_ref(), pow(x, x)) {
-                    let e = e.as_ref();
-                    *self = formula!(pow(inner_base, mul(inner_exp, e)))
+            },
+            Element::Pow(base, exp) => {
+                if match_formula!(base.as_ref(), num(1)) {
+                    *self = formula!(num(1));
+                    return;
+                }
+                if let Some((inner_base, inner_exp)) = match_formula!(base.as_ref(), pow(x, x)) {
+                    let exp_ref = exp.as_ref();
+                    *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
+                    self.optimize_new();
                 }
             },
-
             Element::Function { .. }
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
