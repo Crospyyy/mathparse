@@ -319,6 +319,14 @@ impl Element {
                 }
             },
             Element::Multiply(elements) => {
+                if let Some(e) = elements.iter().find(|e| e.is_nan()) {
+                    *self = e.clone();
+                    return;
+                }
+                if elements.iter().any(|e| match_formula!(e, num(0))) {
+                    *self = formula!(num(0));
+                    return;
+                }
                 let mut to_remove = vec![false; elements.len()];
                 'outer: for i in 0..elements.len() - 1 {
                     for j in i + 1..elements.len() {
@@ -346,8 +354,14 @@ impl Element {
                 }
             },
             Element::Pow(base, exp) => {
-                if match_formula!(base.as_ref(), num(1)) {
-                    *self = formula!(num(1));
+                if let Some(num) = match_formula!(base.as_ref(), num(x)) {
+                    if num == 1 || num == 0 {
+                        *self = formula!(num(num.clone()));
+                    }
+                    return;
+                }
+                if match_formula!(exp.as_ref(), num(1)) {
+                    *self = base.as_ref().clone();
                     return;
                 }
                 if let Some((inner_base, inner_exp)) = match_formula!(base.as_ref(), pow(x, x)) {
@@ -578,5 +592,25 @@ mod tests {
             // Prüfe, dass mindestens eine Optimierung durchgeführt wurde
             assert!(!optimizations.is_empty(), "Keine Optimierungen für: {}", input);
         }
+    }
+
+    #[test]
+    fn test_optimize_new() {
+        // doppelte negation wird entfernt
+        let mut formula = Element::parse("--a").unwrap();
+        formula.optimize_new();
+        assert_eq!(formula, var("a"));
+        // plus null wird entfernt
+        let mut formula = Element::parse("a+0+0").unwrap();
+        formula.optimize_new();
+        assert_eq!(formula, var("a"));
+        // multiplikation mit inverse wird entfernt
+        let mut formula = mul([var("a"), inv(var("a"))]);
+        formula.optimize_new();
+        assert_eq!(formula, num(1));
+        // exponenten werden zusammengeführt
+        let mut formula = Element::parse("(a^2)^3").unwrap();
+        formula.optimize_new();
+        assert_eq!(formula, Element::parse("a^(2*3)").unwrap());
     }
 }
