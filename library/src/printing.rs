@@ -1,11 +1,11 @@
+use crate::expression_values::ExpressionFunType;
 use crate::parsing::signature::ParamCount;
-use crate::{Element, FunctionExpression, Number};
+use crate::{Element, ExprValue, ExpressionNumType, FunctionExpression};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Radix};
 use colored::Colorize;
-use num_rational::BigRational;
 use std::cmp::Ordering;
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
@@ -37,7 +37,7 @@ impl Element {
             Element::VariableOrFunction(name) => {
                 format!("var_or_fun({})", name)
             },
-            Element::FunctionWithExpression { arguments, expression, param_count, debug_name } => {
+            Element::FunctionWithExpression { arguments, expression, param_count, expr_value: debug_name } => {
                 let param_count_str = match param_count {
                     ParamCount::Exactly(n) => format!("={n} params"),
                     ParamCount::AtLeast(n) => format!(">={n} params"),
@@ -55,7 +55,7 @@ impl Element {
                     arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
                 )
             },
-            Element::NumberWithExpression { debug_name, .. } => format!("num_with_expr:{}", debug_name),
+            Element::NumberWithExpression { expr_value: debug_name, .. } => format!("num_with_expr:{}", debug_name),
         }
     }
 }
@@ -121,11 +121,11 @@ impl Formula {
             Element::String(s) => {
                 Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
             },
-            Element::FunctionWithExpression { arguments, debug_name, .. } => Formula::Function {
+            Element::FunctionWithExpression { arguments, expr_value: debug_name, .. } => Formula::Function {
                 name: format!("fun_expr:{debug_name}"),
                 arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
             },
-            Element::NumberWithExpression { debug_name, .. } => {
+            Element::NumberWithExpression { expr_value: debug_name, .. } => {
                 Formula::Variable(format!("num_expr:{debug_name}", ))
             },
         }
@@ -201,6 +201,39 @@ impl Display for Formula {
                     elements.iter().map(Self::to_string).reduce(|a, b| a + &b).unwrap_or_default()
                 )
             },
+        }
+    }
+}
+
+impl Display for ExpressionFunType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ExpressionFunType::Sin => "sin",
+            ExpressionFunType::Asin => "asin",
+            ExpressionFunType::Cos => "cos",
+            ExpressionFunType::Acos => "acos",
+            ExpressionFunType::Tan => "tan",
+            ExpressionFunType::Atan => "atan",
+            ExpressionFunType::Floor => "floor",
+            ExpressionFunType::Round => "round",
+        })
+    }
+}
+
+impl Display for ExpressionNumType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ExpressionNumType::Pi => "pi",
+            ExpressionNumType::E => "e",
+        })
+    }
+}
+
+impl<T: Display> Display for ExprValue<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExprValue::Native(name) => name.fmt(f),
+            ExprValue::Custom(name) => f.write_str(name),
         }
     }
 }
@@ -388,8 +421,8 @@ impl FormattingOptions {
 
 #[cfg(test)]
 mod tests {
-    use crate::FormattingOptions;
     use crate::printing::ScientificNumber;
+    use crate::FormattingOptions;
 
     #[test]
     fn test_scientific_number() {

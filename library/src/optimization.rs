@@ -39,6 +39,30 @@ impl Element {
             | Element::NumberWithExpression { .. } => false,
         }
     }
+
+    /// Checks if the elements are identical or their expression values as well as arguments are equal
+    pub(crate) fn same_value(&self, other: &Element) -> bool {
+        self == other
+            || match (self, other) {
+            (
+                Element::FunctionWithExpression { arguments, expr_value: debug_name, .. },
+                Element::FunctionWithExpression {
+                    arguments: other_args,
+                    expr_value: other_debug_name,
+                    ..
+                },
+            ) => {
+                debug_name.same_value(other_debug_name)
+                    && arguments.len() == other_args.len()
+                    && arguments.iter().zip(other_args).all(|(a, b)| a.same_value(b))
+            },
+            (
+                Element::NumberWithExpression { expr_value: debug_name, .. },
+                Element::NumberWithExpression { expr_value: other_debug_name, .. },
+            ) => debug_name.same_value(other_debug_name),
+            _ => false,
+        }
+    }
 }
 
 fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&mut Vec<T>>) {

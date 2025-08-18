@@ -2,9 +2,11 @@ use crate::parsing::signature::ParamCount;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
 use num_rational::BigRational;
+use std::fmt::{Debug, Display, Formatter, Pointer};
 
 mod benchmarking;
 mod evaluation;
+mod expression_values;
 pub(crate) mod operations;
 mod optimization;
 mod parsing;
@@ -12,6 +14,7 @@ mod printing;
 mod storing;
 mod testing;
 
+use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
@@ -44,10 +47,10 @@ pub enum Element {
         arguments: Vec<Element>,
         param_count: ParamCount,
         expression: FunctionExpression,
-        debug_name: String,
+        expr_value: ExprValue<ExpressionFunType>,
     },
     /// A number defined by an expression
-    NumberWithExpression { fun: fn(&mut Context) -> Number, debug_name: String },
+    NumberWithExpression { fun: fn(&mut Context) -> Number, expr_value: ExprValue<ExpressionNumType> },
     /// List of elements to add together
     Plus(Vec<Element>),
     /// List of elements to multiply together
