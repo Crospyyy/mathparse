@@ -1,7 +1,9 @@
 use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
-use crate::{Element, FormulaStore, Number, formula};
+use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, fun_expr_new, inv, mul, neg, num, num_expr};
+use crate::parsing::signature::ParamCount;
+use crate::{Element, FormulaStore, FunctionExpression, Number, formula};
 use macros::formula_matches;
+use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use strum::{EnumCount, IntoEnumIterator};
@@ -222,10 +224,24 @@ impl Element {
                         ExpressionFunType::Sin => {
                             if arguments.len() == 1 {
                                 let arg = &arguments[0];
-                                let divided =
-                                    mul([arg.clone(), inv(mul([num(2), num_expr(ExpressionNumType::Pi)]))]);
-                                let rem = fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(1)]);
-                                let mut multiplied = mul([rem, num(2), num_expr(ExpressionNumType::Pi)]);
+                                let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
+                                let rem = fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
+                                let corrected = fun_expr_new(
+                                    "negative_over_1",
+                                    ParamCount::Exactly(1),
+                                    FunctionExpression::SingleArgument(|num, ctx| {
+                                        if num
+                                            .get_exact_rational()
+                                            .is_some_and(|r| r >= BigRational::from_integer(1.into()))
+                                        {
+                                            num.plus(&Number::from(-1), ctx).neg(ctx)
+                                        } else {
+                                            num.clone()
+                                        }
+                                    }),
+                                    [rem.clone()],
+                                );
+                                let mut multiplied = mul([corrected, num_expr(ExpressionNumType::Pi)]);
                                 multiplied.optimize_new();
                                 *self = fun_expr_1_arg(ExpressionFunType::Sin, [multiplied]);
                                 return;
