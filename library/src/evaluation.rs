@@ -86,9 +86,9 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        benchmark!(benchmark, formula.optimize_all(), "Formula Optimization");
+        benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
-        benchmark!(benchmark, formula.optimize_all(), "Formula Optimization");
+        benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
 
         let result = benchmark!(
             benchmark,
