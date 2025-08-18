@@ -1,4 +1,6 @@
-use crate::{Element, Number, formula};
+use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
+use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
+use crate::{Element, FormulaStore, Number, formula};
 use macros::formula_matches;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
@@ -206,10 +208,36 @@ impl Element {
                     self.optimize_new();
                 }
             },
+            Element::FunctionWithExpression { arguments, expr_value, .. } => {
+                if let ExprValue::Native(fun_type) = expr_value {
+                    match fun_type {
+                        ExpressionFunType::Floor | ExpressionFunType::Round => {
+                            if arguments.len() == 1
+                                && arguments[0].get_number_inner().is_some_and(|n| n.is_integer())
+                            {
+                                *self = arguments[0].clone();
+                                return;
+                            }
+                        },
+                        ExpressionFunType::Sin => {
+                            if arguments.len() == 1 {
+                                let arg = &arguments[0];
+                                let divided =
+                                    mul([arg.clone(), inv(mul([num(2), num_expr(ExpressionNumType::Pi)]))]);
+                                let rem = fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(1)]);
+                                let mut multiplied = mul([rem, num(2), num_expr(ExpressionNumType::Pi)]);
+                                multiplied.optimize_new();
+                                *self = fun_expr_1_arg(ExpressionFunType::Sin, [multiplied]);
+                                return;
+                            }
+                        },
+                        _ => {},
+                    }
+                }
+            },
             Element::Function { .. }
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
-            | Element::FunctionWithExpression { .. }
             | Element::NumberWithExpression { .. }
             | Element::Number(_)
             | Element::Brackets(_)
@@ -277,6 +305,7 @@ impl Element {
 mod tests {
     use super::*;
     use crate::formula_short::{inv, mul, num, var};
+    use crate::{FormulaStore, create_default_context};
 
     #[test]
     fn test_optimize_new() {
@@ -407,5 +436,19 @@ mod tests {
         let mut f = formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1)))));
         f.optimize_new();
         assert_eq!(f, formula!(pow(num(2), neg(num(1)))));
+    }
+
+    #[test]
+    fn test_expr_fun_optimization() {
+        // pi optimization
+        let mut fs = FormulaStore::new_empty();
+        let ctx = &mut create_default_context();
+        fs.define_default_symbols().unwrap();
+        assert_eq!(fs.eval("sin(2*pi)", ctx), Ok(Number::from(0)));
+        assert_eq!(fs.eval("sin(10*pi)", ctx), Ok(Number::from(0)));
+        assert_eq!(fs.eval("sin(pi)", ctx), Ok(Number::from(0)));
+        assert_eq!(fs.eval("sin(pi/2)", ctx), Ok(Number::from(1)));
+        assert_eq!(fs.eval("sin(pi/6)", ctx), Ok(Number::from_string("0.5").unwrap()));
+        assert_eq!(fs.eval("sin(pi/3)", ctx), Ok(fs.eval("sqrt(3)/2", ctx).unwrap()));
     }
 }

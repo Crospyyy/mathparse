@@ -146,17 +146,22 @@ impl FormulaStore {
             |ctx: &mut Context, args: Vec<Number>| Number::sum(&args, ctx),
             "sum".into(),
         )?;
+        self.add_expression_fun_multiple_args(
+            "rem",
+            ExpressionFunType::Rem.get_param_count(),
+            ExpressionFunType::Rem.get_function_multiple_args().unwrap(),
+            "rem".into(),
+        )?;
 
-        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()), "pi".into())?;
-        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()), "e".into())?;
+        self.add_expression_var("pi", ExpressionNumType::Pi.get_function(), "pi".into())?;
+        self.add_expression_var("e", ExpressionNumType::E.get_function(), "e".into())?;
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
-        self.add_symbol_from_string("rem(x)=x-floor(x)", false)?; // todo implement this in a better way
-        self.add_symbol_from_string(
-            "better_sin(x) = round(sin( rem(x/(2*pi))*2*pi ) * 2^1022) * 2^(-1022)",
-            false,
-        )?; // todo implement this in a better way
+        // self.add_symbol_from_string(
+        //     "better_sin(x) = round(sin( rem(x/(2*pi))*2*pi ) * 2^1022) * 2^(-1022)",
+        //     false,
+        // )?; // todo implement this in a better way
 
         Ok(())
     }
@@ -354,7 +359,9 @@ pub struct InsertionElement {
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
-            if let Element::FunctionWithExpression { expression, param_count, expr_value: debug_name, .. } = &self.formula
+            if let Element::FunctionWithExpression {
+                expression, param_count, expr_value: debug_name, ..
+            } = &self.formula
             {
                 if !param_count.number_would_be_valid(param_values.len()) {
                     return Err(format!(

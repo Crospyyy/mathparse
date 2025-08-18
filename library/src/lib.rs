@@ -77,7 +77,9 @@ pub enum Number {
 
 #[allow(unused)]
 mod formula_short {
-    use crate::{Element, Number};
+    use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
+    use crate::parsing::signature::ParamCount;
+    use crate::{Element, FunctionExpression, Number};
 
     pub fn num(num: impl ToString) -> Element {
         Element::Number(Number::from_string(num).unwrap())
@@ -114,5 +116,37 @@ mod formula_short {
     /// = element^-1
     pub fn inv(element: Element) -> Element {
         pow(element, neg(num("1")))
+    }
+
+    pub fn num_expr(value: ExpressionNumType) -> Element {
+        Element::NumberWithExpression { fun: value.get_function(), expr_value: value.into() }
+    }
+
+    pub fn fun_expr_1_arg(fun: ExpressionFunType, args: impl IntoIterator<Item=Element>) -> Element {
+        assert_eq!(fun.get_param_count(), ParamCount::Exactly(1));
+        Element::FunctionWithExpression {
+            arguments: args.into_iter().collect(),
+            param_count: ParamCount::Exactly(1),
+            expression: FunctionExpression::SingleArgument(fun.get_function_single_arg().unwrap()),
+            expr_value: fun.into(),
+        }
+    }
+
+    pub fn fun_expr_n_args(fun: ExpressionFunType, args: impl IntoIterator<Item=Element>) -> Element {
+        Element::FunctionWithExpression {
+            arguments: args.into_iter().collect(),
+            param_count: fun.get_param_count(),
+            expression: FunctionExpression::MultipleArguments(fun.get_function_multiple_args().unwrap()),
+            expr_value: fun.into(),
+        }
+    }
+
+    pub fn fun_expr_new(debug_name: impl ToString, param_count: ParamCount, expression: FunctionExpression, args: impl IntoIterator<Item=Element>) -> Element {
+        Element::FunctionWithExpression {
+            arguments: args.into_iter().collect(),
+            param_count,
+            expression,
+            expr_value: ExprValue::Custom(debug_name.to_string()),
+        }
     }
 }

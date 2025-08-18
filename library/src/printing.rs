@@ -216,6 +216,8 @@ impl Display for ExpressionFunType {
             ExpressionFunType::Atan => "atan",
             ExpressionFunType::Floor => "floor",
             ExpressionFunType::Round => "round",
+            ExpressionFunType::Rem => "rem",
+            ExpressionFunType::Log2 => "log2",
         })
     }
 }

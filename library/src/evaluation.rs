@@ -12,17 +12,22 @@ impl Element {
             | Element::Function { .. }
             | Element::VariableOrFunction(_) => None,
             Element::Plus(elements) => {
-                let mut sum = Number::from(0);
-                for n in elements {
-                    sum = sum.plus(&n.eval(ctx)?, ctx);
+                let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+                if let Some(nan) = values.iter().find(|v| v.is_nan()) {
+                    return Some(nan.clone());
                 }
-                Some(sum)
+                let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
+                Some(product)
             },
             Element::Multiply(elements) => {
-                let mut product = Number::from(1);
-                for n in elements {
-                    product = product.mul(&n.eval(ctx)?, ctx);
+                let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+                if let Some(nan) = values.iter().find(|v| v.is_nan()) {
+                    return Some(nan.clone());
                 }
+                if values.iter().any(|v| v == 0) {
+                    return Some(Number::from(0));
+                }
+                let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
                 Some(product)
             },
             Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),

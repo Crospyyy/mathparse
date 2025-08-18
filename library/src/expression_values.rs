@@ -1,4 +1,7 @@
 use std::fmt::Display;
+use astro_float::ctx::Context;
+use crate::Number;
+use crate::parsing::signature::ParamCount;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ExpressionFunType {
@@ -10,6 +13,8 @@ pub enum ExpressionFunType {
 	Atan,
 	Floor,
 	Round,
+	Rem,
+	Log2,
 }
 
 impl From<ExpressionFunType> for ExprValue<ExpressionFunType> {
@@ -70,6 +75,8 @@ impl TryFrom<&str> for ExpressionFunType {
 			"atan" => Ok(ExpressionFunType::Atan),
 			"floor" => Ok(ExpressionFunType::Floor),
 			"round" => Ok(ExpressionFunType::Round),
+			"rem" => Ok(ExpressionFunType::Rem),
+			"log2" => Ok(ExpressionFunType::Log2),
 			_ => Err(format!("Unknown ExpressionFunType: {}", value)),
 		}
 	}

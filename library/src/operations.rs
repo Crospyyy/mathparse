@@ -261,8 +261,10 @@ impl Number {
             Number::Float(f) => f.is_negative(),
         }
     }
+    pub(crate) fn is_integer(&self) -> bool {
+        todo!()
+    }
 }
-
 
 static REGEX_NUMBER_UNDERSCORE_REMOVAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)_(\d)").unwrap());
 
@@ -411,6 +413,23 @@ impl Number {
 
 // implement operations where there are two numbers as parameters
 impl Number {
+    pub fn rem(&self, other: &Self, ctx: &mut Context) -> Self {
+        if let (Number::Rational(r1), Number::Rational(r2)) = (self, other) {
+            if r2.is_zero() {
+                return Self::nan(None);
+            }
+            Self::from(r1 % r2)
+        } else {
+            let self_float = self.get_float(ctx);
+            let other_float = other.get_float(ctx);
+            Self::from(inexact_if_needed!(
+                expr!(self_float % other_float, &mut *ctx),
+                self_float,
+                other_float
+            ))
+        }
+    }
+
     pub fn plus(&self, other: &Self, ctx: &mut Context) -> Self {
         if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
             Self::from(a + b)
@@ -555,6 +574,82 @@ impl Number {
     float_op!(log2); // todo check if this can be implemented with rational numbers
     float_op!(log10);
     float_op!(ln);
+}
+
+pub(crate) mod expression_functions {
+    use crate::Number;
+    use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+    use astro_float::ctx::Context;
+    use crate::parsing::signature::ParamCount;
+
+    fn pi(ctx: &mut Context) -> Number {
+        Number::Float(ctx.const_pi())
+    }
+
+    fn e(ctx: &mut Context) -> Number {
+        Number::Float(ctx.const_e())
+    }
+    impl ExpressionNumType {
+        pub(crate) fn get_function(&self) -> fn(&mut Context) -> Number {
+            match self {
+                ExpressionNumType::Pi => pi,
+                ExpressionNumType::E => e,
+            }
+        }
+    }
+    impl ExpressionFunType {
+        pub(crate) fn get_function_single_arg(&self) -> Option<fn(&Number, &mut Context) -> Number> {
+            match self {
+                ExpressionFunType::Sin => Number::sin,
+                ExpressionFunType::Asin => Number::asin,
+                ExpressionFunType::Cos => Number::cos,
+                ExpressionFunType::Acos => Number::acos,
+                ExpressionFunType::Tan => Number::tan,
+                ExpressionFunType::Atan => Number::atan,
+                ExpressionFunType::Floor => Number::floor,
+                ExpressionFunType::Round => Number::round,
+                ExpressionFunType::Rem => None?,
+                ExpressionFunType::Log2 => Number::log2,
+            }
+                .into()
+        }
+
+        pub(crate) fn get_function_multiple_args(&self) -> Option<fn(&mut Context, Vec<Number>) -> Number> {
+            match self {
+                ExpressionFunType::Rem => Some(|ctx: &mut Context, args: Vec<Number>| {
+                    if args.len() != 2 {
+                        eprintln!("rem function expects exactly two arguments, but got {}", args.len());
+                        return Number::nan(None);
+                    }
+                    Number::rem(&args[0], &args[1], ctx)
+                }),
+                ExpressionFunType::Sin
+                | ExpressionFunType::Asin
+                | ExpressionFunType::Cos
+                | ExpressionFunType::Acos
+                | ExpressionFunType::Tan
+                | ExpressionFunType::Atan
+                | ExpressionFunType::Floor
+                | ExpressionFunType::Round
+                | ExpressionFunType::Log2 => None?,
+            }
+        }
+
+        pub(crate) fn get_param_count(&self) -> ParamCount {
+            match self {
+                ExpressionFunType::Rem => ParamCount::Exactly(2),
+                ExpressionFunType::Sin => ParamCount::Exactly(1),
+                ExpressionFunType::Asin => ParamCount::Exactly(1),
+                ExpressionFunType::Cos => ParamCount::Exactly(1),
+                ExpressionFunType::Acos => ParamCount::Exactly(1),
+                ExpressionFunType::Tan => ParamCount::Exactly(1),
+                ExpressionFunType::Atan => ParamCount::Exactly(1),
+                ExpressionFunType::Floor => ParamCount::Exactly(1),
+                ExpressionFunType::Round => ParamCount::Exactly(1),
+                ExpressionFunType::Log2 => ParamCount::Exactly(1),
+            }
+        }
+    }
 }
 
 #[cfg(test)]
