@@ -460,10 +460,14 @@ mod tests {
         let ctx = &mut create_default_context();
         fs.define_default_symbols().unwrap();
         assert_eq!(fs.eval("sin(2*pi)", ctx), Ok(Number::from(0)));
+        assert_eq!(fs.eval("sin(-2*pi)", ctx), Ok(Number::from(0)));
         assert_eq!(fs.eval("sin(10*pi)", ctx), Ok(Number::from(0)));
         assert_eq!(fs.eval("sin(pi)", ctx), Ok(Number::from(0)));
+        assert_eq!(fs.eval("sin(-pi)", ctx), Ok(Number::from(0)));
         assert_eq!(fs.eval("sin(pi/2)", ctx), Ok(Number::from(1)));
+        assert_eq!(fs.eval("sin(-pi/2)", ctx), Ok(Number::from(-1)));
         assert_eq!(fs.eval("sin(pi/6)", ctx), Ok(Number::from_string("0.5").unwrap()));
+        assert_eq!(fs.eval("sin(-pi/6)", ctx), Ok(Number::from_string("-0.5").unwrap()));
         assert_eq!(fs.eval("sin(pi/3)", ctx), Ok(fs.eval("sqrt(3)/2", ctx).unwrap()));
     }
 }

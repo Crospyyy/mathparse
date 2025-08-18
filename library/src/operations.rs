@@ -205,6 +205,14 @@ pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
         dbg!("returning one");
         return Number::from(1);
     }
+    if mapped.abs() == BigRational::new(1.into(), 3.into()) {
+        return if mapped.is_positive() {
+            Number::Rational(BigRational::new(1.into(), 2.into()))
+        } else {
+            Number::Rational(BigRational::new((-1).into(), 2.into()))
+        }
+    }
+
     let float = helper_functions::float_from_rational(&(mapped / rational(2)), ctx);
     dbg!("returning sin");
     Number::from(expr!(sin(float * pi), &mut *ctx))
