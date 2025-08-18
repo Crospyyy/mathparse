@@ -6,6 +6,7 @@ use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
+use std::ops::Mul;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
 
@@ -227,14 +228,24 @@ impl Element {
                                 let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
                                 let rem = fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
                                 let corrected = fun_expr_new(
-                                    "negative_over_1",
+                                    "pi_multiplier_correction",
                                     ParamCount::Exactly(1),
                                     FunctionExpression::SingleArgument(|num, ctx| {
-                                        if num
-                                            .get_exact_rational()
-                                            .is_some_and(|r| r >= BigRational::from_integer(1.into()))
-                                        {
-                                            num.plus(&Number::from(-1), ctx).neg(ctx)
+                                        fn rational(n: i32) -> BigRational {
+                                            BigRational::from_integer(n.into())
+                                        }
+                                        if let Some(r) = num.get_exact_rational() {
+                                            let rem = (&r * rational(2)) % rational(4);
+                                            let mapped = if rem < rational(1) {
+                                                rem
+                                            } else if rem < rational(2) {
+                                                rational(2) - rem
+                                            } else if rem < rational(3) {
+                                                rational(2) - rem
+                                            } else {
+                                                rem - rational(4)
+                                            };
+                                            Number::from(mapped / rational(2))
                                         } else {
                                             num.clone()
                                         }
