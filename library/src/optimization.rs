@@ -1,6 +1,6 @@
-use crate::{Element, Number, formula, formula_matches};
-use astro_float::{BigFloat, Error};
-use macros::match_formula;
+use crate::{Element, Number, formula};
+use astro_float::Error;
+use macros::formula_matches;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use strum::{EnumCount, IntoEnumIterator};
@@ -263,6 +263,28 @@ impl Element {
     }
 }
 
+fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&mut Vec<T>>) {
+    let mut new_list = vec![];
+    for e in list.iter_mut() {
+        if let Some(inner) = flatten_fn(e) {
+            flatten_list(inner, flatten_fn);
+            new_list.append(inner);
+        } else {
+            new_list.push(e.clone());
+        }
+    }
+    *list = new_list;
+}
+
+macro_rules! quick_match {
+    ($input:expr,$pat:pat => $expr:expr) => {
+        match $input {
+            $pat => Some($expr),
+            _ => None,
+        }
+    };
+}
+
 impl Element {
     pub(crate) fn optimize_new(&mut self) {
         self.run_on_children(&mut |child| {
@@ -271,51 +293,39 @@ impl Element {
         });
         match self {
             Element::Plus(elements) => {
+                if elements.iter().any(|e| formula_matches!(e, plus)) {
+                    flatten_list(elements, |e| quick_match!(e, Element::Plus(inner) => inner))
+                }
                 if let Some(e) = elements.iter().find(|e| e.is_nan()) {
                     *self = e.clone();
                     return;
                 }
                 if elements.iter().any(|e| e.is(0)) {
                     elements.retain(|e| !e.is(0));
-                    if elements.is_empty() {
-                        *self = formula!(num(0));
-                        return;
-                    } else if elements.len() == 1 {
-                        *self = elements.remove(0);
-                        return;
-                    }
                 }
-                let mut to_remove = vec![false; elements.len()];
-                'outer: for i in 0..elements.len() - 1 {
-                    for j in i + 1..elements.len() {
-                        if to_remove[j] {
-                            continue;
-                        }
-                        if match_formula!(elements[i], neg({ &elements[j] }))
-                            || match_formula!(elements[j], neg({ &elements[i] }))
-                        {
-                            to_remove[i] = true;
-                            to_remove[j] = true;
-                            continue 'outer;
+                if elements.len() >= 2 {
+                    let mut to_remove = vec![false; elements.len()];
+                    'outer: for i in 0..elements.len() - 1 {
+                        for j in i + 1..elements.len() {
+                            if to_remove[j] {
+                                continue;
+                            }
+                            if formula_matches!(elements[i], neg({ &elements[j] }))
+                                || formula_matches!(elements[j], neg({ &elements[i] }))
+                            {
+                                to_remove[i] = true;
+                                to_remove[j] = true;
+                                continue 'outer;
+                            }
                         }
                     }
-                }
-                for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
-                    elements.remove(i);
+                    for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
+                        elements.remove(i);
+                    }
                 }
 
-                if elements.is_empty() {
-                    *self = formula!(num(0));
-                    return;
-                } else if elements.len() == 1 {
-                    *self = elements.remove(0);
-                    return;
-                }
-            },
-            Element::Negate(n) => {
-                if let Some(e) = match_formula!(n.as_ref(), neg(x)) {
-                    *self = e.clone();
-                    return;
+                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 0) {
+                    *self = replacement
                 }
             },
             Element::Multiply(elements) => {
@@ -323,48 +333,56 @@ impl Element {
                     *self = e.clone();
                     return;
                 }
-                if elements.iter().any(|e| match_formula!(e, num(0))) {
+                if elements.iter().any(|e| formula_matches!(e, num(0))) {
                     *self = formula!(num(0));
                     return;
                 }
-                let mut to_remove = vec![false; elements.len()];
-                'outer: for i in 0..elements.len() - 1 {
-                    for j in i + 1..elements.len() {
-                        if to_remove[j] {
-                            continue;
-                        }
-                        if match_formula!(elements[i], pow({ &elements[j] }, neg(num(1))))
-                            || match_formula!(elements[j], pow({ &elements[i] }, neg(num(1))))
-                        {
-                            to_remove[i] = true;
-                            to_remove[j] = true;
-                            continue 'outer;
+                if elements.iter().any(|e| formula_matches!(e, mul)) {
+                    flatten_list(elements, |e| quick_match!(e, Element::Multiply(inner) => inner))
+                }
+                if elements.len() >= 2 {
+                    let mut to_remove = vec![false; elements.len()];
+                    'outer: for i in 0..elements.len() - 1 {
+                        for j in i + 1..elements.len() {
+                            if to_remove[j] {
+                                continue;
+                            }
+                            if formula_matches!(elements[i], pow({ &elements[j] }, neg(num(1))))
+                                || formula_matches!(elements[j], pow({ &elements[i] }, neg(num(1))))
+                            {
+                                to_remove[i] = true;
+                                to_remove[j] = true;
+                                continue 'outer;
+                            }
                         }
                     }
+                    for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
+                        elements.remove(i);
+                    }
                 }
-                for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
-                    elements.remove(i);
+
+                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
+                    *self = replacement
                 }
-                if elements.is_empty() {
-                    *self = formula!(num(1));
-                    return;
-                } else if elements.len() == 1 {
-                    *self = elements.remove(0);
+            },
+            Element::Negate(n) => {
+                if let Element::Negate(e) = n.as_ref() {
+                    *self = e.as_ref().clone();
                     return;
                 }
             },
             Element::Pow(base, exp) => {
-                if let Some(num) = match_formula!(base.as_ref(), num(x)) {
+                if let Some(num) = formula_matches!(base.as_ref(), num(x)) {
                     if num == 1 || num == 0 {
                         *self = formula!(num(num.clone()));
                     }
                     return;
                 }
-                if match_formula!(exp.as_ref(), num(1)) {
+                if formula_matches!(exp.as_ref(), num(1)) {
                     *self = base.as_ref().clone();
                     return;
                 }
-                if let Some((inner_base, inner_exp)) = match_formula!(base.as_ref(), pow(x, x)) {
+                if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
                     let exp_ref = exp.as_ref();
                     *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
                     self.optimize_new();
@@ -378,6 +396,16 @@ impl Element {
             | Element::Number(_)
             | Element::Brackets(_)
             | Element::String(_) => {},
+        }
+    }
+
+    fn handle_empty_or_one_element(elements: &Vec<Element>, neutral_element: u16) -> Option<Element> {
+        if elements.is_empty() {
+            Some(formula!(num(neutral_element as i32)))
+        } else if elements.len() == 1 {
+            Some(elements[0].clone())
+        } else {
+            None
         }
     }
 }
@@ -596,21 +624,98 @@ mod tests {
 
     #[test]
     fn test_optimize_new() {
-        // doppelte negation wird entfernt
-        let mut formula = Element::parse("--a").unwrap();
-        formula.optimize_new();
-        assert_eq!(formula, var("a"));
-        // plus null wird entfernt
-        let mut formula = Element::parse("a+0+0").unwrap();
-        formula.optimize_new();
-        assert_eq!(formula, var("a"));
-        // multiplikation mit inverse wird entfernt
-        let mut formula = mul([var("a"), inv(var("a"))]);
-        formula.optimize_new();
-        assert_eq!(formula, num(1));
-        // exponenten werden zusammengeführt
-        let mut formula = Element::parse("(a^2)^3").unwrap();
-        formula.optimize_new();
-        assert_eq!(formula, Element::parse("a^(2*3)").unwrap());
+        use crate::formula_short::inv;
+
+        // doppelte Negation
+        let mut f = formula!(neg(neg(var("a"))));
+        f.optimize_new();
+        assert_eq!(f, var("a"));
+
+        // Plus entfernt Nullen komplett
+        let mut f = formula!(plus(num(0), num(0)));
+        f.optimize_new();
+        assert_eq!(f, num(0));
+
+        // Plus reduziert auf einzelnes Element nach Nullentfernung
+        let mut f = formula!(plus(num(0), var("a"), num(0)));
+        f.optimize_new();
+        assert_eq!(f, var("a"));
+
+        // Plus mit additivem Inversen ergibt 0
+        let mut f = formula!(plus(var("a"), neg(var("a"))));
+        f.optimize_new();
+        assert_eq!(f, num(0));
+
+        // Plus mit additiven Inversen und weiterem Term
+        let mut f = formula!(plus(var("a"), neg(var("a")), var("b")));
+        f.optimize_new();
+        assert_eq!(f, var("b"));
+
+        // Plus mit mehreren Paaren
+        let mut f = formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c"))));
+        f.optimize_new();
+        assert_eq!(f, var("b"));
+
+        // Plus propagiert NaN
+        let nan_el = Element::Number(Number::nan(None));
+        let mut f = formula!(plus(var("x"), nan_el, var("y")));
+        f.optimize_new();
+        assert!(f.is_nan());
+
+        // Multiply propagiert NaN
+        let nan_el = Element::Number(Number::nan(None));
+        let mut f = mul([var("x"), nan_el.clone(), var("y")]);
+        f.optimize_new();
+        assert!(f.is_nan());
+
+        // Multiply mit 0 ergibt 0
+        let mut f = formula!(mul(var("a"), num(0), var("b")));
+        f.optimize_new();
+        assert_eq!(f, num(0));
+
+        // Multiply entfernt inverses Paar -> 1
+        let mut f = mul([var("a"), inv(var("a"))]);
+        f.optimize_new();
+        assert_eq!(f, num(1));
+
+        // Multiply entfernt inverses Paar und reduziert auf einzelnes Element
+        let mut f = formula!(mul(var("a"), var("b"), inv(var("a"))));
+        f.optimize_new();
+        assert_eq!(f, var("b"));
+
+        // Multiply mit 0 dominiert trotz inverser Faktoren
+        let mut f = formula!(mul(num(0), var("a"), inv(var("a"))));
+        f.optimize_new();
+        assert_eq!(f, num(0));
+
+        // Potenz Basis 1
+        let mut f = formula!(pow(num(1), var("x")));
+        f.optimize_new();
+        assert_eq!(f, num(1));
+
+        // Potenz Basis 0
+        let mut f = formula!(pow(num(0), var("x")));
+        f.optimize_new();
+        assert_eq!(f, num(0));
+
+        // Exponent 1
+        let mut f = formula!(pow(var("a"), num(1)));
+        f.optimize_new();
+        assert_eq!(f, var("a"));
+
+        // Zusammenführen verschachtelter Exponenten
+        let mut f = formula!(pow(pow(var("a"), num(2)), num(3)));
+        f.optimize_new();
+        assert_eq!(f, formula!(pow(var("a"), mul(num(2), num(3)))));
+
+        // Mehrfach verschachtelte Exponenten
+        let mut f = formula!(pow(pow(pow(var("a"), num(2)), num(3)), num(4)));
+        f.optimize_new();
+        assert_eq!(f, formula!(pow(var("a"), mul(num(2), num(3), num(4)))));
+
+        // Exponent 1 verhindert weiteres Kombinieren
+        let mut f = formula!(pow(pow(var("a"), num(2)), num(1)));
+        f.optimize_new();
+        assert_eq!(f, formula!(pow(var("a"), num(2))));
     }
 }

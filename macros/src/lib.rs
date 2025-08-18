@@ -44,7 +44,7 @@ use quote::{TokenStreamExt, quote};
 /// - **Compare String**
 ///     - `{some_expr}` only match if the compared string is equal to the result of `some_expr`
 #[proc_macro]
-pub fn match_formula(item: TokenStream) -> TokenStream {
+pub fn formula_matches(item: TokenStream) -> TokenStream {
     new::outer(item)
 }
 
