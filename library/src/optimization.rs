@@ -1,7 +1,8 @@
 use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, fun_expr_new, inv, mul, neg, num, num_expr};
+use crate::operations::{rational, sin_radians};
 use crate::parsing::signature::ParamCount;
-use crate::{Element, FormulaStore, FunctionExpression, Number, formula};
+use crate::{Element, FormulaStore, FunctionExpression, Number, create_default_context, formula};
 use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
@@ -226,35 +227,22 @@ impl Element {
                             if arguments.len() == 1 {
                                 let arg = &arguments[0];
                                 let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
-                                let rem = fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
+                                let mut rem =
+                                    fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
+                                rem.optimize_new();
                                 let corrected = fun_expr_new(
-                                    "pi_multiplier_correction",
+                                    "pi_with_radians",
                                     ParamCount::Exactly(1),
                                     FunctionExpression::SingleArgument(|num, ctx| {
-                                        fn rational(n: i32) -> BigRational {
-                                            BigRational::from_integer(n.into())
-                                        }
                                         if let Some(r) = num.get_exact_rational() {
-                                            let rem = (&r * rational(2)) % rational(4);
-                                            let mapped = if rem < rational(1) {
-                                                rem
-                                            } else if rem < rational(2) {
-                                                rational(2) - rem
-                                            } else if rem < rational(3) {
-                                                rational(2) - rem
-                                            } else {
-                                                rem - rational(4)
-                                            };
-                                            Number::from(mapped / rational(2))
+                                            sin_radians(&(r * rational(2)), ctx)
                                         } else {
                                             num.clone()
                                         }
                                     }),
                                     [rem.clone()],
                                 );
-                                let mut multiplied = mul([corrected, num_expr(ExpressionNumType::Pi)]);
-                                multiplied.optimize_new();
-                                *self = fun_expr_1_arg(ExpressionFunType::Sin, [multiplied]);
+                                *self = corrected;
                                 return;
                             }
                         },

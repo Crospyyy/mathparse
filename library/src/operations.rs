@@ -44,6 +44,7 @@ macro_rules! inexact_if_needed {
 
 mod helper_functions {
     use crate::Number;
+    use crate::operations::rational;
     use astro_float::ctx::Context;
     use astro_float::{BigFloat, Error, Word, expr};
     use num_bigint::BigInt;
@@ -161,6 +162,9 @@ mod helper_functions {
 
     /// Returns `None` if the float is inf or NaN.
     pub(super) fn rational_from_float(float: &BigFloat) -> Option<BigRational> {
+        if *float == BigFloat::from(1) {
+            return Some(rational(1));
+        }
         use num_bigint::Sign as IntSign;
         let sign_positive = float.sign()?.is_positive();
         let exponent = float.exponent()?;
@@ -174,6 +178,36 @@ mod helper_functions {
         let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
         Some(ratio)
     }
+}
+pub(crate) fn rational(n: i32) -> BigRational {
+    BigRational::from_integer(n.into())
+}
+
+/// r = radians (0..1 = top right, 1..2 = top left, 2..3 = bottom left, 3..4 = bottom right)
+pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
+    dbg!(&r);
+    let r = r.clone() % rational(4);
+    dbg!(&r);
+    let mapped = if r < rational(1) {
+        r
+    } else if r < rational(2) {
+        rational(2) - r
+    } else if r < rational(3) {
+        rational(2) - r
+    } else {
+        r - rational(4)
+    };
+    if mapped == rational(0) {
+        dbg!("returning zero");
+        return Number::from(0);
+    }
+    if mapped.abs() == rational(1) {
+        dbg!("returning one");
+        return Number::from(1);
+    }
+    let float = helper_functions::float_from_rational(&(mapped / rational(2)), ctx);
+    dbg!("returning sin");
+    Number::from(expr!(sin(float * pi), &mut *ctx))
 }
 
 impl From<BigRational> for Number {
@@ -579,8 +613,8 @@ impl Number {
 pub(crate) mod expression_functions {
     use crate::Number;
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-    use astro_float::ctx::Context;
     use crate::parsing::signature::ParamCount;
+    use astro_float::ctx::Context;
 
     fn pi(ctx: &mut Context) -> Number {
         Number::Float(ctx.const_pi())
