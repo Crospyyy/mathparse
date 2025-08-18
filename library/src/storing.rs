@@ -79,12 +79,8 @@ impl FormulaStore {
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
         macro_rules! define_fun_single_arg {
-            ($op:ident) => {
-                self.add_expression_fun_single_arg(stringify!($op), Number::$op, "x")?
-            };
-            ($x:ident, $($y:ident),+) => {
-                define_fun_single_arg!($x);
-                define_fun_single_arg!($($y),+)
+            ($($op:ident),+) => {
+                $(self.add_expression_fun_single_arg(stringify!($op), Number::$op, "x", stringify!($op))?);+
             }
         }
 
@@ -101,6 +97,7 @@ impl FormulaStore {
                     Number::nan(None)
                 }
             },
+            "avg",
         )?;
         self.add_expression_fun_multiple_args(
             "median",
@@ -113,6 +110,7 @@ impl FormulaStore {
                     Number::nan(None)
                 }
             },
+            "median",
         )?;
         self.add_expression_fun_multiple_args(
             "max",
@@ -125,6 +123,7 @@ impl FormulaStore {
                     Number::nan(None)
                 }
             },
+            "max",
         )?;
         self.add_expression_fun_multiple_args(
             "min",
@@ -137,15 +136,17 @@ impl FormulaStore {
                     Number::nan(None)
                 }
             },
+            "min",
         )?;
         self.add_expression_fun_multiple_args(
             "sum",
             ParamCount::AtLeast(0),
             |ctx: &mut Context, args: Vec<Number>| Number::sum(&args, ctx),
+            "sum",
         )?;
 
-        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()))?;
-        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()))?;
+        self.add_expression_var("pi", |ctx| Number::Float(ctx.const_pi()), "pi")?;
+        self.add_expression_var("e", |ctx| Number::Float(ctx.const_e()), "e")?;
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
@@ -212,7 +213,7 @@ impl FormulaStore {
     }
 
     pub fn add_expression_var(
-        &mut self, name: impl ToString, expression: fn(&mut Context) -> Number,
+        &mut self, name: impl ToString, expression: fn(&mut Context) -> Number, debug_name: &str,
     ) -> Result<(), String> {
         let name = name.to_string();
         if self.formulas.contains_key(&name) {
@@ -220,13 +221,16 @@ impl FormulaStore {
         }
         self.parameter_mappings.insert(name.clone(), None);
         self.signatures.insert(name.clone(), Signature::Number);
-        self.formulas.insert(name, Element::NumberWithExpression(expression));
+        self.formulas.insert(
+            name,
+            Element::NumberWithExpression { fun: expression, debug_name: debug_name.to_owned() },
+        );
         Ok(())
     }
 
     pub fn add_expression_fun_multiple_args(
         &mut self, name: impl ToString, param_count: ParamCount,
-        expression: fn(&mut Context, Vec<Number>) -> Number,
+        expression: fn(&mut Context, Vec<Number>) -> Number, debug_name: &str,
     ) -> Result<(), String> {
         let name = name.to_string();
         if self.formulas.contains_key(&name) {
@@ -246,12 +250,14 @@ impl FormulaStore {
                 arguments: vec![],
                 param_count,
                 expression: FunctionExpression::MultipleArguments(expression),
+                debug_name: debug_name.to_owned(),
             },
         );
         Ok(())
     }
     pub fn add_expression_fun_single_arg(
         &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number, param_name: &str,
+        debug_name: &str,
     ) -> Result<(), String> {
         let name = name.to_string();
         if self.formulas.contains_key(&name) {
@@ -265,6 +271,7 @@ impl FormulaStore {
                 arguments: vec![Element::Variable(param_name.to_string())],
                 param_count: ParamCount::Exactly(1),
                 expression: FunctionExpression::SingleArgument(expression),
+                debug_name: debug_name.to_owned(),
             },
         );
         Ok(())
@@ -347,7 +354,8 @@ pub struct InsertionElement {
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
-            if let Element::FunctionWithExpression { expression, param_count, .. } = &self.formula {
+            if let Element::FunctionWithExpression { expression, param_count, debug_name, .. } = &self.formula
+            {
                 if !param_count.number_would_be_valid(param_values.len()) {
                     return Err(format!(
                         "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
@@ -360,6 +368,7 @@ impl InsertionElement {
                     arguments: param_values,
                     param_count: *param_count,
                     expression: expression.clone(),
+                    debug_name: debug_name.clone(),
                 });
             }
             let self_arguments = param_values;
@@ -403,7 +412,7 @@ impl Element {
             },
             Element::Negate(x) => x.insert_symbol(insert)?,
             Element::Number(_)
-            | Element::NumberWithExpression(_)
+            | Element::NumberWithExpression { .. }
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
             | Element::String(_) => {},
@@ -503,7 +512,7 @@ impl Element {
             | Element::Number(_)
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
-            | Element::NumberWithExpression(_)
+            | Element::NumberWithExpression { .. }
             | Element::Function { .. } => {},
             Element::Plus(elements)
             | Element::Multiply(elements)

@@ -44,9 +44,10 @@ pub enum Element {
         arguments: Vec<Element>,
         param_count: ParamCount,
         expression: FunctionExpression,
+        debug_name: String,
     },
     /// A number defined by an expression
-    NumberWithExpression(fn(&mut Context) -> Number),
+    NumberWithExpression { fun: fn(&mut Context) -> Number, debug_name: String },
     /// List of elements to add together
     Plus(Vec<Element>),
     /// List of elements to multiply together

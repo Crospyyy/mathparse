@@ -37,7 +37,7 @@ impl Element {
             Element::VariableOrFunction(name) => {
                 format!("var_or_fun({})", name)
             },
-            Element::FunctionWithExpression { arguments, expression, param_count } => {
+            Element::FunctionWithExpression { arguments, expression, param_count, debug_name } => {
                 let param_count_str = match param_count {
                     ParamCount::Exactly(n) => format!("={n} params"),
                     ParamCount::AtLeast(n) => format!(">={n} params"),
@@ -48,15 +48,14 @@ impl Element {
                     "n arguments"
                 };
                 format!(
-                    "fun_with_expr({}, {}, [{}])",
+                    "fun_with_expr:{}({}, {}, [{}])",
+                    debug_name,
                     param_count_str,
                     name_str,
                     arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
                 )
             },
-            Element::NumberWithExpression(_) => {
-                "num_with_expr".to_owned()
-            },
+            Element::NumberWithExpression { debug_name, .. } => format!("num_with_expr:{}", debug_name),
         }
     }
 }
@@ -122,11 +121,13 @@ impl Formula {
             Element::String(s) => {
                 Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
             },
-            Element::FunctionWithExpression { arguments, .. } => Formula::Function {
-                name: "fun_expr".to_string(),
+            Element::FunctionWithExpression { arguments, debug_name, .. } => Formula::Function {
+                name: format!("fun_expr:{debug_name}"),
                 arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
             },
-            Element::NumberWithExpression(_) => Formula::Variable("num_expr".to_string()),
+            Element::NumberWithExpression { debug_name, .. } => {
+                Formula::Variable(format!("num_expr:{debug_name}", ))
+            },
         }
     }
 }

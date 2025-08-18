@@ -36,7 +36,7 @@ impl Element {
             | Element::String(_)
             | Element::VariableOrFunction(_)
             | Element::Number(_)
-            | Element::NumberWithExpression(_) => false,
+            | Element::NumberWithExpression { .. } => false,
         }
     }
 }
@@ -186,7 +186,7 @@ impl Element {
             | Element::Variable(_)
             | Element::VariableOrFunction(_)
             | Element::FunctionWithExpression { .. }
-            | Element::NumberWithExpression(_)
+            | Element::NumberWithExpression { .. }
             | Element::Number(_)
             | Element::Brackets(_)
             | Element::String(_) => {},

@@ -180,8 +180,8 @@ pub mod implementation {
                 | Element::VariableOrFunction(_)
                 | Element::Number(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_)
-                | Element::Pow(_, _) => {},
+                | Element::NumberWithExpression { .. }
+                | Element::Pow(..) => {},
             }
         }
 
@@ -235,7 +235,7 @@ pub mod implementation {
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => {},
+                | Element::NumberWithExpression { .. } => {},
             }
         }
 
@@ -266,7 +266,7 @@ pub mod implementation {
                 | Element::VariableOrFunction(_)
                 | Element::Pow(_, _)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => {},
+                | Element::NumberWithExpression { .. } => {},
             }
         }
 
@@ -316,7 +316,7 @@ pub mod implementation {
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => {},
+                | Element::NumberWithExpression { .. } => {},
             }
         }
 
@@ -370,7 +370,7 @@ pub mod implementation {
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => Ok(()),
+                | Element::NumberWithExpression { .. } => Ok(()),
             }
         }
 
@@ -410,7 +410,7 @@ pub mod implementation {
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => {},
+                | Element::NumberWithExpression { .. } => {},
             }
         }
 
@@ -439,7 +439,7 @@ pub mod implementation {
                 | Element::String(_)
                 | Element::VariableOrFunction(_)
                 | Element::FunctionWithExpression { .. }
-                | Element::NumberWithExpression(_) => {},
+                | Element::NumberWithExpression { .. } => {},
             }
         }
 
@@ -478,7 +478,7 @@ pub mod implementation {
                     });
                 },
                 Element::Variable(_)
-                | Element::NumberWithExpression(_)
+                | Element::NumberWithExpression { .. }
                 | Element::VariableOrFunction(_)
                 | Element::Number(_) => {},
             }
@@ -507,7 +507,7 @@ pub mod implementation {
                 Element::Variable(_)
                 | Element::Number(_)
                 | Element::VariableOrFunction(_)
-                | Element::NumberWithExpression(_) => false,
+                | Element::NumberWithExpression { .. } => false,
             }
         }
     }
@@ -741,7 +741,7 @@ pub mod signature {
                     self.insert_or_replace_symbol(name, Signature::NumberOrFunction)
                 },
                 Element::Number(_)
-                | Element::NumberWithExpression(_)
+                | Element::NumberWithExpression { .. }
                 | Element::Brackets(_)
                 | Element::String(_) => {},
             }
@@ -910,7 +910,7 @@ pub mod signature {
                 Element::Brackets(_)
                 | Element::String(_)
                 | Element::Number(_)
-                | Element::NumberWithExpression(_)
+                | Element::NumberWithExpression { .. }
                 | Element::FunctionWithExpression { .. }
                 | Element::Variable(_)
                 | Element::VariableOrFunction(_) => {},
@@ -952,7 +952,7 @@ pub mod signature {
 				| Element::String(_)
 				| Element::Number(_)
 				| Element::Variable(_)
-				| Element::NumberWithExpression(_)
+                | Element::NumberWithExpression { .. }
 				| Element::FunctionWithExpression { .. } // todo I'm not sure if it is correct to ignore this
 				| Element::VariableOrFunction(_) => {}
 			}

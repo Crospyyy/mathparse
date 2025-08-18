@@ -1,5 +1,5 @@
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, FunctionExpression, Number, benchmark};
+use crate::{Benchmark, Element, FunctionExpression, Number, benchmark, create_default_context};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -28,8 +28,8 @@ impl Element {
             Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
             Element::Number(n) => Some(n.clone()),
             Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-            Element::NumberWithExpression(fun) => Some(fun(ctx)),
-            Element::FunctionWithExpression { arguments, expression, param_count } => match expression {
+            Element::NumberWithExpression { fun, .. } => Some(fun(ctx)),
+            Element::FunctionWithExpression { arguments, expression, param_count, .. } => match expression {
                 FunctionExpression::SingleArgument(fun) => {
                     if arguments.len() != 1 {
                         return None;
@@ -52,7 +52,7 @@ impl Element {
             Element::Brackets(_)
             | Element::String(_)
             | Element::Number(_)
-            | Element::NumberWithExpression(_)
+            | Element::NumberWithExpression { .. }
             | Element::FunctionWithExpression { .. } => {},
             Element::Plus(e) | Element::Multiply(e) => {
                 e.iter().for_each(|el| el.get_all_unexpanded_names(names));
@@ -86,9 +86,13 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
+        dbg!(formula.get_string(&mut create_default_context()));
 
         let result = benchmark!(
             benchmark,
