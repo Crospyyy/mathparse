@@ -300,9 +300,8 @@ impl Element {
                     *self = e.clone();
                     return;
                 }
-                if elements.iter().any(|e| e.is(0)) {
-                    elements.retain(|e| !e.is(0));
-                }
+                elements.retain(|e| !e.is(0));
+
                 if elements.len() >= 2 {
                     let mut to_remove = vec![false; elements.len()];
                     'outer: for i in 0..elements.len() - 1 {
@@ -329,6 +328,9 @@ impl Element {
                 }
             },
             Element::Multiply(elements) => {
+                if elements.iter().any(|e| formula_matches!(e, mul)) {
+                    flatten_list(elements, |e| quick_match!(e, Element::Multiply(inner) => inner))
+                }
                 if let Some(e) = elements.iter().find(|e| e.is_nan()) {
                     *self = e.clone();
                     return;
@@ -337,9 +339,8 @@ impl Element {
                     *self = formula!(num(0));
                     return;
                 }
-                if elements.iter().any(|e| formula_matches!(e, mul)) {
-                    flatten_list(elements, |e| quick_match!(e, Element::Multiply(inner) => inner))
-                }
+                elements.retain(|e| !e.is(1));
+
                 if elements.len() >= 2 {
                     let mut to_remove = vec![false; elements.len()];
                     'outer: for i in 0..elements.len() - 1 {
@@ -378,8 +379,23 @@ impl Element {
                     }
                     return;
                 }
-                if formula_matches!(exp.as_ref(), num(1)) {
-                    *self = base.as_ref().clone();
+                if let Some(x) = formula_matches!(exp.as_ref(), num(x)) {
+                    if x == 1 {
+                        *self = base.as_ref().clone();
+                        return;
+                    }
+                    if x == 0 {
+                        *self = formula!(num(1));
+                        return;
+                    }
+                }
+                if let Some(elements) = quick_match!(base.as_mut(), Element::Multiply(inner) => inner) {
+                    for element in elements.iter_mut() {
+                        let exp = exp.as_ref().clone();
+                        *element = formula!(pow(element, exp))
+                    }
+                    *self = Element::Multiply(elements.clone());
+                    self.optimize_new();
                     return;
                 }
                 if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
@@ -624,7 +640,7 @@ mod tests {
 
     #[test]
     fn test_optimize_new() {
-        use crate::formula_short::inv;
+        use crate::formula_short::{inv, mul, neg, num, plus, pow, var};
 
         // doppelte Negation
         let mut f = formula!(neg(neg(var("a"))));
@@ -663,8 +679,8 @@ mod tests {
         assert!(f.is_nan());
 
         // Multiply propagiert NaN
-        let nan_el = Element::Number(Number::nan(None));
-        let mut f = mul([var("x"), nan_el.clone(), var("y")]);
+        let nan_el2 = Element::Number(Number::nan(None));
+        let mut f = mul([var("x"), nan_el2.clone(), var("y")]);
         f.optimize_new();
         assert!(f.is_nan());
 
@@ -717,5 +733,39 @@ mod tests {
         let mut f = formula!(pow(pow(var("a"), num(2)), num(1)));
         f.optimize_new();
         assert_eq!(f, formula!(pow(var("a"), num(2))));
+
+        // -(-a)*1 + (0+b) + c*(d*0) => a+b,
+        let mut f = formula!(plus(
+            mul(neg(neg(var("a"))), num(1)),
+            plus(num(0), var("b")),
+            mul(var("c"), mul(var("d"), num(0)))
+        ));
+        f.optimize_new();
+        assert_eq!(f, formula!(plus(var("a"), var("b"))));
+
+        // x^0 + y*1 => 1 + y
+        let mut f = formula!(plus(pow(var("x"), num(0)), mul(var("y"), num(1))));
+        f.optimize_new();
+        assert_eq!(f, formula!(plus(num(1), var("y"))));
+
+        // (a+b)+(c+d) -> a+b+c+d
+        let mut f = formula!(plus(plus(var("a"), var("b")), plus(var("c"), var("d"))));
+        f.optimize_new();
+        assert_eq!(f, formula!(plus(var("a"), var("b"), var("c"), var("d"))));
+
+        // (a*b)*(c*d) -> a*b*c*d
+        let mut f = formula!(mul(mul(var("a"), var("b")), mul(var("c"), var("d"))));
+        f.optimize_new();
+        assert_eq!(f, formula!(mul(var("a"), var("b"), var("c"), var("d"))));
+
+        // a*a^-1 -> 1 (bereits oben getestet, hier nochmal aus Sammlung)
+        let mut f = formula!(mul(var("a"), inv(var("a"))));
+        f.optimize_new();
+        assert_eq!(f, num(1));
+
+        // 33*(2*33)^-1 bleibt unverändert da entsprechende Optimierung fehlt
+        let mut f = formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1)))));
+        f.optimize_new();
+        assert_eq!(f, formula!(pow(num(2), neg(num(1)))));
     }
 }
