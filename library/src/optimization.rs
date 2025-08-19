@@ -7,6 +7,7 @@ use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
+use std::mem;
 use std::ops::Mul;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
@@ -136,9 +137,17 @@ impl Element {
                 }
             },
             Element::Multiply(elements) => {
+                let mut outer_neg = false;
+                for e in elements.iter_mut() {
+                    if let Element::Negate(inner) = e {
+                        outer_neg ^= true;
+                        *e = mem::replace(inner, Element::Number(Number::nan(None)));
+                    }
+                }
                 if elements.iter().any(|e| formula_matches!(e, mul)) {
                     flatten_list(elements, |e| quick_match!(e, Element::Multiply(inner) => inner))
                 }
+
                 if let Some(e) = elements.iter().find(|e| e.is_nan()) {
                     *self = e.clone();
                     return;
@@ -171,7 +180,7 @@ impl Element {
                 }
 
                 if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
-                    *self = replacement
+                    *self = if outer_neg { formula!(neg(replacement)) } else { replacement }
                 }
             },
             Element::Negate(n) => {
@@ -320,6 +329,7 @@ impl Element {
 mod tests {
     use super::*;
     use crate::formula_short::{inv, mul, num, var};
+    use crate::printing::Formula;
     use crate::{FormulaStore, create_default_context};
 
     #[test]
@@ -327,34 +337,22 @@ mod tests {
         use crate::formula_short::{inv, mul, num, var};
 
         // doppelte Negation
-        let mut f = formula!(neg(neg(var("a"))));
-        f.optimize_new();
-        assert_eq!(f, var("a"));
+        test(formula!(neg(neg(var("a")))), var("a"));
 
         // Plus entfernt Nullen komplett
-        let mut f = formula!(plus(num(0), num(0)));
-        f.optimize_new();
-        assert_eq!(f, num(0));
+        test(formula!(plus(num(0), num(0))), num(0));
 
         // Plus reduziert auf einzelnes Element nach Nullentfernung
-        let mut f = formula!(plus(num(0), var("a"), num(0)));
-        f.optimize_new();
-        assert_eq!(f, var("a"));
+        test(formula!(plus(num(0), var("a"), num(0))), var("a"));
 
         // Plus mit additivem Inversen ergibt 0
-        let mut f = formula!(plus(var("a"), neg(var("a"))));
-        f.optimize_new();
-        assert_eq!(f, num(0));
+        test(formula!(plus(var("a"), neg(var("a")))), num(0));
 
         // Plus mit additiven Inversen und weiterem Term
-        let mut f = formula!(plus(var("a"), neg(var("a")), var("b")));
-        f.optimize_new();
-        assert_eq!(f, var("b"));
+        test(formula!(plus(var("a"), neg(var("a")), var("b"))), var("b"));
 
         // Plus mit mehreren Paaren
-        let mut f = formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c"))));
-        f.optimize_new();
-        assert_eq!(f, var("b"));
+        test(formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c")))), var("b"));
 
         // Plus propagiert NaN
         let nan_el = Element::Number(Number::nan(None));
@@ -369,54 +367,37 @@ mod tests {
         assert!(f.is_nan());
 
         // Multiply mit 0 ergibt 0
-        let mut f = formula!(mul(var("a"), num(0), var("b")));
-        f.optimize_new();
-        assert_eq!(f, num(0));
+        test(formula!(mul(var("a"), num(0), var("b"))), num(0));
 
         // Multiply entfernt inverses Paar -> 1
-        let mut f = mul([var("a"), inv(var("a"))]);
-        f.optimize_new();
-        assert_eq!(f, num(1));
+        test(mul([var("a"), inv(var("a"))]), num(1));
 
         // Multiply entfernt inverses Paar und reduziert auf einzelnes Element
-        let mut f = formula!(mul(var("a"), var("b"), inv(var("a"))));
-        f.optimize_new();
-        assert_eq!(f, var("b"));
+        test(formula!(mul(var("a"), var("b"), inv(var("a")))), var("b"));
 
         // Multiply mit 0 dominiert trotz inverser Faktoren
-        let mut f = formula!(mul(num(0), var("a"), inv(var("a"))));
-        f.optimize_new();
-        assert_eq!(f, num(0));
+        test(formula!(mul(num(0), var("a"), inv(var("a")))), num(0));
 
         // Potenz Basis 1
-        let mut f = formula!(pow(num(1), var("x")));
-        f.optimize_new();
-        assert_eq!(f, num(1));
+        test(formula!(pow(num(1), var("x"))), num(1));
 
         // Potenz Basis 0
-        let mut f = formula!(pow(num(0), var("x")));
-        f.optimize_new();
-        assert_eq!(f, num(0));
+        test(formula!(pow(num(0), var("x"))), num(0));
 
         // Exponent 1
-        let mut f = formula!(pow(var("a"), num(1)));
-        f.optimize_new();
-        assert_eq!(f, var("a"));
+        test(formula!(pow(var("a"), num(1))), var("a"));
 
         // Zusammenführen verschachtelter Exponenten
-        let mut f = formula!(pow(pow(var("a"), num(2)), num(3)));
-        f.optimize_new();
-        assert_eq!(f, formula!(pow(var("a"), mul(num(2), num(3)))));
+        test(formula!(pow(pow(var("a"), num(2)), num(3))), formula!(pow(var("a"), mul(num(2), num(3)))));
 
         // Mehrfach verschachtelte Exponenten
-        let mut f = formula!(pow(pow(pow(var("a"), num(2)), num(3)), num(4)));
-        f.optimize_new();
-        assert_eq!(f, formula!(pow(var("a"), mul(num(2), num(3), num(4)))));
+        test(
+            formula!(pow(pow(pow(var("a"), num(2)), num(3)), num(4))),
+            formula!(pow(var("a"), mul(num(2), num(3), num(4)))),
+        );
 
         // Exponent 1 verhindert weiteres Kombinieren
-        let mut f = formula!(pow(pow(var("a"), num(2)), num(1)));
-        f.optimize_new();
-        assert_eq!(f, formula!(pow(var("a"), num(2))));
+        test(formula!(pow(pow(var("a"), num(2)), num(1))), formula!(pow(var("a"), num(2))));
 
         // -(-a)*1 + (0+b) + c*(d*0) => a+b,
         let mut f = formula!(plus(
@@ -428,29 +409,34 @@ mod tests {
         assert_eq!(f, formula!(plus(var("a"), var("b"))));
 
         // x^0 + y*1 => 1 + y
-        let mut f = formula!(plus(pow(var("x"), num(0)), mul(var("y"), num(1))));
-        f.optimize_new();
-        assert_eq!(f, formula!(plus(num(1), var("y"))));
+        test(formula!(plus(pow(var("x"), num(0)), mul(var("y"), num(1)))), formula!(plus(num(1), var("y"))));
 
         // (a+b)+(c+d) -> a+b+c+d
-        let mut f = formula!(plus(plus(var("a"), var("b")), plus(var("c"), var("d"))));
-        f.optimize_new();
-        assert_eq!(f, formula!(plus(var("a"), var("b"), var("c"), var("d"))));
+        test(
+            formula!(plus(plus(var("a"), var("b")), plus(var("c"), var("d")))),
+            formula!(plus(var("a"), var("b"), var("c"), var("d"))),
+        );
 
         // (a*b)*(c*d) -> a*b*c*d
-        let mut f = formula!(mul(mul(var("a"), var("b")), mul(var("c"), var("d"))));
-        f.optimize_new();
-        assert_eq!(f, formula!(mul(var("a"), var("b"), var("c"), var("d"))));
+        test(
+            formula!(mul(mul(var("a"), var("b")), mul(var("c"), var("d")))),
+            formula!(mul(var("a"), var("b"), var("c"), var("d"))),
+        );
 
-        // a*a^-1 -> 1 (bereits oben getestet, hier nochmal aus Sammlung)
-        let mut f = formula!(mul(var("a"), inv(var("a"))));
-        f.optimize_new();
-        assert_eq!(f, num(1));
+        test(formula!(mul(var("a"), inv(var("a")))), num(1));
 
-        // 33*(2*33)^-1 bleibt unverändert da entsprechende Optimierung fehlt
-        let mut f = formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1)))));
-        f.optimize_new();
-        assert_eq!(f, formula!(pow(num(2), neg(num(1)))));
+        test(
+            formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1))))),
+            formula!(pow(num(2), neg(num(1)))),
+        );
+
+        test(formula!(mul(neg(num(2)))), formula!(neg(num(2))));
+        test(formula!(mul(neg(num(2)), neg(num(2)))), formula!(mul(num(2), num(2))));
+    }
+
+    fn test(mut input: Element, expected: Element) {
+        input.optimize_new();
+        assert_eq!(input, expected);
     }
 
     #[test]
