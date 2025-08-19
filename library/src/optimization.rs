@@ -240,24 +240,9 @@ impl Element {
                                 let mut rem =
                                     fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
                                 rem.optimize_new();
-                                let corrected = fun_expr_new(
-                                    "pi_with_radians",
-                                    ParamCount::Exactly(1),
-                                    FunctionExpression::SingleArgument(|num, ctx| {
-                                        if let Some(r) = num.get_exact_rational() {
-                                            dbg!("calculate sin with rational");
-                                            sin_radians(&r, ctx)
-                                        } else {
-                                            dbg!("calculate sin with float");
-                                            let float = num.get_float(ctx);
-                                            let mut result = expr!(sin(float * pi / 2), &mut *ctx);
-                                            if float.inexact() {
-                                                result.set_inexact(true)
-                                            }
-                                            Number::from(result)
-                                        }
-                                    }),
-                                    [mul([rem.clone(), num(2)])],
+                                let corrected = fun_expr_1_arg(
+                                    ExpressionFunType::SinWithRadians,
+                                    mul([rem.clone(), num(2)]),
                                 );
                                 *self = corrected;
                                 return;

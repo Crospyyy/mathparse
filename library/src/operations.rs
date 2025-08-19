@@ -640,8 +640,10 @@ impl Number {
 pub(crate) mod expression_functions {
     use crate::Number;
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+    use crate::operations::sin_radians;
     use crate::parsing::signature::ParamCount;
     use astro_float::ctx::Context;
+    use astro_float::expr;
 
     fn pi(ctx: &mut Context) -> Number {
         Number::Float(ctx.const_pi())
@@ -658,6 +660,21 @@ pub(crate) mod expression_functions {
             }
         }
     }
+
+    fn sin_with_radians(num: &Number, ctx: &mut Context) -> Number {
+        if let Some(r) = num.get_exact_rational() {
+            dbg!("calculate sin with rational");
+            sin_radians(&r, ctx)
+        } else {
+            dbg!("calculate sin with float");
+            let float = num.get_float(ctx);
+            let mut result = expr!(sin(float * pi / 2), &mut *ctx);
+            if float.inexact() {
+                result.set_inexact(true)
+            }
+            Number::from(result)
+        }
+    }
     impl ExpressionFunType {
         pub(crate) fn get_function_single_arg(&self) -> Option<fn(&Number, &mut Context) -> Number> {
             match self {
@@ -671,6 +688,7 @@ pub(crate) mod expression_functions {
                 ExpressionFunType::Round => Number::round,
                 ExpressionFunType::Rem => None?,
                 ExpressionFunType::Log2 => Number::log2,
+                ExpressionFunType::SinWithRadians => sin_with_radians,
             }
                 .into()
         }
@@ -692,7 +710,8 @@ pub(crate) mod expression_functions {
                 | ExpressionFunType::Atan
                 | ExpressionFunType::Floor
                 | ExpressionFunType::Round
-                | ExpressionFunType::Log2 => None?,
+                | ExpressionFunType::Log2
+                | ExpressionFunType::SinWithRadians => None?,
             }
         }
 
@@ -708,6 +727,7 @@ pub(crate) mod expression_functions {
                 ExpressionFunType::Floor => ParamCount::Exactly(1),
                 ExpressionFunType::Round => ParamCount::Exactly(1),
                 ExpressionFunType::Log2 => ParamCount::Exactly(1),
+                ExpressionFunType::SinWithRadians => ParamCount::Exactly(1),
             }
         }
     }

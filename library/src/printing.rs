@@ -218,6 +218,7 @@ impl Display for ExpressionFunType {
             ExpressionFunType::Round => "round",
             ExpressionFunType::Rem => "rem",
             ExpressionFunType::Log2 => "log2",
+            ExpressionFunType::SinWithRadians => "sin_radians",
         })
     }
 }

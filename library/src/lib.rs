@@ -122,10 +122,10 @@ mod formula_short {
         Element::NumberWithExpression { fun: value.get_function(), expr_value: value.into() }
     }
 
-    pub fn fun_expr_1_arg(fun: ExpressionFunType, args: impl IntoIterator<Item=Element>) -> Element {
+    pub fn fun_expr_1_arg(fun: ExpressionFunType, arg: Element) -> Element {
         assert_eq!(fun.get_param_count(), ParamCount::Exactly(1));
         Element::FunctionWithExpression {
-            arguments: args.into_iter().collect(),
+            arguments: vec![arg],
             param_count: ParamCount::Exactly(1),
             expression: FunctionExpression::SingleArgument(fun.get_function_single_arg().unwrap()),
             expr_value: fun.into(),

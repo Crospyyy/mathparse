@@ -1,5 +1,5 @@
 use crate::storing::FormulaStore;
-use crate::{benchmark, create_default_context, Benchmark, Element, FunctionExpression, Number};
+use crate::{Benchmark, Element, FunctionExpression, Number, benchmark, create_default_context};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -136,11 +136,13 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+    use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
     use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
-    use astro_float::{expr, Error};
+    use astro_float::{Error, expr};
 
     #[test]
     fn test_formula_evaluation() {
@@ -263,7 +265,21 @@ mod tests {
         test_eval!("rem(0, 2)", Number::from(0));
         test_eval!("rem(1, 2)", Number::from(1));
         test_eval!("rem(2, 2)", Number::from(0));
-        test_eval!("sin(123)", Number::Float(expr!(sin(123), &mut ctx)));
+        test_eval!(
+            "sin(123)",
+            fun_expr_1_arg(
+                ExpressionFunType::SinWithRadians,
+                mul([
+                    fun_expr_n_args(
+                        ExpressionFunType::Rem,
+                        [mul([num(123), inv(num_expr(ExpressionNumType::Pi))]), num(2),]
+                    ),
+                    num(2),
+                ])
+            )
+            .eval(&mut ctx)
+            .unwrap()
+        );
         test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
         test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));
         test_eval!("sqrt(123)", Number::Float(expr!(sqrt(123), &mut ctx)));

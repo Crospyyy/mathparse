@@ -15,6 +15,7 @@ pub enum ExpressionFunType {
 	Round,
 	Rem,
 	Log2,
+	SinWithRadians,
 }
 
 impl From<ExpressionFunType> for ExprValue<ExpressionFunType> {
