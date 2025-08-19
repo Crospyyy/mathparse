@@ -7,6 +7,7 @@ use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
 use std::cmp::Ordering;
+use std::ops::Neg;
 use std::sync::LazyLock;
 
 pub fn create_default_context() -> NumberContext {
@@ -186,9 +187,12 @@ pub(crate) fn rational(n: i32) -> BigRational {
 /// r = radians (0..1 = top right, 1..2 = top left, 2..3 = bottom left, 3..4 = bottom right)
 pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
     dbg!(&r);
-    let r = r.clone() % rational(4);
+    let mut r = r.clone() % rational(4);
+    if r.is_negative() {
+        r += rational(4);
+    }
     dbg!(&r);
-    let mapped = if r < rational(1) {
+    let mut mapped = if r < rational(1) {
         r
     } else if r < rational(2) {
         rational(2) - r
@@ -197,25 +201,33 @@ pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
     } else {
         r - rational(4)
     };
+
+    fn negate_if(num: i32, neg: bool) -> i32 {
+        if neg { -num } else { num }
+    }
     if mapped == rational(0) {
         dbg!("returning zero");
         return Number::from(0);
     }
     if mapped.abs() == rational(1) {
         dbg!("returning one");
-        return Number::from(1);
+        return Number::from(negate_if(1, mapped.is_negative()));
     }
     if mapped.abs() == BigRational::new(1.into(), 3.into()) {
-        return if mapped.is_positive() {
-            Number::Rational(BigRational::new(1.into(), 2.into()))
-        } else {
-            Number::Rational(BigRational::new((-1).into(), 2.into()))
-        }
+        dbg!("returning 1/2");
+        return Number::Rational(BigRational::new(negate_if(1, mapped.is_negative()).into(), 2.into()));
+    }
+    if mapped.abs() == BigRational::new(2.into(), 3.into()) {
+        dbg!("returning 1/2");
+        let negator = negate_if(1, mapped.is_negative());
+        return Number::from(expr!(negator * sqrt(3) / 2, &mut *ctx));
     }
 
+    dbg!("return sin calculation");
     let float = helper_functions::float_from_rational(&(mapped / rational(2)), ctx);
-    dbg!("returning sin");
-    Number::from(expr!(sin(float * pi), &mut *ctx))
+    let sin_input = expr!(float * pi, &mut *ctx);
+    let float = expr!(sin(sin_input), &mut *ctx);
+    Number::from(float)
 }
 
 impl From<BigRational> for Number {
@@ -304,7 +316,10 @@ impl Number {
         }
     }
     pub(crate) fn is_integer(&self) -> bool {
-        todo!()
+        match self {
+            Number::Rational(r) => r.is_integer(),
+            Number::Float(f) => f.is_int(),
+        }
     }
 }
 
@@ -460,7 +475,11 @@ impl Number {
             if r2.is_zero() {
                 return Self::nan(None);
             }
-            Self::from(r1 % r2)
+            let mut result = r1 % r2;
+            if result.is_negative() {
+                result += r2;
+            }
+            Self::from(result)
         } else {
             let self_float = self.get_float(ctx);
             let other_float = other.get_float(ctx);

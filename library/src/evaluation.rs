@@ -1,5 +1,5 @@
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, FunctionExpression, Number, benchmark, create_default_context};
+use crate::{benchmark, create_default_context, Benchmark, Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -140,7 +140,7 @@ mod tests {
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
-    use astro_float::{Error, expr};
+    use astro_float::{expr, Error};
 
     #[test]
     fn test_formula_evaluation() {
@@ -258,7 +258,11 @@ mod tests {
                 assert_eq!(store.eval($input, &mut ctx), Ok($output))
             };
         }
-
+        test_eval!("rem(-2, 2)", Number::from(0));
+        test_eval!("rem(-1, 2)", Number::from(1));
+        test_eval!("rem(0, 2)", Number::from(0));
+        test_eval!("rem(1, 2)", Number::from(1));
+        test_eval!("rem(2, 2)", Number::from(0));
         test_eval!("sin(123)", Number::Float(expr!(sin(123), &mut ctx)));
         test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
         test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));

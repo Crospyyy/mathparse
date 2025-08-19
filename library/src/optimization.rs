@@ -3,6 +3,7 @@ use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, fun_expr_new, inv, m
 use crate::operations::{rational, sin_radians};
 use crate::parsing::signature::ParamCount;
 use crate::{Element, FormulaStore, FunctionExpression, Number, create_default_context, formula};
+use astro_float::expr;
 use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
@@ -244,12 +245,19 @@ impl Element {
                                     ParamCount::Exactly(1),
                                     FunctionExpression::SingleArgument(|num, ctx| {
                                         if let Some(r) = num.get_exact_rational() {
-                                            sin_radians(&(r * rational(2)), ctx)
+                                            dbg!("calculate sin with rational");
+                                            sin_radians(&r, ctx)
                                         } else {
-                                            num.clone()
+                                            dbg!("calculate sin with float");
+                                            let float = num.get_float(ctx);
+                                            let mut result = expr!(sin(float * pi / 2), &mut *ctx);
+                                            if float.inexact() {
+                                                result.set_inexact(true)
+                                            }
+                                            Number::from(result)
                                         }
                                     }),
-                                    [rem.clone()],
+                                    [mul([rem.clone(), num(2)])],
                                 );
                                 *self = corrected;
                                 return;

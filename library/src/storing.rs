@@ -158,10 +158,6 @@ impl FormulaStore {
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
-        // self.add_symbol_from_string(
-        //     "better_sin(x) = round(sin( rem(x/(2*pi))*2*pi ) * 2^1022) * 2^(-1022)",
-        //     false,
-        // )?; // todo implement this in a better way
 
         Ok(())
     }
