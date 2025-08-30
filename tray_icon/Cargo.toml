@@ -1,0 +1,7 @@
+[package]
+name = "tray_icon"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tray-icon = "0.21.1"

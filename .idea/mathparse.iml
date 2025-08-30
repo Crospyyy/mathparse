@@ -7,11 +7,15 @@
       <sourceFolder url="file://$MODULE_DIR$/library/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/macros/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/enable_shortcuts/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/tray_icon/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/console/target" />
       <excludeFolder url="file://$MODULE_DIR$/gui/target" />
       <excludeFolder url="file://$MODULE_DIR$/library/target" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
       <excludeFolder url="file://$MODULE_DIR$/macros/target" />
+      <excludeFolder url="file://$MODULE_DIR$/enable_shortcuts/target" />
+      <excludeFolder url="file://$MODULE_DIR$/tray_icon/target" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
