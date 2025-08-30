@@ -1,6 +1,6 @@
 use crate::expression_values::ExpressionFunType;
 use crate::parsing::signature::ParamCount;
-use crate::{Element, ExprValue, ExpressionNumType, FunctionExpression};
+use crate::{Element, ExprValue, ExpressionNumType, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Radix};
 use colored::Colorize;
@@ -251,6 +251,37 @@ impl<T: Display> Display for ExprValue<T> {
     }
 }
 
+enum NumberString {
+    Imprecise(String),
+    Precise { string: String, is_rounded: bool },
+}
+
+impl Number {
+    pub fn to_string(&self, formatting_options: FormattingOptions, ctx: &mut Context) -> String {
+        let float = self.get_float(ctx);
+        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
+            scientific.to_string(formatting_options)
+        } else {
+            float.to_string()
+        }
+    }
+
+    pub fn to_string_detailed(
+        &self, formatting_options: FormattingOptions, ctx: &mut Context,
+    ) -> NumberString {
+        if let Some(num_rational) = self.get_exact_rational() {
+            let (string, is_rounded) = rational_to_string(num_rational, formatting_options);
+            return NumberString::Precise { string, is_rounded };
+        }
+        let float = self.get_float(ctx);
+        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
+            NumberString::Imprecise(scientific.to_string(formatting_options))
+        } else {
+            NumberString::Imprecise(float.to_string())
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub(super) struct ScientificNumber {
     negative: bool,
@@ -468,20 +499,24 @@ impl FormattingOptions {
     }
 }
 
-fn rational_to_string(ratio: BigRational, formatting_options: FormattingOptions) -> String {
+fn rational_to_string(ratio: BigRational, formatting_options: FormattingOptions) -> (String, bool) {
     let scientific = if ratio.is_integer() {
         let num = ratio.to_integer();
         let (s, vec) = num.to_radix_be(10);
 
         let exponent = (vec.len() - 1) as i64;
-        ScientificNumber::new(s == Sign::Minus, vec, exponent)
+        (ScientificNumber::new(s == Sign::Minus, vec, exponent), true)
     } else {
         long_division(ratio.numer().clone(), ratio.denom().clone(), formatting_options.round_to_decimals)
     };
-    scientific.to_string(formatting_options)
+    (scientific.0.to_string(formatting_options), scientific.1)
 }
 
-fn long_division(numerator: BigInt, denominator: BigInt, rounding_decimals: usize) -> ScientificNumber {
+/// Performs long division of two BigInts to obtain a ScientificNumber representation of the result.
+/// Returns a tuple containing the ScientificNumber and a boolean indicating whether the result was rounded.
+fn long_division(
+    numerator: BigInt, denominator: BigInt, rounding_decimals: usize,
+) -> (ScientificNumber, bool) {
     let negative = numerator.is_negative() ^ denominator.is_negative();
     let mut num_vec = numerator.abs().to_radix_be(10).1;
     let denom_abs = denominator.abs();
@@ -489,6 +524,7 @@ fn long_division(numerator: BigInt, denominator: BigInt, rounding_decimals: usiz
 
     let mut leading_zeroes = 0usize;
     let mut result_vec = vec![];
+    let mut has_been_rounded = true;
     for take_n_from_numerator in 1.. {
         if result_vec.len() > rounding_decimals {
             break;
@@ -498,6 +534,10 @@ fn long_division(numerator: BigInt, denominator: BigInt, rounding_decimals: usiz
         }
         let current_num =
             BigInt::from_radix_be(Sign::Plus, &num_vec[leading_zeroes..take_n_from_numerator], 10).unwrap();
+        if current_num.is_zero() {
+            has_been_rounded = false;
+            break;
+        }
         let division_result = &current_num / &denom_abs;
         let result_digit = division_result.to_u8().unwrap();
 
@@ -513,12 +553,16 @@ fn long_division(numerator: BigInt, denominator: BigInt, rounding_decimals: usiz
         }
 
         let remainder = current_num % &denom_abs;
-        let rem_digits = remainder.to_radix_be(10).1;
-        leading_zeroes = take_n_from_numerator - if remainder.is_zero() { 0 } else { rem_digits.len() };
-        num_vec[leading_zeroes..take_n_from_numerator].copy_from_slice(&rem_digits);
+        if !remainder.is_zero() {
+            let rem_digits = remainder.to_radix_be(10).1;
+            leading_zeroes = take_n_from_numerator - rem_digits.len();
+            num_vec[leading_zeroes..take_n_from_numerator].copy_from_slice(&rem_digits);
+        } else {
+            leading_zeroes = take_n_from_numerator;
+        }
     }
     let result_rounded = ScientificNumber::round_decimals_vec(rounding_decimals, &mut exponent, &result_vec);
-    ScientificNumber::new(negative, result_rounded, exponent)
+    (ScientificNumber::new(negative, result_rounded, exponent), has_been_rounded)
 }
 
 #[cfg(test)]
@@ -530,21 +574,52 @@ mod tests {
 
     #[test]
     fn test_long_division() {
-        fn quick_divide(num: &str, denom: &str, decimals: usize) -> ScientificNumber {
+        fn quick_divide(num: &str, denom: &str, decimals: usize) -> (ScientificNumber, bool) {
             let num = BigInt::from_str(num).unwrap();
             let denom = BigInt::from_str(denom).unwrap();
             long_division(num, denom, decimals)
         }
-        assert_eq!(quick_divide("1", "3", 5), ScientificNumber::new(false, vec![3, 3, 3, 3, 3], -1));
-        assert_eq!(quick_divide("1", "6", 5), ScientificNumber::new(false, vec![1, 6, 6, 6, 7], -1));
-        assert_eq!(quick_divide("1", "9", 5), ScientificNumber::new(false, vec![1, 1, 1, 1, 1], -1));
 
-        assert_eq!(quick_divide("1", "7", 6), ScientificNumber::new(false, vec![1, 4, 2, 8, 5, 7], -1));
-        assert_eq!(quick_divide("1", "7", 5), ScientificNumber::new(false, vec![1, 4, 2, 8, 6], -1));
-        assert_eq!(quick_divide("1", "7", 4), ScientificNumber::new(false, vec![1, 4, 2, 9], -1));
-        assert_eq!(quick_divide("1", "7", 3), ScientificNumber::new(false, vec![1, 4, 3], -1));
-        assert_eq!(quick_divide("1", "7", 2), ScientificNumber::new(false, vec![1, 4], -1));
-        assert_eq!(quick_divide("1", "7", 1), ScientificNumber::new(false, vec![1], -1));
+        fn check_divide(
+            num: &str, denom: &str, decimals: usize, base: impl Into<Vec<u8>>, exponent: i64, rounded: bool,
+            negative: bool,
+        ) {
+            assert_eq!(
+                quick_divide(num, denom, decimals),
+                (ScientificNumber::new(negative, base, exponent), rounded)
+            );
+        }
+        check_divide("1", "3", 5, [3, 3, 3, 3, 3], -1, true, false);
+        check_divide("1", "6", 5, [1, 6, 6, 6, 7], -1, true, false);
+        check_divide("1", "9", 5, [1, 1, 1, 1, 1], -1, true, false);
+
+        check_divide("-1", "3", 5, [3, 3, 3, 3, 3], -1, true, true);
+        check_divide("-1", "6", 5, [1, 6, 6, 6, 7], -1, true, true);
+        check_divide("-1", "9", 5, [1, 1, 1, 1, 1], -1, true, true);
+
+        check_divide("1", "-3", 5, [3, 3, 3, 3, 3], -1, true, true);
+        check_divide("1", "-6", 5, [1, 6, 6, 6, 7], -1, true, true);
+        check_divide("1", "-9", 5, [1, 1, 1, 1, 1], -1, true, true);
+
+        check_divide("-1", "-3", 5, [3, 3, 3, 3, 3], -1, true, false);
+        check_divide("-1", "-6", 5, [1, 6, 6, 6, 7], -1, true, false);
+        check_divide("-1", "-9", 5, [1, 1, 1, 1, 1], -1, true, false);
+
+        check_divide("1", "7", 6, [1, 4, 2, 8, 5, 7], -1, true, false);
+        check_divide("1", "7", 5, [1, 4, 2, 8, 6], -1, true, false);
+        check_divide("1", "7", 4, [1, 4, 2, 9], -1, true, false);
+        check_divide("1", "7", 3, [1, 4, 3], -1, true, false);
+        check_divide("1", "7", 2, [1, 4], -1, true, false);
+        check_divide("1", "7", 1, [1], -1, true, false);
+
+        check_divide("1", "2", 5, [5], -1, false, false);
+        check_divide("1", "4", 5, [2, 5], -1, false, false);
+        check_divide("1", "8", 5, [1, 2, 5], -1, false, false);
+        check_divide("1", "16", 5, [6, 2, 5], -2, false, false);
+        check_divide("1", "32", 5, [3, 1, 2, 5], -2, false, false);
+        check_divide("1", "64", 5, [1, 5, 6, 2, 5], -2, false, false);
+        check_divide("1", "128", 5, [7, 8, 1, 2, 5], -3, false, false);
+        check_divide("1", "256", 5, [3, 9, 0, 6, 3], -3, true, false);
     }
 
     #[test]
