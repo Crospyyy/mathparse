@@ -6,7 +6,7 @@ use astro_float::{BigFloat, Radix};
 use colored::Colorize;
 use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
-use num_traits::{Signed, ToPrimitive, Zero};
+use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
 
@@ -251,7 +251,7 @@ impl<T: Display> Display for ExprValue<T> {
     }
 }
 
-enum NumberString {
+pub enum NumberString {
     Imprecise(String),
     Precise { string: String, is_rounded: bool },
 }
@@ -270,7 +270,7 @@ impl Number {
         &self, formatting_options: FormattingOptions, ctx: &mut Context,
     ) -> NumberString {
         if let Some(num_rational) = self.get_exact_rational() {
-            let (string, is_rounded) = rational_to_string(num_rational, formatting_options);
+            let (string, is_rounded) = rational_to_string(&num_rational, formatting_options);
             return NumberString::Precise { string, is_rounded };
         }
         let float = self.get_float(ctx);
@@ -351,9 +351,8 @@ impl ScientificNumber {
     pub(super) fn to_string(&self, options: FormattingOptions) -> String {
         let round_to_decimals = options.round_to_decimals.max(1);
         let mut modified_exponent = self.exponent;
-        let rounded =
+        let (rounded, _has_rounded) =
             ScientificNumber::round_decimals_vec(round_to_decimals, &mut modified_exponent, &self.base);
-        dbg!(&rounded);
         if rounded.is_empty() {
             return "0".to_string();
         }
@@ -365,10 +364,25 @@ impl ScientificNumber {
     }
 
     /// Rounds the given vector of digits to the specified number of significant digits and removes leading and trailing zeroes.
-    fn round_decimals_vec(round_to_decimals: usize, exponent: &mut i64, vec: &[u8]) -> Vec<u8> {
+    fn round_decimals_vec(round_to_decimals: usize, exponent: &mut i64, vec: &[u8]) -> (Vec<u8>, bool) {
+        let mut vec = vec.to_vec();
+        // remove trailing zeroes
+        while vec.last() == Some(&0) {
+            vec.pop();
+        }
+        // remove leading zeroes
+        while vec.first() == Some(&0) {
+            vec.remove(0);
+            *exponent -= 1;
+        }
+
+        let mut has_rounded = true;
+
         let mut rounded = if round_to_decimals >= vec.len() {
-            vec.to_vec()
+            has_rounded = false;
+            vec
         } else {
+            has_rounded = true;
             let mut numbers = vec[..=round_to_decimals].to_vec();
             // rounding
             if numbers[round_to_decimals] >= 5 {
@@ -392,12 +406,7 @@ impl ScientificNumber {
         while rounded.last() == Some(&0) {
             rounded.pop();
         }
-        // remove leading zeroes
-        while rounded.first() == Some(&0) {
-            rounded.remove(0);
-            *exponent -= 1;
-        }
-        rounded
+        (rounded, has_rounded)
     }
 
     fn create_regular_string(
@@ -499,69 +508,72 @@ impl FormattingOptions {
     }
 }
 
-fn rational_to_string(ratio: BigRational, formatting_options: FormattingOptions) -> (String, bool) {
-    let scientific = if ratio.is_integer() {
-        let num = ratio.to_integer();
-        let (s, vec) = num.to_radix_be(10);
-
-        let exponent = (vec.len() - 1) as i64;
-        (ScientificNumber::new(s == Sign::Minus, vec, exponent), true)
-    } else {
-        long_division(ratio.numer().clone(), ratio.denom().clone(), formatting_options.round_to_decimals)
-    };
+fn rational_to_string(ratio: &BigRational, formatting_options: FormattingOptions) -> (String, bool) {
+    let scientific = long_division(&ratio.numer(), &ratio.denom(), formatting_options.round_to_decimals);
     (scientific.0.to_string(formatting_options), scientific.1)
 }
 
 /// Performs long division of two BigInts to obtain a ScientificNumber representation of the result.
 /// Returns a tuple containing the ScientificNumber and a boolean indicating whether the result was rounded.
 fn long_division(
-    numerator: BigInt, denominator: BigInt, rounding_decimals: usize,
+    numerator: &BigInt, denominator: &BigInt, rounding_decimals: usize,
 ) -> (ScientificNumber, bool) {
     let negative = numerator.is_negative() ^ denominator.is_negative();
     let mut num_vec = numerator.abs().to_radix_be(10).1;
-    let denom_abs = denominator.abs();
     let mut exponent = (num_vec.len() - 1) as i64;
+    let mut has_been_rounded = false;
 
-    let mut leading_zeroes = 0usize;
-    let mut result_vec = vec![];
-    let mut has_been_rounded = true;
-    for take_n_from_numerator in 1.. {
-        if result_vec.len() > rounding_decimals {
-            break;
-        }
-        if take_n_from_numerator > num_vec.len() {
-            num_vec.push(0);
-        }
-        let current_num =
-            BigInt::from_radix_be(Sign::Plus, &num_vec[leading_zeroes..take_n_from_numerator], 10).unwrap();
-        if current_num.is_zero() {
-            has_been_rounded = false;
-            break;
-        }
-        let division_result = &current_num / &denom_abs;
-        let result_digit = division_result.to_u8().unwrap();
+    let result_vec = if denominator.is_one() {
+        num_vec
+    } else {
+        let denom_abs = denominator.abs();
 
-        if result_digit == 0 {
-            if result_vec.is_empty() {
-                exponent -= 1;
-            } else {
-                result_vec.push(0);
+        let mut leading_zeroes = 0usize;
+        let mut result_vec = vec![];
+        has_been_rounded = true;
+        for take_n_from_numerator in 1.. {
+            if result_vec.len() > rounding_decimals {
+                break;
             }
-            continue;
-        } else {
-            result_vec.push(result_digit);
-        }
+            if take_n_from_numerator > num_vec.len() {
+                num_vec.push(0);
+            }
+            let current_num =
+                BigInt::from_radix_be(Sign::Plus, &num_vec[leading_zeroes..take_n_from_numerator], 10)
+                    .unwrap();
+            if current_num.is_zero() && take_n_from_numerator == num_vec.len() {
+                has_been_rounded = false;
+                break;
+            }
+            let division_result = &current_num / &denom_abs;
+            let result_digit = division_result.to_u8().unwrap();
 
-        let remainder = current_num % &denom_abs;
-        if !remainder.is_zero() {
-            let rem_digits = remainder.to_radix_be(10).1;
-            leading_zeroes = take_n_from_numerator - rem_digits.len();
-            num_vec[leading_zeroes..take_n_from_numerator].copy_from_slice(&rem_digits);
-        } else {
-            leading_zeroes = take_n_from_numerator;
+            if result_digit == 0 {
+                if result_vec.is_empty() {
+                    exponent -= 1;
+                } else {
+                    result_vec.push(0);
+                }
+                continue;
+            } else {
+                result_vec.push(result_digit);
+            }
+
+            let remainder = current_num % &denom_abs;
+            if !remainder.is_zero() {
+                let rem_digits = remainder.to_radix_be(10).1;
+                leading_zeroes = take_n_from_numerator - rem_digits.len();
+                num_vec[leading_zeroes..take_n_from_numerator].copy_from_slice(&rem_digits);
+            } else {
+                leading_zeroes = take_n_from_numerator;
+            }
         }
-    }
-    let result_rounded = ScientificNumber::round_decimals_vec(rounding_decimals, &mut exponent, &result_vec);
+        result_vec
+    };
+
+    let (result_rounded, has_rounded) =
+        ScientificNumber::round_decimals_vec(rounding_decimals, &mut exponent, &result_vec);
+    has_been_rounded |= has_rounded;
     (ScientificNumber::new(negative, result_rounded, exponent), has_been_rounded)
 }
 
@@ -577,7 +589,7 @@ mod tests {
         fn quick_divide(num: &str, denom: &str, decimals: usize) -> (ScientificNumber, bool) {
             let num = BigInt::from_str(num).unwrap();
             let denom = BigInt::from_str(denom).unwrap();
-            long_division(num, denom, decimals)
+            long_division(&num, &denom, decimals)
         }
 
         fn check_divide(
@@ -589,6 +601,11 @@ mod tests {
                 (ScientificNumber::new(negative, base, exponent), rounded)
             );
         }
+        check_divide("1", "1", 5, [1], 0, false, false);
+        check_divide("3", "1", 5, [3], 0, false, false);
+        check_divide("6", "1", 5, [6], 0, false, false);
+        check_divide("123456", "1", 5, [1, 2, 3, 4, 6], 5, true, false);
+
         check_divide("1", "3", 5, [3, 3, 3, 3, 3], -1, true, false);
         check_divide("1", "6", 5, [1, 6, 6, 6, 7], -1, true, false);
         check_divide("1", "9", 5, [1, 1, 1, 1, 1], -1, true, false);

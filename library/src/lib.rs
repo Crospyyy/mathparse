@@ -22,6 +22,7 @@ pub use operations::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
 pub use parsing::signature::Signature;
 pub use printing::FormattingOptions;
+pub use printing::NumberString;
 pub use storing::FormulaStore;
 pub use storing::Symbol;
 
@@ -132,7 +133,7 @@ mod formula_short {
         }
     }
 
-    pub fn fun_expr_n_args(fun: ExpressionFunType, args: impl IntoIterator<Item=Element>) -> Element {
+    pub fn fun_expr_n_args(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
         Element::FunctionWithExpression {
             arguments: args.into_iter().collect(),
             param_count: fun.get_param_count(),
@@ -141,7 +142,10 @@ mod formula_short {
         }
     }
 
-    pub fn fun_expr_new(debug_name: impl ToString, param_count: ParamCount, expression: FunctionExpression, args: impl IntoIterator<Item=Element>) -> Element {
+    pub fn fun_expr_new(
+        debug_name: impl ToString, param_count: ParamCount, expression: FunctionExpression,
+        args: impl IntoIterator<Item = Element>,
+    ) -> Element {
         Element::FunctionWithExpression {
             arguments: args.into_iter().collect(),
             param_count,
