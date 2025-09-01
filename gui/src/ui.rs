@@ -4,12 +4,8 @@ use crate::logic::UiStateInfo;
 use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId};
-use eframe::{App, Frame};
 use egui::text::CCursorRange;
-use egui::{
-    CentralPanel, Context, DragValue, FontSelection, Id, Key, Label, Response, RichText, ScrollArea,
-    TextEdit, Ui, ViewportCommand, Widget,
-};
+use egui::{DragValue, FontSelection, Id, Key, Label, Response, RichText, ScrollArea, TextEdit, Ui, Widget};
 use library::FormattingOptions;
 
 pub(super) struct UiState {
@@ -29,21 +25,6 @@ impl UiState {
             output_digits: FormattingOptions::default().round_to_decimals,
             all_symbol_strings: Vec::new(),
         }
-    }
-}
-
-impl App for Window {
-    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        CentralPanel::default().show(ctx, |ui| {
-            let mut pressed_shortcut = false;
-            self.handle_window_control(ctx, ui, &mut pressed_shortcut);
-
-            let input = &mut vec![];
-            self.show_top_input(ui, input, pressed_shortcut);
-            ui.separator();
-            self.show_all_defined_symbols(ui);
-            self.handle_ui_input(input);
-        });
     }
 }
 
@@ -155,7 +136,7 @@ impl Window {
         }
     }
 
-    fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
+    pub(crate) fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
         // todo align all symbols to the `=` sign
         let area = ScrollArea::vertical().auto_shrink(false);
         area.show(ui, |ui| {

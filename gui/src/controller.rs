@@ -1,9 +1,11 @@
 use crate::logic::UiStateInfo;
 use crate::ui::UiState;
 use crate::{Window, WindowState};
-use eframe::CreationContext;
+use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
-use egui::{Context, Event, Key, Modifiers, Pos2, Response, TextBuffer, TextEdit, Ui, ViewportCommand};
+use egui::{
+    CentralPanel, Context, Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui, ViewportCommand,
+};
 use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 use regex::Regex;
@@ -22,6 +24,21 @@ macro_rules! debug_print {
             format_args!($($arg)*)
         )
     };
+}
+
+impl App for Window {
+    fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        CentralPanel::default().show(ctx, |ui| {
+            let mut pressed_shortcut = false;
+            self.handle_window_control(ctx, ui, &mut pressed_shortcut);
+
+            let input = &mut vec![];
+            self.show_top_input(ui, input, pressed_shortcut);
+            ui.separator();
+            self.show_all_defined_symbols(ui);
+            self.handle_ui_input(input);
+        });
+    }
 }
 
 pub fn try_center_window(ctx: &Context) -> bool {
