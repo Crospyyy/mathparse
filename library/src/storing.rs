@@ -67,7 +67,7 @@ impl Symbol<'_> {
 }
 
 impl FormulaStore {
-    pub fn get_symbols(&self) -> Vec<Symbol> {
+    pub fn get_symbols(&'_ self) -> Vec<Symbol<'_>> {
         self.parameter_mappings
             .iter()
             .map(|(name, params)| Symbol {

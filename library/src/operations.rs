@@ -368,15 +368,6 @@ impl Number {
         }
     }
 
-    pub fn to_string(&self, formatting_options: FormattingOptions, ctx: &mut Context) -> String {
-        let float = self.get_float(ctx);
-        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
-            scientific.to_string(formatting_options)
-        } else {
-            float.to_string()
-        }
-    }
-
     pub fn get_debug_string(&self) -> String {
         match self {
             Number::Rational(r) => format!("rat({})", r),
@@ -690,7 +681,7 @@ pub(crate) mod expression_functions {
                 ExpressionFunType::Log2 => Number::log2,
                 ExpressionFunType::SinWithRadians => sin_with_radians,
             }
-                .into()
+            .into()
         }
 
         pub(crate) fn get_function_multiple_args(&self) -> Option<fn(&mut Context, Vec<Number>) -> Number> {

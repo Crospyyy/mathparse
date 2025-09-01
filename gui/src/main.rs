@@ -171,7 +171,7 @@ mod ui {
 mod logic {
     use crate::Window;
     use egui::Response;
-    use library::{Benchmark, FormattingOptions, NumberContext, benchmark};
+    use library::{Benchmark, FormattingOptions, NumberContext, NumberString, benchmark};
 
     impl Window {
         pub(crate) fn get_result_of_possible_symbol_declaration(
@@ -191,7 +191,7 @@ mod logic {
                     let mut b = Benchmark::new();
                     let result_str = benchmark!(
                         b,
-                        result.to_string(
+                        result.to_string_detailed(
                             FormattingOptions::default().with_rounding(self.ui_state.output_digits),
                             ctx,
                         ),
@@ -199,7 +199,16 @@ mod logic {
                     );
                     b.print_times();
 
-                    if result.is_exact() { format!("= {}", result_str) } else { format!("~= {}", result_str) }
+                    match result_str {
+                        NumberString::Imprecise(str) => format!("~= {}", str),
+                        NumberString::Precise { string, is_rounded } => {
+                            if is_rounded {
+                                format!("= {} (rounded)", string)
+                            } else {
+                                format!("= {}", string)
+                            }
+                        },
+                    }
                 })
                 .map_err(|s| format!("Error: {}", s))
         }
