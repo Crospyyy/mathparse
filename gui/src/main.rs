@@ -1,12 +1,20 @@
 use crate::ui::UiState;
+use egui::ViewportBuilder;
 use library::FormulaStore;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 pub fn main() {
     use eframe::NativeOptions;
-    eframe::run_native("Quick Mafs", NativeOptions::default(), Box::new(|cc| Ok(Box::new(Window::new(cc)))))
-        .expect("panic message");
+    eframe::run_native(
+        "Quick Mafs",
+        NativeOptions {
+            viewport: ViewportBuilder::default().with_always_on_top().with_decorations(false),
+            ..Default::default()
+        },
+        Box::new(|cc| Ok(Box::new(Window::new(cc)))),
+    )
+    .expect("panic message");
 }
 
 pub struct Window {
@@ -18,11 +26,12 @@ pub struct Window {
 struct WindowState {
     request_focus: Arc<AtomicBool>,
     last_frame_had_focus: bool,
+    centered: bool,
 }
 
 impl WindowState {
     fn new() -> Self {
-        Self { request_focus: Arc::new(AtomicBool::new(false)), last_frame_had_focus: false }
+        Self { request_focus: Arc::new(AtomicBool::new(false)), last_frame_had_focus: false, centered: false }
     }
 }
 

@@ -3,7 +3,7 @@ use crate::ui::UiState;
 use crate::{Window, WindowState};
 use eframe::CreationContext;
 use egui::text::{CCursor, CCursorRange};
-use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui, ViewportCommand};
+use egui::{Context, Event, Key, Modifiers, Pos2, Response, TextBuffer, TextEdit, Ui, ViewportCommand};
 use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 use regex::Regex;
@@ -11,6 +11,31 @@ use std::sync::LazyLock;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
+
+#[macro_export]
+macro_rules! debug_print {
+    ($($arg:tt)*) => {
+        println!("[{}:{}:{}] {}",
+            file!(),
+            line!(),
+            column!(),
+            format_args!($($arg)*)
+        )
+    };
+}
+
+pub fn try_center_window(ctx: &Context) -> bool {
+    let (monitor_opt, win_size_opt) =
+        ctx.input(|i| (i.viewport().monitor_size, i.viewport().outer_rect.map(|r| r.size())));
+
+    if let (Some(monitor), Some(win_size)) = (monitor_opt, win_size_opt) {
+        let pos = (monitor - win_size) / 2.0;
+        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos.to_pos2()));
+        debug_print!("Center window at: {:?}", pos);
+        return true;
+    }
+    false
+}
 
 impl Window {
     pub(crate) fn new(_cc: &CreationContext) -> Self {
@@ -64,6 +89,24 @@ impl Window {
                     self.update_calculation_result();
                 },
             }
+        }
+    }
+
+    pub(super) fn handle_window_control(&mut self, ctx: &Context, ui: &mut Ui, pressed_shortcut: &mut bool) {
+        let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
+        if requested_focus {
+            self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
+            ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
+            *pressed_shortcut = true;
+        }
+        let has_focus = ctx.input(|ip| ip.raw.focused);
+        if self.window_state.last_frame_had_focus && !has_focus {
+            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
+        self.window_state.last_frame_had_focus = has_focus;
+
+        if !self.window_state.centered {
+            self.window_state.centered = try_center_window(ctx);
         }
     }
 

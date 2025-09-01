@@ -36,7 +36,7 @@ impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         CentralPanel::default().show(ctx, |ui| {
             let mut pressed_shortcut = false;
-            self.handle_window_focus(ctx, ui, &mut pressed_shortcut);
+            self.handle_window_control(ctx, ui, &mut pressed_shortcut);
 
             let input = &mut vec![];
             self.show_top_input(ui, input, pressed_shortcut);
@@ -163,22 +163,5 @@ impl Window {
                 ui.label(RichText::new(text).size(17.0));
             }
         });
-    }
-
-    fn handle_window_focus(&mut self, ctx: &Context, ui: &mut Ui, pressed_shortcut: &mut bool) {
-        let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
-        if requested_focus {
-            self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
-            ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
-            *pressed_shortcut = true;
-            dbg!("requesting focus");
-        }
-        let has_focus = ctx.input(|ip| ip.raw.focused);
-        dbg!(has_focus);
-        if self.window_state.last_frame_had_focus && !has_focus {
-            dbg!("minimize");
-            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-        }
-        self.window_state.last_frame_had_focus = has_focus;
     }
 }
