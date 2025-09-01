@@ -24,8 +24,11 @@ mod ui {
         TextEdit, Ui, Widget,
     };
     use library::FormattingOptions;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicBool;
 
     pub(super) struct UiState {
+        pub(super) request_focus: Arc<AtomicBool>,
         pub(super) top_user_input: String,
         pub(super) top_user_input_id: Id,
         pub(super) calculation_result: Option<Result<String, String>>,
@@ -36,6 +39,7 @@ mod ui {
     impl UiState {
         pub(super) fn new() -> Self {
             Self {
+                request_focus: Arc::new(AtomicBool::new(false)),
                 top_user_input: "".to_string(),
                 top_user_input_id: "Formula Input".into(),
                 calculation_result: None,
@@ -59,6 +63,10 @@ mod ui {
 
     impl Window {
         pub(crate) fn show_top_input(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
+            if self.ui_state.request_focus.load(std::sync::atomic::Ordering::Relaxed) {
+                self.ui_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
+                ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id))
+            }
             self.handle_bracket_input(ui);
 
             let text_edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
@@ -67,7 +75,6 @@ mod ui {
                 .lock_focus(true);
 
             let response = ui.add_sized([ui.available_width(), 20.0], text_edit);
-
             self.input_post_process(ui);
 
             if response.has_focus() {
@@ -233,7 +240,8 @@ mod controller {
     use crate::ui::UiState;
     use eframe::CreationContext;
     use egui::text::{CCursor, CCursorRange};
-    use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui};
+    use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui, ViewportCommand};
+    use global_shortcuts::register_global_shortcut;
     use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
     use regex::Regex;
     use std::sync::LazyLock;
@@ -254,6 +262,17 @@ mod controller {
             store.add_symbol_from_string("water_heat_capacity_j_per_g = 4.184", false).unwrap();
             let mut window = Self { formula_store: store, ui_state: UiState::new() };
             window.update_all_symbol_strings();
+            let context = _cc.egui_ctx.clone();
+            let req_focus = window.ui_state.request_focus.clone();
+            register_global_shortcut(
+                global_shortcuts::Modifiers::ALT,
+                global_shortcuts::Key::Space,
+                move || {
+                    context.send_viewport_cmd(ViewportCommand::Minimized(false));
+                    context.send_viewport_cmd(ViewportCommand::Focus);
+                    req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
+                },
+            );
             window
         }
 

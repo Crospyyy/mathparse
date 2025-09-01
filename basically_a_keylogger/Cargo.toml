@@ -1,5 +1,5 @@
 [package]
-name = "enable_shortcuts"
+name = "global_shortcuts"
 version = "0.1.0"
 edition = "2024"
 

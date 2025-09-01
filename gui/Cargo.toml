@@ -8,3 +8,4 @@ library = { path = "../library" }
 egui = "0.32.0"
 eframe = "0.32.0"
 regex = "1.11.1"
+global_shortcuts = { path = "../basically_a_keylogger" }
