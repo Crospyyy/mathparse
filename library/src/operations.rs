@@ -403,6 +403,7 @@ impl Number {
         numbers.iter().fold(Number::from(0), |a, b| a.plus(&b, ctx))
     }
 
+    /// Returns `None` if numbers is an empty array
     pub fn average(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
         match numbers.len() {
             0 => return None,
@@ -433,6 +434,7 @@ impl Number {
         })
     }
 
+    /// Returns `None` if numbers is an empty array
     pub fn max_of_several(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
         let num_args = numbers.len();
         match num_args {
@@ -445,6 +447,8 @@ impl Number {
         }
         Some(numbers.iter().max_by(|a, b| a.cmp(b, ctx).unwrap()).unwrap().clone())
     }
+
+    /// Returns `None` if numbers is an empty array
     pub fn min_of_several(numbers: &[Self], ctx: &mut Context) -> Option<Self> {
         let num_args = numbers.len();
         match num_args {
