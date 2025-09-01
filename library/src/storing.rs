@@ -91,7 +91,7 @@ impl FormulaStore {
         self.add_expression_fun_multiple_args(
             "avg",
             ParamCount::AtLeast(1),
-            |ctx: &mut Context, args: Vec<Number>| {
+            |args: Vec<Number>, ctx: &mut Context| {
                 if let Some(average) = Number::average(&args, ctx) {
                     average
                 } else {
@@ -104,7 +104,7 @@ impl FormulaStore {
         self.add_expression_fun_multiple_args(
             "median",
             ParamCount::AtLeast(1),
-            |ctx: &mut Context, args: Vec<Number>| {
+            |args: Vec<Number>, ctx: &mut Context| {
                 if let Some(median) = Number::median(&args, ctx) {
                     median
                 } else {
@@ -117,7 +117,7 @@ impl FormulaStore {
         self.add_expression_fun_multiple_args(
             "max",
             ParamCount::AtLeast(1),
-            |ctx: &mut Context, args: Vec<Number>| {
+            |args: Vec<Number>, ctx: &mut Context| {
                 if let Some(max) = Number::max_of_several(&args, ctx) {
                     max
                 } else {
@@ -130,7 +130,7 @@ impl FormulaStore {
         self.add_expression_fun_multiple_args(
             "min",
             ParamCount::AtLeast(1),
-            |ctx: &mut Context, args: Vec<Number>| {
+            |args: Vec<Number>, ctx: &mut Context| {
                 if let Some(min) = Number::min_of_several(&args, ctx) {
                     min
                 } else {
@@ -143,7 +143,7 @@ impl FormulaStore {
         self.add_expression_fun_multiple_args(
             "sum",
             ParamCount::AtLeast(0),
-            |ctx: &mut Context, args: Vec<Number>| Number::sum(&args, ctx),
+            |args: Vec<Number>, ctx: &mut Context| Number::sum(&args, ctx),
             "sum".into(),
         )?;
         self.add_expression_fun_multiple_args(
@@ -231,50 +231,48 @@ impl FormulaStore {
 
     pub fn add_expression_fun_multiple_args(
         &mut self, name: impl ToString, param_count: ParamCount,
-        expression: fn(&mut Context, Vec<Number>) -> Number, debug_name: ExprValue<ExpressionFunType>,
+        expression: fn(Vec<Number>, &mut Context) -> Number, expr_value: ExprValue<ExpressionFunType>,
     ) -> Result<(), String> {
-        let name = name.to_string();
-        if self.formulas.contains_key(&name) {
-            return Err(format!("Formula definition with key `{}` already exists", name));
-        }
-        self.parameter_mappings.insert(name.clone(), Some(vec![])); // add a mock parameter list
-        self.signatures.insert(
-            name.clone(),
-            match param_count {
-                ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
-                ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
-            },
-        );
-        self.formulas.insert(
-            name,
-            Element::FunctionWithExpression {
-                arguments: vec![],
-                param_count,
-                expression: FunctionExpression::MultipleArguments(expression),
-                expr_value: debug_name,
-            },
-        );
-        Ok(())
+        let params = Some(vec![]);
+        let signature = match param_count {
+            ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
+            ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
+        };
+        let element = Element::FunctionWithExpression {
+            arguments: vec![],
+            param_count,
+            expression: FunctionExpression::MultipleArguments(expression),
+            expr_value,
+        };
+        self.add_symbol(name, signature, params, element)
     }
+
     pub fn add_expression_fun_single_arg(
         &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number, param_name: &str,
-        debug_name: ExprValue<ExpressionFunType>,
+        expr_value: ExprValue<ExpressionFunType>,
+    ) -> Result<(), String> {
+        let signature = Signature::Function(vec![Signature::Number]);
+        let params = Some(vec![param_name.to_string()]);
+        let element = Element::FunctionWithExpression {
+            arguments: vec![Element::Variable(param_name.to_string())],
+            param_count: ParamCount::Exactly(1),
+            expression: FunctionExpression::SingleArgument(expression),
+            expr_value,
+        };
+        self.add_symbol(name, signature, params, element)
+    }
+
+    fn add_symbol(
+        &mut self, name: impl ToString, signature: Signature, param_names: Option<Vec<String>>,
+        element: Element,
     ) -> Result<(), String> {
         let name = name.to_string();
         if self.formulas.contains_key(&name) {
             return Err(format!("Formula definition with key `{}` already exists", name));
         }
-        self.parameter_mappings.insert(name.clone(), Some(vec![param_name.to_string()])); // add a mock parameter list
-        self.signatures.insert(name.clone(), Signature::Function(vec![Signature::Number]));
-        self.formulas.insert(
-            name,
-            Element::FunctionWithExpression {
-                arguments: vec![Element::Variable(param_name.to_string())],
-                param_count: ParamCount::Exactly(1),
-                expression: FunctionExpression::SingleArgument(expression),
-                expr_value: debug_name,
-            },
-        );
+        self.parameter_mappings.insert(name.clone(), param_names);
+        self.signatures.insert(name.clone(), signature);
+        self.formulas.insert(name, element);
         Ok(())
     }
 

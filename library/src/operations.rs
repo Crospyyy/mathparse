@@ -1,5 +1,5 @@
 use crate::operations::helper_functions::{float_to_exact_rational, power_rational_and_rational};
-use crate::printing::{FormattingOptions, ScientificNumber};
+use crate::printing::FormattingOptions;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
@@ -684,9 +684,9 @@ pub(crate) mod expression_functions {
             .into()
         }
 
-        pub(crate) fn get_function_multiple_args(&self) -> Option<fn(&mut Context, Vec<Number>) -> Number> {
+        pub(crate) fn get_function_multiple_args(&self) -> Option<fn(Vec<Number>, &mut Context) -> Number> {
             match self {
-                ExpressionFunType::Rem => Some(|ctx: &mut Context, args: Vec<Number>| {
+                ExpressionFunType::Rem => Some(|args: Vec<Number>, ctx: &mut Context| {
                     if args.len() != 2 {
                         eprintln!("rem function expects exactly two arguments, but got {}", args.len());
                         return Number::nan(None);

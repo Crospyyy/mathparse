@@ -46,7 +46,7 @@ impl Element {
                         return None;
                     }
                     let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
-                    Some(fun(ctx, args))
+                    Some(fun(args, ctx))
                 },
             },
         }

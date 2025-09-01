@@ -1,11 +1,7 @@
 use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, fun_expr_new, inv, mul, neg, num, num_expr};
-use crate::operations::{rational, sin_radians};
-use crate::parsing::signature::ParamCount;
-use crate::{Element, FormulaStore, FunctionExpression, Number, create_default_context, formula};
-use astro_float::expr;
+use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
+use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
-use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use std::mem;
@@ -52,24 +48,24 @@ impl Element {
     pub(crate) fn same_value(&self, other: &Element) -> bool {
         self == other
             || match (self, other) {
-            (
-                Element::FunctionWithExpression { arguments, expr_value: debug_name, .. },
-                Element::FunctionWithExpression {
-                    arguments: other_args,
-                    expr_value: other_debug_name,
-                    ..
+                (
+                    Element::FunctionWithExpression { arguments, expr_value: debug_name, .. },
+                    Element::FunctionWithExpression {
+                        arguments: other_args,
+                        expr_value: other_debug_name,
+                        ..
+                    },
+                ) => {
+                    debug_name.same_value(other_debug_name)
+                        && arguments.len() == other_args.len()
+                        && arguments.iter().zip(other_args).all(|(a, b)| a.same_value(b))
                 },
-            ) => {
-                debug_name.same_value(other_debug_name)
-                    && arguments.len() == other_args.len()
-                    && arguments.iter().zip(other_args).all(|(a, b)| a.same_value(b))
-            },
-            (
-                Element::NumberWithExpression { expr_value: debug_name, .. },
-                Element::NumberWithExpression { expr_value: other_debug_name, .. },
-            ) => debug_name.same_value(other_debug_name),
-            _ => false,
-        }
+                (
+                    Element::NumberWithExpression { expr_value: debug_name, .. },
+                    Element::NumberWithExpression { expr_value: other_debug_name, .. },
+                ) => debug_name.same_value(other_debug_name),
+                _ => false,
+            }
     }
 }
 
@@ -322,7 +318,6 @@ impl Element {
 mod tests {
     use super::*;
     use crate::formula_short::{inv, mul, num, var};
-    use crate::printing::Formula;
     use crate::{FormulaStore, create_default_context};
 
     #[test]
