@@ -6,12 +6,11 @@ use std::sync::atomic::AtomicBool;
 
 pub fn main() {
     use eframe::NativeOptions;
+    let viewport =
+        ViewportBuilder::default().with_always_on_top().with_decorations(false).with_transparent(true);
     eframe::run_native(
         "Quick Mafs",
-        NativeOptions {
-            viewport: ViewportBuilder::default().with_always_on_top().with_decorations(false),
-            ..Default::default()
-        },
+        NativeOptions { viewport, ..Default::default() },
         Box::new(|cc| Ok(Box::new(Window::new(cc)))),
     )
     .expect("panic message");

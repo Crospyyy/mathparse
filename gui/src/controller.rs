@@ -4,7 +4,8 @@ use crate::{Window, WindowState};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::{
-    CentralPanel, Context, Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui, ViewportCommand,
+    CentralPanel, Color32, Context, Event, Key, Modifiers, Response, Shadow, Stroke, StrokeKind, Style,
+    TextBuffer, TextEdit, Ui, ViewportCommand, Visuals,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
@@ -28,9 +29,16 @@ macro_rules! debug_print {
 
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
-        CentralPanel::default().show(ctx, |ui| {
-            let mut pressed_shortcut = false;
-            self.handle_window_control(ctx, ui, &mut pressed_shortcut);
+        let mut pressed_shortcut = false;
+        self.handle_window_control(ctx, &mut pressed_shortcut);
+
+        let frame = egui::containers::Frame::window(&Style::default());
+
+        CentralPanel::default().frame(frame).show(ctx, |ui| {
+            let resp = ui.interact(ui.max_rect(), egui::Id::new("window-drag-bg"), egui::Sense::drag());
+            if resp.dragged() {
+                ctx.send_viewport_cmd(ViewportCommand::StartDrag);
+            }
 
             let input = &mut vec![];
             self.show_top_input(ui, input, pressed_shortcut);
@@ -38,6 +46,10 @@ impl App for Window {
             self.show_all_defined_symbols(ui);
             self.handle_ui_input(input);
         });
+    }
+
+    fn clear_color(&self, _visuals: &Visuals) -> [f32; 4] {
+        egui::Rgba::TRANSPARENT.to_array()
     }
 }
 
@@ -109,11 +121,11 @@ impl Window {
         }
     }
 
-    pub(super) fn handle_window_control(&mut self, ctx: &Context, ui: &mut Ui, pressed_shortcut: &mut bool) {
+    pub(super) fn handle_window_control(&mut self, ctx: &Context, pressed_shortcut: &mut bool) {
         let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
         if requested_focus {
             self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
-            ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
+            ctx.memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
             *pressed_shortcut = true;
         }
         let has_focus = ctx.input(|ip| ip.raw.focused);
