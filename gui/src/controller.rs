@@ -1,6 +1,6 @@
-use crate::Window;
 use crate::logic::UiStateInfo;
 use crate::ui::UiState;
+use crate::{Window, WindowState};
 use eframe::CreationContext;
 use egui::text::{CCursor, CCursorRange};
 use egui::{Event, Key, Modifiers, Response, TextBuffer, TextEdit, Ui, ViewportCommand};
@@ -23,10 +23,12 @@ impl Window {
         store.add_symbol_from_string("liter_to_gallons = 0.264172", false).unwrap();
         store.add_symbol_from_string("joule_to_wh = 1/3600", false).unwrap();
         store.add_symbol_from_string("water_heat_capacity_j_per_g = 4.184", false).unwrap();
-        let mut window = Self { formula_store: store, ui_state: UiState::new() };
+        let mut window =
+            Self { formula_store: store, ui_state: UiState::new(), window_state: WindowState::new() };
         window.update_all_symbol_strings();
+
         let context = _cc.egui_ctx.clone();
-        let req_focus = window.ui_state.request_focus.clone();
+        let req_focus = window.window_state.request_focus.clone();
         register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
             context.send_viewport_cmd(ViewportCommand::Minimized(false));
             context.send_viewport_cmd(ViewportCommand::Focus);
@@ -230,7 +232,7 @@ pub struct AutocompletionResult<'a> {
     pub longest_common_start: String,
 }
 
-fn set_cursor_pos(response: &Response, cursor_pos: usize) {
+pub fn set_cursor_pos(response: &Response, cursor_pos: usize) {
     if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
         state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos))));
         state.store(&response.ctx, response.id);

@@ -1,19 +1,18 @@
 use crate::Window;
 use crate::controller::get_cursor_pos;
 use crate::logic::UiStateInfo;
+use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId};
 use eframe::{App, Frame};
+use egui::text::CCursorRange;
 use egui::{
     CentralPanel, Context, DragValue, FontSelection, Id, Key, Label, Response, RichText, ScrollArea,
-    TextEdit, Ui, Widget,
+    TextEdit, Ui, ViewportCommand, Widget,
 };
 use library::FormattingOptions;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 pub(super) struct UiState {
-    pub(super) request_focus: Arc<AtomicBool>,
     pub(super) top_user_input: String,
     pub(super) top_user_input_id: Id,
     pub(super) calculation_result: Option<Result<String, String>>,
@@ -24,7 +23,6 @@ pub(super) struct UiState {
 impl UiState {
     pub(super) fn new() -> Self {
         Self {
-            request_focus: Arc::new(AtomicBool::new(false)),
             top_user_input: "".to_string(),
             top_user_input_id: "Formula Input".into(),
             calculation_result: None,
@@ -37,8 +35,11 @@ impl UiState {
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         CentralPanel::default().show(ctx, |ui| {
+            let mut pressed_shortcut = false;
+            self.handle_window_focus(ctx, ui, &mut pressed_shortcut);
+
             let input = &mut vec![];
-            self.show_top_input(ui, input);
+            self.show_top_input(ui, input, pressed_shortcut);
             ui.separator();
             self.show_all_defined_symbols(ui);
             self.handle_ui_input(input);
@@ -47,11 +48,9 @@ impl App for Window {
 }
 
 impl Window {
-    pub(crate) fn show_top_input(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
-        if self.ui_state.request_focus.load(std::sync::atomic::Ordering::Relaxed) {
-            self.ui_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
-            ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id))
-        }
+    pub(crate) fn show_top_input(
+        &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
+    ) {
         self.handle_bracket_input(ui);
 
         let text_edit = TextEdit::singleline(&mut self.ui_state.top_user_input)
@@ -60,6 +59,15 @@ impl Window {
             .lock_focus(true);
 
         let response = ui.add_sized([ui.available_width(), 20.0], text_edit);
+        if pressed_shortcut {
+            if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
+                state.cursor.set_char_range(Some(CCursorRange::two(
+                    CCursor::new(0),
+                    CCursor::new(self.ui_state.top_user_input.len()),
+                )));
+                state.store(&response.ctx, response.id);
+            }
+        }
         self.input_post_process(ui);
 
         if response.has_focus() {
@@ -155,5 +163,22 @@ impl Window {
                 ui.label(RichText::new(text).size(17.0));
             }
         });
+    }
+
+    fn handle_window_focus(&mut self, ctx: &Context, ui: &mut Ui, pressed_shortcut: &mut bool) {
+        let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
+        if requested_focus {
+            self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
+            ui.ctx().memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
+            *pressed_shortcut = true;
+            dbg!("requesting focus");
+        }
+        let has_focus = ctx.input(|ip| ip.raw.focused);
+        dbg!(has_focus);
+        if self.window_state.last_frame_had_focus && !has_focus {
+            dbg!("minimize");
+            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
+        self.window_state.last_frame_had_focus = has_focus;
     }
 }
