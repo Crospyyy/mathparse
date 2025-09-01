@@ -1,5 +1,5 @@
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, FunctionExpression, Number, benchmark, create_default_context};
+use crate::{benchmark, create_default_context, Benchmark, Element, FunctionExpression, Number};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -142,7 +142,7 @@ mod tests {
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
-    use astro_float::{Error, expr};
+    use astro_float::{expr, Error};
 
     #[test]
     fn test_formula_evaluation() {

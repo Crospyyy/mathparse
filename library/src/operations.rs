@@ -2,7 +2,7 @@ use crate::operations::helper_functions::{float_to_exact_rational, power_rationa
 use crate::printing::FormattingOptions;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
+use astro_float::{expr, BigFloat, Consts, Error, RoundingMode};
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
@@ -44,10 +44,10 @@ macro_rules! inexact_if_needed {
 }
 
 mod helper_functions {
-    use crate::Number;
     use crate::operations::rational;
+    use crate::Number;
     use astro_float::ctx::Context;
-    use astro_float::{BigFloat, Error, Word, expr};
+    use astro_float::{expr, BigFloat, Error, Word};
     use num_bigint::BigInt;
     use num_rational::BigRational;
     use num_traits::{One, Signed, ToPrimitive, Zero};
@@ -633,10 +633,10 @@ impl Number {
 }
 
 pub(crate) mod expression_functions {
-    use crate::Number;
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
     use crate::operations::sin_radians;
     use crate::parsing::signature::ParamCount;
+    use crate::Number;
     use astro_float::ctx::Context;
     use astro_float::expr;
 
@@ -730,11 +730,11 @@ pub(crate) mod expression_functions {
 
 #[cfg(test)]
 mod tests {
-    use crate::Number;
     use crate::operations::helper_functions::{
         big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
     };
-    use crate::operations::{FormattingOptions, create_default_context};
+    use crate::operations::{create_default_context, FormattingOptions};
+    use crate::Number;
     use astro_float::BigFloat;
     use num_bigint::BigInt;
     use num_rational::BigRational;

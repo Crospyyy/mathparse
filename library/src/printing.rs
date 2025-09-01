@@ -579,8 +579,8 @@ fn long_division(
 
 #[cfg(test)]
 mod tests {
+    use crate::printing::{long_division, ScientificNumber};
     use crate::FormattingOptions;
-    use crate::printing::{ScientificNumber, long_division};
     use num_bigint::BigInt;
     use std::str::FromStr;
 

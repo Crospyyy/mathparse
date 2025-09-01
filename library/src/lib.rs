@@ -1,6 +1,6 @@
 use crate::parsing::signature::ParamCount;
-use astro_float::BigFloat;
 use astro_float::ctx::Context;
+use astro_float::BigFloat;
 use num_rational::BigRational;
 use std::fmt::{Debug, Display, Pointer};
 
@@ -15,8 +15,8 @@ mod storing;
 mod testing;
 
 use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
+pub use astro_float::RoundingMode;
 pub use benchmarking::Benchmark;
 pub use operations::create_default_context;
 pub use parsing::get_fun_name_end_of_string;

@@ -1,5 +1,29 @@
 use std::fmt::Display;
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExprValue<T: Display> {
+    Native(T),
+    Custom(String),
+}
+
+impl<T: PartialEq + Display> ExprValue<T> {
+    pub fn same_value(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ExprValue::Native(a), ExprValue::Native(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl<T: for<'a> TryFrom<&'a str> + Display> From<&str> for ExprValue<T> {
+    fn from(value: &str) -> Self {
+        match T::try_from(value) {
+            Ok(fun_type) => ExprValue::Native(fun_type),
+            Err(_) => ExprValue::Custom(value.to_string()),
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ExpressionFunType {
     Sin,
@@ -33,21 +57,6 @@ pub enum ExpressionNumType {
     E,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ExprValue<T: Display> {
-    Native(T),
-    Custom(String),
-}
-
-impl<T: PartialEq + Display> ExprValue<T> {
-    pub fn same_value(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ExprValue::Native(a), ExprValue::Native(b)) => a == b,
-            _ => false,
-        }
-    }
-}
-
 impl TryFrom<&str> for ExpressionNumType {
     type Error = String;
 
@@ -76,15 +85,6 @@ impl TryFrom<&str> for ExpressionFunType {
             "rem" => Ok(ExpressionFunType::Rem),
             "log2" => Ok(ExpressionFunType::Log2),
             _ => Err(format!("Unknown ExpressionFunType: {}", value)),
-        }
-    }
-}
-
-impl<T: for<'a> TryFrom<&'a str> + Display> From<&str> for ExprValue<T> {
-    fn from(value: &str) -> Self {
-        match T::try_from(value) {
-            Ok(fun_type) => ExprValue::Native(fun_type),
-            Err(_) => ExprValue::Custom(value.to_string()),
         }
     }
 }
