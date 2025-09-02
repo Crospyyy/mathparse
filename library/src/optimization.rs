@@ -1,6 +1,6 @@
 use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
-use crate::{create_default_context, formula, Element, FormulaStore, Number};
+use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
@@ -106,7 +106,7 @@ impl Element {
                     *self = e.clone();
                     return;
                 }
-                elements.retain(|e| !e.is(0));
+                elements.retain(|e| !formula_matches!(e, num(0)));
 
                 if elements.len() >= 2 {
                     let mut to_remove = vec![false; elements.len()];
@@ -153,7 +153,7 @@ impl Element {
                     *self = formula!(num(0));
                     return;
                 }
-                elements.retain(|e| !e.is(1));
+                elements.retain(|e| !formula_matches!(e, num(1)));
 
                 if elements.len() >= 2 {
                     let mut to_remove = vec![false; elements.len()];
@@ -318,7 +318,7 @@ impl Element {
 mod tests {
     use super::*;
     use crate::formula_short::{inv, mul, num, var};
-    use crate::{create_default_context, FormulaStore};
+    use crate::{FormulaStore, create_default_context};
 
     #[test]
     fn test_optimize_new() {

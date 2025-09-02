@@ -478,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_float_consts() {
-        use crate::operations::create_default_context;
+        use crate::calculation::create_default_context;
         use astro_float::BigFloat;
         use astro_float::expr;
 
@@ -548,7 +548,7 @@ mod tests {
 
     #[test]
     fn test_storing() {
-        use crate::operations::create_default_context;
+        use crate::calculation::create_default_context;
 
         println!("### Test storing formulas ###");
 
