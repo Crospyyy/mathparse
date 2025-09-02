@@ -3,6 +3,7 @@ use crate::printing::FormattingOptions;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
+use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
@@ -31,7 +32,7 @@ pub fn create_default_context() -> NumberContext {
 
 impl Element {
     pub(crate) fn is_nan(&self) -> bool {
-        self.get_number_inner().is_some_and(|n| n.is_nan())
+        formula_matches!(self, num(x)).is_some_and(|n| n.is_nan())
     }
 }
 

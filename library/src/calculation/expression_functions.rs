@@ -40,6 +40,7 @@ fn sin_with_radians(num: &Number, ctx: &mut Context) -> Number {
 impl ExpressionFunType {
     pub(crate) fn get_function_single_arg(&self) -> Option<fn(&Number, &mut Context) -> Number> {
         match self {
+            ExpressionFunType::Rem => None?,
             ExpressionFunType::Sin => Number::sin,
             ExpressionFunType::Asin => Number::asin,
             ExpressionFunType::Cos => Number::cos,
@@ -48,7 +49,6 @@ impl ExpressionFunType {
             ExpressionFunType::Atan => Number::atan,
             ExpressionFunType::Floor => Number::floor,
             ExpressionFunType::Round => Number::round,
-            ExpressionFunType::Rem => None?,
             ExpressionFunType::Log2 => Number::log2,
             ExpressionFunType::SinWithRadians => sin_with_radians,
         }

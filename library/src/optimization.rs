@@ -9,19 +9,26 @@ use std::ops::Mul;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
 
-#[derive(EnumIter, EnumCount, Copy, Clone, PartialEq, Debug)]
-pub enum Optimization {
-    CombineExponents,
-    OneOrZeroToAnyPower,
-    MultiplyByOne,
-    PlusZero,
-    DoubleNegation,
-    DivideBySame,
-    MultiplyByZero,
-    FlattenPlus,
-    FlattenMultiply,
-    PowerOfZero,
-    FlattenPower,
+macro_rules! quick_match {
+    ($input:expr,$pat:pat => $expr:expr) => {
+        match $input {
+            $pat => Some($expr),
+            _ => None,
+        }
+    };
+}
+
+fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&mut Vec<T>>) {
+    let mut new_list = vec![];
+    for e in list.iter_mut() {
+        if let Some(inner) = flatten_fn(e) {
+            flatten_list(inner, flatten_fn);
+            new_list.append(inner);
+        } else {
+            new_list.push(e.clone());
+        }
+    }
+    *list = new_list;
 }
 
 impl Element {
@@ -67,31 +74,7 @@ impl Element {
                 _ => false,
             }
     }
-}
 
-fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&mut Vec<T>>) {
-    let mut new_list = vec![];
-    for e in list.iter_mut() {
-        if let Some(inner) = flatten_fn(e) {
-            flatten_list(inner, flatten_fn);
-            new_list.append(inner);
-        } else {
-            new_list.push(e.clone());
-        }
-    }
-    *list = new_list;
-}
-
-macro_rules! quick_match {
-    ($input:expr,$pat:pat => $expr:expr) => {
-        match $input {
-            $pat => Some($expr),
-            _ => None,
-        }
-    };
-}
-
-impl Element {
     pub(crate) fn optimize_new(&mut self) {
         self.run_on_children(&mut |child| {
             child.optimize_new();
@@ -223,7 +206,7 @@ impl Element {
                     match fun_type {
                         ExpressionFunType::Floor | ExpressionFunType::Round => {
                             if arguments.len() == 1
-                                && arguments[0].get_number_inner().is_some_and(|n| n.is_integer())
+                                && formula_matches!(arguments[0], num(x)).is_some_and(|n| n.is_integer())
                             {
                                 *self = arguments[0].clone();
                                 return;
@@ -269,51 +252,6 @@ impl Element {
     }
 }
 
-macro_rules! implement_internal {
-    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident) => {
-        pub(crate) fn $name(&self) -> Option<&$return_type> {
-            match self {
-                Element::$enum_name($inner_name) => Some($inner_name),
-                _ => None,
-            }
-        }
-
-        pub(crate) fn $name_mut(&mut self) -> Option<&mut $return_type> {
-            match self {
-                Element::$enum_name($inner_name) => Some($inner_name),
-                _ => None,
-            }
-        }
-    };
-    ($name:ident, $name_mut:ident, $return_type:ty, $enum_name:ident, $inner_name:ident, $inner_name2:ident) => {
-        fn $name(&self) -> Option<(&$return_type, &$return_type)> {
-            match self {
-                Element::$enum_name($inner_name, $inner_name2) => Some((&**$inner_name, &**$inner_name2)),
-                _ => None,
-            }
-        }
-
-        fn $name_mut(&mut self) -> Option<(&mut $return_type, &mut $return_type)> {
-            match self {
-                Element::$enum_name($inner_name, $inner_name2) => Some(($inner_name, $inner_name2)),
-                _ => None,
-            }
-        }
-    };
-}
-
-impl Element {
-    implement_internal!(get_number_inner, get_number_inner_mut, Number, Number, num);
-    implement_internal!(get_pow_inner, get_pow_inner_mut, Element, Pow, base, exponent);
-    implement_internal!(get_negate_inner, get_negate_inner_mut, Element, Negate, element);
-    implement_internal!(get_variable_inner, get_variable_inner_mut, String, Variable, name);
-    fn get_mul_inner(&self) -> Option<&Vec<Self>> {
-        if let Element::Multiply(inner) = self { Some(inner) } else { None }
-    }
-    fn get_mul_inner_mut(&mut self) -> Option<&mut Vec<Self>> {
-        if let Element::Multiply(inner) = self { Some(inner) } else { None }
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;

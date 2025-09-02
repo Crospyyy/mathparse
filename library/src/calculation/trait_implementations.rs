@@ -1,6 +1,7 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
 use crate::{Element, Number};
 use astro_float::BigFloat;
+use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::ToPrimitive;
 
@@ -64,6 +65,6 @@ impl PartialEq<i32> for &Number {
 
 impl PartialEq<i32> for &Element {
     fn eq(&self, other: &i32) -> bool {
-        self.get_number_inner().is_some_and(|n| n == other)
+        formula_matches!(self, num(x)).is_some_and(|n| n == other)
     }
 }
