@@ -1012,36 +1012,6 @@ pub mod signature {
             &self.name
         }
     }
-
-    // fn update_signature(
-    //     mut signature_arguments: Option<&mut Signatures>, undefined: &mut Signatures,
-    //     refine_with: &Signatures,
-    // ) -> Result<(), String> {
-    //     let mut result = Ok(());
-    //     undefined.0.retain(|name, sig| {
-    //         if let Some(fun_arg) = signature_arguments.as_mut().and_then(|a| a.0.get_mut(name)) {
-    //             if fun_arg.could_be(&sig) {
-    //                 fun_arg.refine_with(sig.clone());
-    //                 false
-    //             } else {
-    //                 result = Err(format!("Invalid usage of already defined formula {}", name));
-    //                 true
-    //             }
-    //         } else if let Some(already_defined) = refine_with.0.get(name) {
-    //             if sig.could_be(already_defined) {
-    //                 false
-    //             } else {
-    //                 result = Err(format!("Invalid usage of already defined formula {}", name));
-    //                 true
-    //             }
-    //         } else {
-    //             true
-    //         }
-    //     });
-    //     result
-    // }
-
-    // struct SymbolDefinition {}
 }
 
 #[cfg(test)]
