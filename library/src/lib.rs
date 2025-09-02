@@ -2,12 +2,12 @@ use crate::parsing::signature::ParamCount;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
 use num_rational::BigRational;
-use std::fmt::{Debug, Display, Formatter, Pointer};
+use std::fmt::{Debug, Display, Pointer};
 
 mod benchmarking;
+pub(crate) mod calculation;
 mod evaluation;
 mod expression_values;
-pub(crate) mod operations;
 mod optimization;
 mod parsing;
 mod printing;
@@ -18,7 +18,7 @@ use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
-pub use operations::create_default_context;
+pub use calculation::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
 pub use parsing::signature::Signature;
 pub use printing::FormattingOptions;
@@ -67,7 +67,7 @@ pub enum Element {
 #[derive(Clone, Debug, PartialEq)]
 pub enum FunctionExpression {
     SingleArgument(fn(&Number, &mut Context) -> Number),
-    MultipleArguments(fn(&mut Context, Vec<Number>) -> Number),
+    MultipleArguments(fn(Vec<Number>, &mut Context) -> Number),
 }
 
 #[derive(Clone, Debug)]

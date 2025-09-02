@@ -1046,10 +1046,10 @@ pub mod signature {
 
 #[cfg(test)]
 pub mod testing {
+    use crate::Element;
+    use crate::calculation::create_default_context;
     use crate::formula_short::*;
-    use crate::operations::create_default_context;
     use crate::printing::FormattingOptions;
-    use crate::{Element, Number};
     use astro_float::ctx::Context;
 
     #[allow(unused)]

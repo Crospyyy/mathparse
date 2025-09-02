@@ -46,7 +46,7 @@ impl Element {
                         return None;
                     }
                     let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
-                    Some(fun(ctx, args))
+                    Some(fun(args, ctx))
                 },
             },
         }
@@ -136,9 +136,9 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::calculation::create_default_context;
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
     use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
-    use crate::operations::create_default_context;
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;

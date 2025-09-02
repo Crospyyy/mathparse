@@ -157,7 +157,8 @@ mod test {
         assert!(formula_matches!(f, pow(num(1), num(2))));
         assert!(formula_matches!(f, pow(num(1), num(2))));
         let f = formula!(pow(num(1), pow(num(2), num(3))));
-        let (n1, n2, n3) = formula_matches!(f, pow(num(x), pow(num(x), num(x)))).expect("This should not fail");
+        let (n1, n2, n3) =
+            formula_matches!(f, pow(num(x), pow(num(x), num(x)))).expect("This should not fail");
         {
             assert_eq!(n1, &Number::from(1));
             assert_eq!(n2, &Number::from(2));

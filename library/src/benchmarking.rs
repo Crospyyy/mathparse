@@ -1,16 +1,6 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-pub enum Benchmark {
-    Disabled,
-    JustTotalDuration(Duration),
-    Enabled {
-        sub_start_time: Option<Instant>,
-        total_duration: Duration,
-        tasks: HashMap<String, (usize, Benchmark)>,
-    },
-}
-
 #[macro_export]
 macro_rules! benchmark {
     ($bench:ident,$s:expr,$name:expr) => {{
@@ -19,6 +9,16 @@ macro_rules! benchmark {
         $bench.complete($name);
         return_val
     }};
+}
+
+pub enum Benchmark {
+    Disabled,
+    JustTotalDuration(Duration),
+    Enabled {
+        sub_start_time: Option<Instant>,
+        total_duration: Duration,
+        tasks: HashMap<String, (usize, Benchmark)>,
+    },
 }
 
 impl Benchmark {
