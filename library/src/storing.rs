@@ -1,8 +1,6 @@
 use crate::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
-use crate::{
-    Element, ExpressionFunType, ExpressionNumType, Number, NumberContext,
-};
+use crate::{Element, ExpressionFunType, ExpressionNumType, Number, NumberContext};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
 
@@ -67,15 +65,13 @@ impl FormulaStore {
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
-        macro_rules! define_fun_single_arg {
+        macro_rules! define_functions {
             ($($op:ident),+) => {
                 $(self.add_expression_fun(&stringify!($op).to_lowercase(), ExpressionFunType::$op)?);+
             }
         }
 
-        define_fun_single_arg!(Sin, Cos, Tan, Asin, Acos, Atan, Log2, Floor, Ceil, Round);
-
-        self.add_expression_fun("rem", ExpressionFunType::Rem)?;
+        define_functions!(Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln);
 
         self.add_expression_fun(
             "avg",
@@ -209,7 +205,7 @@ impl FormulaStore {
     pub fn add_expression_fun(
         &mut self, name: impl ToString, expr_value: ExpressionFunType,
     ) -> Result<(), String> {
-        let params = Some(vec![]);
+        let params = Some(vec![]); // todo add param names
         let signature = match expr_value.get_param_count() {
             ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
             ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),

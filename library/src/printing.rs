@@ -207,20 +207,9 @@ impl Display for Formula {
 impl Display for ExpressionFunType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            ExpressionFunType::Sin => f.write_str("sin"),
-            ExpressionFunType::Asin => f.write_str("asin"),
-            ExpressionFunType::Cos => f.write_str("cos"),
-            ExpressionFunType::Acos => f.write_str("acos"),
-            ExpressionFunType::Tan => f.write_str("tan"),
-            ExpressionFunType::Atan => f.write_str("atan"),
-            ExpressionFunType::Floor => f.write_str("floor"),
-            ExpressionFunType::Ceil => f.write_str("ceil"),
-            ExpressionFunType::Round => f.write_str("round"),
-            ExpressionFunType::Rem => f.write_str("rem"),
-            ExpressionFunType::Log2 => f.write_str("log2"),
-            ExpressionFunType::SinWithRadians => f.write_str("sin_radians"),
             ExpressionFunType::AssertValueRange(r) => f.write_str(&format!("check_{:?}", r).to_lowercase()),
             ExpressionFunType::Custom(c) => f.write_str(&format!("custom_{}", c.name)),
+            _ => f.write_str(&format!("{:?}", self).to_lowercase()),
         }
     }
 }

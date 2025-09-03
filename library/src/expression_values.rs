@@ -1,5 +1,5 @@
-use crate::parsing::signature::ParamCount;
 use crate::Number;
+use crate::parsing::signature::ParamCount;
 use astro_float::ctx::Context;
 use std::fmt::{Debug, Display, Formatter};
 use std::rc::Rc;
@@ -8,6 +8,7 @@ use std::rc::Rc;
 pub enum ExpressionFunType {
     Custom(CustomFunction),
     Sin,
+    SinWithRadians,
     Asin,
     Cos,
     Acos,
@@ -16,9 +17,11 @@ pub enum ExpressionFunType {
     Floor,
     Ceil,
     Round,
+    Abs,
     Rem,
     Log2,
-    SinWithRadians,
+    Log10,
+    Ln,
     AssertValueRange(ValueRange),
 }
 
@@ -46,9 +49,14 @@ impl CustomFunction {
         CustomFunction::new(name, param_count, FunctionExpression::single_argument(f))
     }
     pub(crate) fn multiple_arguments(
-        name: &'static str, param_count: ParamCount, f: impl Fn(Vec<Number>, &mut Context) -> Number + 'static,
+        name: &'static str, param_count: ParamCount,
+        f: impl Fn(Vec<Number>, &mut Context) -> Number + 'static,
     ) -> Self {
         CustomFunction::new(name, param_count, FunctionExpression::multiple_arguments(f))
+    }
+
+    pub fn get_fn(&self) -> FunctionExpression {
+        self.function.clone()
     }
 
     pub fn get_fn_single_arg(&self) -> Option<Rc<dyn Fn(&Number, &mut Context) -> Number>> {

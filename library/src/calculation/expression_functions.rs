@@ -40,34 +40,6 @@ fn sin_with_radians(num: &Number, ctx: &mut Context) -> Number {
 
 impl ExpressionFunType {
     pub fn get_function(&self) -> FunctionExpression {
-        todo!()
-    }
-
-    pub(crate) fn get_function_single_arg(&self) -> Option<Rc<dyn Fn(&Number, &mut Context) -> Number>> {
-        Some(match self {
-            ExpressionFunType::Rem => None?,
-            ExpressionFunType::Sin => Rc::new(Number::sin),
-            ExpressionFunType::Asin => Rc::new(Number::asin),
-            ExpressionFunType::Cos => Rc::new(Number::cos),
-            ExpressionFunType::Acos => Rc::new(Number::acos),
-            ExpressionFunType::Tan => Rc::new(Number::tan),
-            ExpressionFunType::Atan => Rc::new(Number::atan),
-            ExpressionFunType::Floor => Rc::new(Number::floor),
-            ExpressionFunType::Ceil => Rc::new(Number::ceil),
-            ExpressionFunType::Round => Rc::new(Number::round),
-            ExpressionFunType::Log2 => Rc::new(Number::log2),
-            ExpressionFunType::SinWithRadians => Rc::new(sin_with_radians),
-            ExpressionFunType::AssertValueRange(range) => {
-                let r = *range;
-                Rc::new(move |n, _c| if n.is_in_value_range(r) { n.clone() } else { Number::nan(None) })
-            },
-            ExpressionFunType::Custom(c) => c.get_fn_single_arg()?,
-        })
-    }
-
-    pub(crate) fn get_function_multiple_args(
-        &self,
-    ) -> Option<Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>> {
         macro_rules! args_check {
             ($args:expr,$len:literal, $name:ident) => {
                 if $args.len() != $len {
@@ -81,25 +53,36 @@ impl ExpressionFunType {
                 }
             };
         }
-        Some(match self {
-            ExpressionFunType::Rem => Rc::new(|args: Vec<Number>, ctx: &mut Context| {
-                args_check!(args, 2, Rem);
-                Number::rem(&args[0], &args[1], ctx)
-            }),
-            ExpressionFunType::Sin
-            | ExpressionFunType::Asin
-            | ExpressionFunType::Cos
-            | ExpressionFunType::Acos
-            | ExpressionFunType::Tan
-            | ExpressionFunType::Atan
-            | ExpressionFunType::Floor
-            | ExpressionFunType::Ceil
-            | ExpressionFunType::Round
-            | ExpressionFunType::Log2
-            | ExpressionFunType::SinWithRadians => None?,
-            ExpressionFunType::Custom(c) => c.get_fn_multiple_args()?,
-            ExpressionFunType::AssertValueRange(_) => None?,
-        })
+
+        match self {
+            ExpressionFunType::Rem => {
+                FunctionExpression::multiple_arguments(|args: Vec<Number>, ctx: &mut Context| {
+                    args_check!(args, 2, Rem);
+                    Number::rem(&args[0], &args[1], ctx)
+                })
+            },
+            ExpressionFunType::Sin => FunctionExpression::single_argument(Number::sin),
+            ExpressionFunType::SinWithRadians => FunctionExpression::single_argument(sin_with_radians),
+            ExpressionFunType::Asin => FunctionExpression::single_argument(Number::asin),
+            ExpressionFunType::Cos => FunctionExpression::single_argument(Number::cos),
+            ExpressionFunType::Acos => FunctionExpression::single_argument(Number::acos),
+            ExpressionFunType::Tan => FunctionExpression::single_argument(Number::tan),
+            ExpressionFunType::Atan => FunctionExpression::single_argument(Number::atan),
+            ExpressionFunType::Floor => FunctionExpression::single_argument(Number::floor),
+            ExpressionFunType::Ceil => FunctionExpression::single_argument(Number::ceil),
+            ExpressionFunType::Round => FunctionExpression::single_argument(Number::round),
+            ExpressionFunType::Abs => FunctionExpression::single_argument(Number::abs),
+            ExpressionFunType::Log2 => FunctionExpression::single_argument(Number::log2),
+            ExpressionFunType::Log10 => FunctionExpression::single_argument(Number::log10),
+            ExpressionFunType::Ln => FunctionExpression::single_argument(Number::ln),
+            ExpressionFunType::AssertValueRange(range) => {
+                let r = *range;
+                FunctionExpression::single_argument(move |n, _c| {
+                    if n.is_in_value_range(r) { n.clone() } else { Number::nan(None) }
+                })
+            },
+            ExpressionFunType::Custom(c) => c.get_fn(),
+        }
     }
 
     pub(crate) fn get_param_count(&self) -> ParamCount {
@@ -114,7 +97,10 @@ impl ExpressionFunType {
             | ExpressionFunType::Floor
             | ExpressionFunType::Ceil
             | ExpressionFunType::Round
+            | ExpressionFunType::Abs
             | ExpressionFunType::Log2
+            | ExpressionFunType::Log10
+            | ExpressionFunType::Ln
             | ExpressionFunType::SinWithRadians
             | ExpressionFunType::AssertValueRange(_) => ParamCount::Exactly(1),
             ExpressionFunType::Custom(c) => c.param_count,

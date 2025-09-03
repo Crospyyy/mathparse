@@ -240,7 +240,7 @@ mod tests {
             for function in function_names {
                 for i in 0..5 {
                     println!("Testing function: {} with {} arguments", function, i);
-                    assert_eq!(store.eval(&&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
+                    assert_eq!(store.eval(&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
                 }
             }
         };
