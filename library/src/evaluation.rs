@@ -1,5 +1,6 @@
+use crate::expression_values::FunctionExpression;
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, FunctionExpression, Number, benchmark, create_default_context};
+use crate::{Benchmark, Element, Number, benchmark, create_default_context};
 use astro_float::ctx::Context;
 use std::collections::HashSet;
 
@@ -33,21 +34,19 @@ impl Element {
             Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
             Element::Number(n) => Some(n.clone()),
             Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-            Element::NumberWithExpression { fun, .. } => Some(fun(ctx)),
-            Element::FunctionWithExpression { arguments, expression, param_count, .. } => match expression {
-                FunctionExpression::SingleArgument(fun) => {
-                    if arguments.len() != 1 {
-                        return None;
-                    }
-                    Some(fun(&arguments[0].eval(ctx)?, ctx))
-                },
-                FunctionExpression::MultipleArguments(fun) => {
-                    if !param_count.number_would_be_valid(arguments.len()) {
-                        return None;
-                    }
-                    let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
-                    Some(fun(args, ctx))
-                },
+            Element::NumberWithExpression { expr_value } => Some(expr_value.get_function()(ctx)),
+            Element::FunctionWithExpression { arguments, expr_value } => {
+                let count = expr_value.get_param_count();
+                if !count.number_would_be_valid(arguments.len()) {
+                    return None;
+                }
+                match expr_value.get_function() {
+                    FunctionExpression::SingleArgument(fun) => Some(fun(&arguments[0].eval(ctx)?, ctx)),
+                    FunctionExpression::MultipleArguments(fun) => {
+                        let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
+                        Some(fun(args, ctx))
+                    },
+                }
             },
         }
     }
@@ -138,7 +137,7 @@ impl FormulaStore {
 mod tests {
     use crate::calculation::create_default_context;
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-    use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
+    use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
     use crate::storing::FormulaStore;
     use crate::{Element, Number};
     use astro_float::ctx::Context;
@@ -267,15 +266,15 @@ mod tests {
         test_eval!("rem(2, 2)", Number::from(0));
         test_eval!(
             "sin(123)",
-            fun_expr_1_arg(
+            fun_expr(
                 ExpressionFunType::SinWithRadians,
-                mul([
-                    fun_expr_n_args(
+                [mul([
+                    fun_expr(
                         ExpressionFunType::Rem,
                         [mul([num(123), inv(num_expr(ExpressionNumType::Pi))]), num(2),]
                     ),
                     num(2),
-                ])
+                ])]
             )
             .eval(&mut ctx)
             .unwrap()

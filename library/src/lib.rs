@@ -1,6 +1,4 @@
-use crate::parsing::signature::ParamCount;
 use astro_float::BigFloat;
-use astro_float::ctx::Context;
 use num_rational::BigRational;
 use std::fmt::{Debug, Display, Pointer};
 
@@ -14,9 +12,9 @@ mod printing;
 mod storing;
 mod testing;
 
-use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-pub use astro_float::RoundingMode;
+use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::ctx::Context as NumberContext;
+pub use astro_float::RoundingMode;
 pub use benchmarking::Benchmark;
 pub use calculation::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
@@ -46,12 +44,10 @@ pub enum Element {
     /// A function with a stored evaluation expression
     FunctionWithExpression {
         arguments: Vec<Element>,
-        param_count: ParamCount,
-        expression: FunctionExpression,
-        expr_value: ExprValue<ExpressionFunType>,
+        expr_value: ExpressionFunType,
     },
     /// A number defined by an expression
-    NumberWithExpression { fun: fn(&mut Context) -> Number, expr_value: ExprValue<ExpressionNumType> },
+    NumberWithExpression { expr_value: ExpressionNumType },
     /// List of elements to add together
     Plus(Vec<Element>),
     /// List of elements to multiply together
@@ -64,11 +60,7 @@ pub enum Element {
     Number(Number),
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum FunctionExpression {
-    SingleArgument(fn(&Number, &mut Context) -> Number),
-    MultipleArguments(fn(Vec<Number>, &mut Context) -> Number),
-}
+
 
 #[derive(Clone, Debug)]
 pub enum Number {
@@ -78,9 +70,8 @@ pub enum Number {
 
 #[allow(unused)]
 mod formula_short {
-    use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-    use crate::parsing::signature::ParamCount;
-    use crate::{Element, FunctionExpression, Number};
+    use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+    use crate::{Element, Number};
 
     pub fn num(num: impl ToString) -> Element {
         Element::Number(Number::from_string(num).unwrap())
@@ -120,37 +111,13 @@ mod formula_short {
     }
 
     pub fn num_expr(value: ExpressionNumType) -> Element {
-        Element::NumberWithExpression { fun: value.get_function(), expr_value: value.into() }
+        Element::NumberWithExpression { expr_value: value.into() }
     }
 
-    pub fn fun_expr_1_arg(fun: ExpressionFunType, arg: Element) -> Element {
-        assert_eq!(fun.get_param_count(), ParamCount::Exactly(1));
-        Element::FunctionWithExpression {
-            arguments: vec![arg],
-            param_count: ParamCount::Exactly(1),
-            expression: FunctionExpression::SingleArgument(fun.get_function_single_arg().unwrap()),
-            expr_value: fun.into(),
-        }
-    }
-
-    pub fn fun_expr_n_args(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
+    pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
         Element::FunctionWithExpression {
             arguments: args.into_iter().collect(),
-            param_count: fun.get_param_count(),
-            expression: FunctionExpression::MultipleArguments(fun.get_function_multiple_args().unwrap()),
-            expr_value: fun.into(),
-        }
-    }
-
-    pub fn fun_expr_new(
-        debug_name: impl ToString, param_count: ParamCount, expression: FunctionExpression,
-        args: impl IntoIterator<Item = Element>,
-    ) -> Element {
-        Element::FunctionWithExpression {
-            arguments: args.into_iter().collect(),
-            param_count,
-            expression,
-            expr_value: ExprValue::Custom(debug_name.to_string()),
+            expr_value: fun,
         }
     }
 }

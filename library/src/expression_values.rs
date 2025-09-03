@@ -1,31 +1,12 @@
-use std::fmt::Display;
+use crate::parsing::signature::ParamCount;
+use crate::Number;
+use astro_float::ctx::Context;
+use std::fmt::{Debug, Display, Formatter};
+use std::rc::Rc;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ExprValue<T: Display> {
-    Native(T),
-    Custom(String),
-}
-
-impl<T: PartialEq + Display> ExprValue<T> {
-    pub fn same_value(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ExprValue::Native(a), ExprValue::Native(b)) => a == b,
-            _ => false,
-        }
-    }
-}
-
-impl<T: for<'a> TryFrom<&'a str> + Display> From<&str> for ExprValue<T> {
-    fn from(value: &str) -> Self {
-        match T::try_from(value) {
-            Ok(fun_type) => ExprValue::Native(fun_type),
-            Err(_) => ExprValue::Custom(value.to_string()),
-        }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionFunType {
+    Custom(CustomFunction),
     Sin,
     Asin,
     Cos,
@@ -33,58 +14,99 @@ pub enum ExpressionFunType {
     Tan,
     Atan,
     Floor,
+    Ceil,
     Round,
     Rem,
     Log2,
     SinWithRadians,
+    AssertValueRange(ValueRange),
 }
 
-impl From<ExpressionFunType> for ExprValue<ExpressionFunType> {
-    fn from(fun_type: ExpressionFunType) -> Self {
-        ExprValue::Native(fun_type)
+impl From<CustomFunction> for ExpressionFunType {
+    fn from(value: CustomFunction) -> Self {
+        ExpressionFunType::Custom(value)
     }
 }
 
-impl From<ExpressionNumType> for ExprValue<ExpressionNumType> {
-    fn from(num_type: ExpressionNumType) -> Self {
-        ExprValue::Native(num_type)
+#[derive(Clone, Debug)]
+pub(crate) struct CustomFunction {
+    pub(crate) name: &'static str,
+    pub(crate) param_count: ParamCount,
+    function: FunctionExpression,
+}
+
+impl CustomFunction {
+    pub(crate) fn new(name: &'static str, param_count: ParamCount, function: FunctionExpression) -> Self {
+        CustomFunction { name, param_count, function }
     }
+
+    pub(crate) fn single_argument(
+        name: &'static str, param_count: ParamCount, f: impl Fn(&Number, &mut Context) -> Number + 'static,
+    ) -> Self {
+        CustomFunction::new(name, param_count, FunctionExpression::single_argument(f))
+    }
+    pub(crate) fn multiple_arguments(
+        name: &'static str, param_count: ParamCount, f: impl Fn(Vec<Number>, &mut Context) -> Number + 'static,
+    ) -> Self {
+        CustomFunction::new(name, param_count, FunctionExpression::multiple_arguments(f))
+    }
+
+    pub fn get_fn_single_arg(&self) -> Option<Rc<dyn Fn(&Number, &mut Context) -> Number>> {
+        match &self.function {
+            FunctionExpression::SingleArgument(f) => Some(f.clone()),
+            _ => None,
+        }
+    }
+    pub fn get_fn_multiple_args(&self) -> Option<Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>> {
+        match &self.function {
+            FunctionExpression::MultipleArguments(f) => Some(f.clone()),
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq for CustomFunction {
+    /// This always returns false since custom functions can't be compared
+    fn eq(&self, _other: &Self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone)]
+pub enum FunctionExpression {
+    SingleArgument(Rc<dyn Fn(&Number, &mut Context) -> Number>),
+    MultipleArguments(Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>),
+}
+
+impl Debug for FunctionExpression {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FunctionExpression::SingleArgument(_) => f.write_str("SingleArgument"),
+            FunctionExpression::MultipleArguments(_) => f.write_str("MultipleArguments"),
+        }
+    }
+}
+
+impl FunctionExpression {
+    pub(crate) fn single_argument(f: impl Fn(&Number, &mut Context) -> Number + 'static) -> Self {
+        FunctionExpression::SingleArgument(Rc::new(f))
+    }
+    pub(crate) fn multiple_arguments(f: impl Fn(Vec<Number>, &mut Context) -> Number + 'static) -> Self {
+        FunctionExpression::MultipleArguments(Rc::new(f))
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum ValueRange {
+    Positive,
+    Negative,
+    PositiveOrZero,
+    NegativeOrZero,
+    NotZero,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ExpressionNumType {
     Pi,
     E,
-}
-
-impl TryFrom<&str> for ExpressionNumType {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "pi" => Ok(ExpressionNumType::Pi),
-            "e" => Ok(ExpressionNumType::E),
-            _ => Err(format!("Unknown ExpressionNumType: {}", value)),
-        }
-    }
-}
-
-impl TryFrom<&str> for ExpressionFunType {
-    type Error = String;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "sin" => Ok(ExpressionFunType::Sin),
-            "asin" => Ok(ExpressionFunType::Asin),
-            "cos" => Ok(ExpressionFunType::Cos),
-            "acos" => Ok(ExpressionFunType::Acos),
-            "tan" => Ok(ExpressionFunType::Tan),
-            "atan" => Ok(ExpressionFunType::Atan),
-            "floor" => Ok(ExpressionFunType::Floor),
-            "round" => Ok(ExpressionFunType::Round),
-            "rem" => Ok(ExpressionFunType::Rem),
-            "log2" => Ok(ExpressionFunType::Log2),
-            _ => Err(format!("Unknown ExpressionFunType: {}", value)),
-        }
-    }
 }

@@ -527,7 +527,7 @@ mod new {
                 ElementMatcher::Any => MatchOutput::no_output(quote! { Some(()) }),
                 ElementMatcher::X => MatchOutput::with_output(quote! { Some(#formula) }, 1),
                 ElementMatcher::Expression(expr) => {
-                    MatchOutput::no_output(quote! { (#formula).same_value(#expr).then_some(()) })
+                    MatchOutput::no_output(quote! { ((#formula) == (#expr)).then_some(()) })
                 },
                 ElementMatcher::WithoutInner(element) => {
                     let element_string = element.as_pattern();

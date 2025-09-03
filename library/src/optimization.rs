@@ -1,11 +1,13 @@
-use crate::expression_values::{ExprValue, ExpressionFunType, ExpressionNumType};
-use crate::formula_short::{fun_expr_1_arg, fun_expr_n_args, inv, mul, num, num_expr};
+use crate::expression_values::{CustomFunction, ExpressionFunType, ExpressionNumType, FunctionExpression};
+use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
+use crate::parsing::signature::ParamCount;
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use std::mem;
 use std::ops::Mul;
+use std::rc::Rc;
 use strum::{EnumCount, IntoEnumIterator};
 use strum_macros::{EnumCount, EnumIter};
 
@@ -49,30 +51,6 @@ impl Element {
             | Element::Number(_)
             | Element::NumberWithExpression { .. } => false,
         }
-    }
-
-    /// Checks if the elements are identical or their expression values as well as arguments are equal
-    pub(crate) fn same_value(&self, other: &Element) -> bool {
-        self == other
-            || match (self, other) {
-                (
-                    Element::FunctionWithExpression { arguments, expr_value: debug_name, .. },
-                    Element::FunctionWithExpression {
-                        arguments: other_args,
-                        expr_value: other_debug_name,
-                        ..
-                    },
-                ) => {
-                    debug_name.same_value(other_debug_name)
-                        && arguments.len() == other_args.len()
-                        && arguments.iter().zip(other_args).all(|(a, b)| a.same_value(b))
-                },
-                (
-                    Element::NumberWithExpression { expr_value: debug_name, .. },
-                    Element::NumberWithExpression { expr_value: other_debug_name, .. },
-                ) => debug_name.same_value(other_debug_name),
-                _ => false,
-            }
     }
 
     pub(crate) fn optimize_new(&mut self) {
@@ -171,8 +149,19 @@ impl Element {
             },
             Element::Pow(base, exp) => {
                 if let Some(num) = formula_matches!(base.as_ref(), num(x)) {
-                    if num == 1 || num == 0 {
+                    if num == 1 {
                         *self = formula!(num(num.clone()));
+                    } else if num == 0 {
+                        *self = fun_expr(
+                            ExpressionFunType::Custom(CustomFunction::new(
+                                "assert_not_negative",
+                                ParamCount::Exactly(1),
+                                FunctionExpression::SingleArgument(Rc::new(|im, _ctx| {
+                                    if im.is_negative() { Number::nan(None) } else { Number::from(0) }
+                                })),
+                            )),
+                            [exp.as_ref().clone()],
+                        )
                     }
                     return;
                 }
@@ -201,35 +190,28 @@ impl Element {
                     self.optimize_new();
                 }
             },
-            Element::FunctionWithExpression { arguments, expr_value, .. } => {
-                if let ExprValue::Native(fun_type) = expr_value {
-                    match fun_type {
-                        ExpressionFunType::Floor | ExpressionFunType::Round => {
-                            if arguments.len() == 1
-                                && formula_matches!(arguments[0], num(x)).is_some_and(|n| n.is_integer())
-                            {
-                                *self = arguments[0].clone();
-                                return;
-                            }
-                        },
-                        ExpressionFunType::Sin => {
-                            if arguments.len() == 1 {
-                                let arg = &arguments[0];
-                                let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
-                                let mut rem =
-                                    fun_expr_n_args(ExpressionFunType::Rem, [divided.clone(), num(2)]);
-                                rem.optimize_new();
-                                let corrected = fun_expr_1_arg(
-                                    ExpressionFunType::SinWithRadians,
-                                    mul([rem.clone(), num(2)]),
-                                );
-                                *self = corrected;
-                                return;
-                            }
-                        },
-                        _ => {},
+            Element::FunctionWithExpression { arguments, expr_value } => match expr_value {
+                ExpressionFunType::Floor | ExpressionFunType::Round => {
+                    if arguments.len() == 1
+                        && formula_matches!(arguments[0], num(x)).is_some_and(|n| n.is_integer())
+                    {
+                        *self = arguments[0].clone();
+                        return;
                     }
-                }
+                },
+                ExpressionFunType::Sin => {
+                    if arguments.len() == 1 {
+                        let arg = &arguments[0];
+                        let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
+                        let mut rem = fun_expr(ExpressionFunType::Rem, [divided.clone(), num(2)]);
+                        rem.optimize_new();
+                        let corrected =
+                            fun_expr(ExpressionFunType::SinWithRadians, [mul([rem.clone(), num(2)])]);
+                        *self = corrected;
+                        return;
+                    }
+                },
+                _ => {},
             },
             Element::Function { .. }
             | Element::Variable(_)
@@ -358,6 +340,8 @@ mod tests {
 
         test(formula!(mul(neg(num(2)))), formula!(neg(num(2))));
         test(formula!(mul(neg(num(2)), neg(num(2)))), formula!(mul(num(2), num(2))));
+
+        test(formula!(mul(num(0), pow(num(0), neg(num(1))))), Element::Number(Number::nan(None)));
     }
 
     fn test(mut input: Element, expected: Element) {

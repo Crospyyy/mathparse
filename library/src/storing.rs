@@ -1,6 +1,7 @@
+use crate::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{ParamCount, Signature, Signatures, SymbolDeclarationData};
 use crate::{
-    Element, ExprValue, ExpressionFunType, ExpressionNumType, FunctionExpression, Number, NumberContext,
+    Element, ExpressionFunType, ExpressionNumType, Number, NumberContext,
 };
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
@@ -68,79 +69,89 @@ impl FormulaStore {
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
         macro_rules! define_fun_single_arg {
             ($($op:ident),+) => {
-                $(self.add_expression_fun_single_arg(stringify!($op), Number::$op, "x", stringify!($op).into())?);+
+                $(self.add_expression_fun(&stringify!($op).to_lowercase(), ExpressionFunType::$op)?);+
             }
         }
 
-        define_fun_single_arg!(sin, cos, tan, asin, acos, atan, abs, log2, log10, ln, floor, ceil, round);
+        define_fun_single_arg!(Sin, Cos, Tan, Asin, Acos, Atan, Log2, Floor, Ceil, Round);
 
-        self.add_expression_fun_multiple_args(
+        self.add_expression_fun("rem", ExpressionFunType::Rem)?;
+
+        self.add_expression_fun(
             "avg",
-            ParamCount::AtLeast(1),
-            |args: Vec<Number>, ctx: &mut Context| {
-                if let Some(average) = Number::average(&args, ctx) {
-                    average
-                } else {
-                    eprintln!("Somehow average was called with zero numbers");
-                    Number::nan(None)
-                }
-            },
-            "avg".into(),
+            ExpressionFunType::Custom(CustomFunction::new(
+                "avg",
+                ParamCount::AtLeast(1),
+                FunctionExpression::multiple_arguments(|args: Vec<Number>, ctx: &mut Context| {
+                    if let Some(average) = Number::average(&args, ctx) {
+                        average
+                    } else {
+                        eprintln!("Somehow average was called with zero numbers");
+                        Number::nan(None)
+                    }
+                }),
+            )),
         )?;
-        self.add_expression_fun_multiple_args(
+        self.add_expression_fun(
             "median",
-            ParamCount::AtLeast(1),
-            |args: Vec<Number>, ctx: &mut Context| {
-                if let Some(median) = Number::median(&args, ctx) {
-                    median
-                } else {
-                    eprintln!("Somehow median was called with zero numbers");
-                    Number::nan(None)
-                }
-            },
-            "median".into(),
+            CustomFunction::multiple_arguments(
+                "median".into(),
+                ParamCount::AtLeast(1),
+                |args: Vec<Number>, ctx: &mut Context| {
+                    if let Some(median) = Number::median(&args, ctx) {
+                        median
+                    } else {
+                        eprintln!("Somehow median was called with zero numbers");
+                        Number::nan(None)
+                    }
+                },
+            )
+            .into(),
         )?;
-        self.add_expression_fun_multiple_args(
+        self.add_expression_fun(
             "max",
-            ParamCount::AtLeast(1),
-            |args: Vec<Number>, ctx: &mut Context| {
-                if let Some(max) = Number::max_of_several(&args, ctx) {
-                    max
-                } else {
-                    eprintln!("Somehow max was called with zero numbers");
-                    Number::nan(None)
-                }
-            },
-            "max".into(),
+            CustomFunction::multiple_arguments(
+                "max".into(),
+                ParamCount::AtLeast(1),
+                |args: Vec<Number>, ctx: &mut Context| {
+                    if let Some(max) = Number::max_of_several(&args, ctx) {
+                        max
+                    } else {
+                        eprintln!("Somehow max was called with zero numbers");
+                        Number::nan(None)
+                    }
+                },
+            )
+            .into(),
         )?;
-        self.add_expression_fun_multiple_args(
+        self.add_expression_fun(
             "min",
-            ParamCount::AtLeast(1),
-            |args: Vec<Number>, ctx: &mut Context| {
-                if let Some(min) = Number::min_of_several(&args, ctx) {
-                    min
-                } else {
-                    eprintln!("Somehow min was called with zero numbers");
-                    Number::nan(None)
-                }
-            },
-            "min".into(),
+            CustomFunction::multiple_arguments(
+                "min",
+                ParamCount::AtLeast(1),
+                |args: Vec<Number>, ctx: &mut Context| {
+                    if let Some(min) = Number::min_of_several(&args, ctx) {
+                        min
+                    } else {
+                        eprintln!("Somehow min was called with zero numbers");
+                        Number::nan(None)
+                    }
+                },
+            )
+            .into(),
         )?;
-        self.add_expression_fun_multiple_args(
+        self.add_expression_fun(
             "sum",
-            ParamCount::AtLeast(0),
-            |args: Vec<Number>, ctx: &mut Context| Number::sum(&args, ctx),
-            "sum".into(),
-        )?;
-        self.add_expression_fun_multiple_args(
-            "rem",
-            ExpressionFunType::Rem.get_param_count(),
-            ExpressionFunType::Rem.get_function_multiple_args().unwrap(),
-            "rem".into(),
+            CustomFunction::multiple_arguments(
+                "sum",
+                ParamCount::AtLeast(0),
+                |args: Vec<Number>, ctx: &mut Context| Number::sum(&args, ctx),
+            )
+            .into(),
         )?;
 
-        self.add_expression_var("pi", ExpressionNumType::Pi.get_function(), "pi".into())?;
-        self.add_expression_var("e", ExpressionNumType::E.get_function(), "e".into())?;
+        self.add_expression_var("pi", ExpressionNumType::Pi)?;
+        self.add_expression_var("e", ExpressionNumType::E)?;
         self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
         self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
         self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
@@ -187,45 +198,23 @@ impl FormulaStore {
     }
 
     pub fn add_expression_var(
-        &mut self, name: impl ToString, expression: fn(&mut Context) -> Number,
-        debug_name: ExprValue<ExpressionNumType>,
+        &mut self, name: impl ToString, expr_value: ExpressionNumType,
     ) -> Result<(), String> {
         let parameter_names = None;
         let signature = Signature::Number;
-        let element = Element::NumberWithExpression { fun: expression, expr_value: debug_name };
+        let element = Element::NumberWithExpression { expr_value };
         self.add_symbol(name.to_string(), signature, parameter_names, element)
     }
 
-    pub fn add_expression_fun_multiple_args(
-        &mut self, name: impl ToString, param_count: ParamCount,
-        expression: fn(Vec<Number>, &mut Context) -> Number, expr_value: ExprValue<ExpressionFunType>,
+    pub fn add_expression_fun(
+        &mut self, name: impl ToString, expr_value: ExpressionFunType,
     ) -> Result<(), String> {
         let params = Some(vec![]);
-        let signature = match param_count {
+        let signature = match expr_value.get_param_count() {
             ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
             ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
         };
-        let element = Element::FunctionWithExpression {
-            arguments: vec![],
-            param_count,
-            expression: FunctionExpression::MultipleArguments(expression),
-            expr_value,
-        };
-        self.add_symbol(name, signature, params, element)
-    }
-
-    pub fn add_expression_fun_single_arg(
-        &mut self, name: impl ToString, expression: fn(&Number, &mut Context) -> Number, param_name: &str,
-        expr_value: ExprValue<ExpressionFunType>,
-    ) -> Result<(), String> {
-        let signature = Signature::Function(vec![Signature::Number]);
-        let params = Some(vec![param_name.to_string()]);
-        let element = Element::FunctionWithExpression {
-            arguments: vec![Element::Variable(param_name.to_string())],
-            param_count: ParamCount::Exactly(1),
-            expression: FunctionExpression::SingleArgument(expression),
-            expr_value,
-        };
+        let element = Element::FunctionWithExpression { arguments: vec![], expr_value };
         self.add_symbol(name, signature, params, element)
     }
 
@@ -283,23 +272,18 @@ pub struct InsertionElement {
 impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
-            if let Element::FunctionWithExpression {
-                expression, param_count, expr_value: debug_name, ..
-            } = &self.formula
-            {
-                if !param_count.number_would_be_valid(param_values.len()) {
+            if let Element::FunctionWithExpression { expr_value, .. } = &self.formula {
+                if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
                     return Err(format!(
                         "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
                         self.name,
-                        param_count,
+                        expr_value.get_param_count(),
                         param_values.len()
                     ));
                 }
                 return Ok(Element::FunctionWithExpression {
                     arguments: param_values,
-                    param_count: *param_count,
-                    expression: expression.clone(),
-                    expr_value: debug_name.clone(),
+                    expr_value: expr_value.clone(),
                 });
             }
             let self_arguments = param_values;

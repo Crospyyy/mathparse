@@ -1,6 +1,6 @@
-use crate::expression_values::ExpressionFunType;
+use crate::expression_values::{ExpressionFunType, FunctionExpression};
 use crate::parsing::signature::ParamCount;
-use crate::{Element, ExprValue, ExpressionNumType, FunctionExpression, Number};
+use crate::{Element, ExpressionNumType, Number};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Radix};
 use colored::Colorize;
@@ -40,26 +40,15 @@ impl Element {
             Element::VariableOrFunction(name) => {
                 format!("var_or_fun({})", name)
             },
-            Element::FunctionWithExpression {
-                arguments,
-                expression,
-                param_count,
-                expr_value: debug_name,
-            } => {
-                let param_count_str = match param_count {
+            Element::FunctionWithExpression { arguments, expr_value } => {
+                let param_count_str = match expr_value.get_param_count() {
                     ParamCount::Exactly(n) => format!("={n} params"),
                     ParamCount::AtLeast(n) => format!(">={n} params"),
                 };
-                let name_str = if matches!(expression, FunctionExpression::SingleArgument(_)) {
-                    "one argument"
-                } else {
-                    "n arguments"
-                };
                 format!(
-                    "fun_with_expr:{}({}, {}, [{}])",
-                    debug_name,
+                    "fun_with_expr:{}({}, [{}])",
+                    expr_value,
                     param_count_str,
-                    name_str,
                     arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
                 )
             },
@@ -217,19 +206,22 @@ impl Display for Formula {
 
 impl Display for ExpressionFunType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            ExpressionFunType::Sin => "sin",
-            ExpressionFunType::Asin => "asin",
-            ExpressionFunType::Cos => "cos",
-            ExpressionFunType::Acos => "acos",
-            ExpressionFunType::Tan => "tan",
-            ExpressionFunType::Atan => "atan",
-            ExpressionFunType::Floor => "floor",
-            ExpressionFunType::Round => "round",
-            ExpressionFunType::Rem => "rem",
-            ExpressionFunType::Log2 => "log2",
-            ExpressionFunType::SinWithRadians => "sin_radians",
-        })
+        match self {
+            ExpressionFunType::Sin => f.write_str("sin"),
+            ExpressionFunType::Asin => f.write_str("asin"),
+            ExpressionFunType::Cos => f.write_str("cos"),
+            ExpressionFunType::Acos => f.write_str("acos"),
+            ExpressionFunType::Tan => f.write_str("tan"),
+            ExpressionFunType::Atan => f.write_str("atan"),
+            ExpressionFunType::Floor => f.write_str("floor"),
+            ExpressionFunType::Ceil => f.write_str("ceil"),
+            ExpressionFunType::Round => f.write_str("round"),
+            ExpressionFunType::Rem => f.write_str("rem"),
+            ExpressionFunType::Log2 => f.write_str("log2"),
+            ExpressionFunType::SinWithRadians => f.write_str("sin_radians"),
+            ExpressionFunType::AssertValueRange(r) => f.write_str(&format!("check_{:?}", r).to_lowercase()),
+            ExpressionFunType::Custom(c) => f.write_str(&format!("custom_{}", c.name)),
+        }
     }
 }
 
@@ -239,15 +231,6 @@ impl Display for ExpressionNumType {
             ExpressionNumType::Pi => "pi",
             ExpressionNumType::E => "e",
         })
-    }
-}
-
-impl<T: Display> Display for ExprValue<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExprValue::Native(name) => name.fmt(f),
-            ExprValue::Custom(name) => f.write_str(name),
-        }
     }
 }
 

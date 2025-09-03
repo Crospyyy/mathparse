@@ -10,6 +10,7 @@ use regex::Regex;
 use std::cmp::Ordering;
 use std::ops::Neg;
 use std::sync::LazyLock;
+use crate::expression_values::ValueRange;
 
 pub(crate) mod expression_functions;
 mod helper_functions;
@@ -105,6 +106,10 @@ impl Number {
         } else {
             self.get_float(ctx).partial_cmp(&other.get_float(ctx))
         }
+    }
+    
+    pub(crate) fn is_in_value_range(&self, range: ValueRange)->bool{
+        todo!()
     }
 
     pub(crate) fn is_negative(&self) -> bool {
