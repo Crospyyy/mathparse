@@ -73,7 +73,7 @@ impl FormulaStore {
 
         define_functions!(Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln);
 
-        self.add_expression_fun(
+        self.add_expression_fun( // todo add these as native expression functions
             "avg",
             ExpressionFunType::Custom(CustomFunction::new(
                 "avg",
