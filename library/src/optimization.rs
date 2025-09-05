@@ -1,15 +1,12 @@
-use crate::expression_values::{CustomFunction, ExpressionFunType, ExpressionNumType, FunctionExpression};
+use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
-use crate::parsing::signature::ParamCount;
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
 use num_traits::{Signed, ToPrimitive};
 use std::cmp::PartialEq;
 use std::mem;
 use std::ops::Mul;
-use std::rc::Rc;
 use strum::{EnumCount, IntoEnumIterator};
-use strum_macros::{EnumCount, EnumIter};
 
 macro_rules! quick_match {
     ($input:expr,$pat:pat => $expr:expr) => {
@@ -151,17 +148,6 @@ impl Element {
                 if let Some(num) = formula_matches!(base.as_ref(), num(x)) {
                     if num == 1 {
                         *self = formula!(num(num.clone()));
-                    } else if num == 0 {
-                        *self = fun_expr(
-                            ExpressionFunType::Custom(CustomFunction::new(
-                                "assert_not_negative",
-                                ParamCount::Exactly(1),
-                                FunctionExpression::SingleArgument(Rc::new(|im, _ctx| {
-                                    if im.is_negative() { Number::nan(None) } else { Number::from(0) }
-                                })),
-                            )),
-                            [exp.as_ref().clone()],
-                        )
                     }
                     return;
                 }
@@ -237,7 +223,7 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::formula_short::{inv, mul, num, var};
+    use crate::formula_short::{inv, mul, nan, num, var};
     use crate::{FormulaStore, create_default_context};
 
     #[test]
@@ -288,9 +274,6 @@ mod tests {
 
         // Potenz Basis 1
         test(formula!(pow(num(1), var("x"))), num(1));
-
-        // Potenz Basis 0
-        test(formula!(pow(num(0), var("x"))), num(0));
 
         // Exponent 1
         test(formula!(pow(var("a"), num(1))), var("a"));

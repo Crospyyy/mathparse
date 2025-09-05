@@ -68,6 +68,11 @@ pub enum Number {
 mod formula_short {
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
     use crate::{Element, Number};
+    use astro_float::BigFloat;
+
+    pub fn nan() -> Element {
+        Element::Number(Number::nan(None))
+    }
 
     pub fn num(num: impl ToString) -> Element {
         Element::Number(Number::from_string(num).unwrap())
