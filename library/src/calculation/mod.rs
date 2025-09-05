@@ -1,4 +1,5 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
+use crate::expression_values::ValueRange;
 use crate::printing::FormattingOptions;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
@@ -10,7 +11,6 @@ use regex::Regex;
 use std::cmp::Ordering;
 use std::ops::Neg;
 use std::sync::LazyLock;
-use crate::expression_values::ValueRange;
 
 pub(crate) mod expression_functions;
 mod helper_functions;
@@ -107,8 +107,8 @@ impl Number {
             self.get_float(ctx).partial_cmp(&other.get_float(ctx))
         }
     }
-    
-    pub(crate) fn is_in_value_range(&self, range: ValueRange)->bool{
+
+    pub(crate) fn is_in_value_range(&self, range: ValueRange) -> bool {
         todo!()
     }
 

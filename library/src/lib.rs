@@ -13,8 +13,8 @@ mod storing;
 mod testing;
 
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-pub use astro_float::ctx::Context as NumberContext;
 pub use astro_float::RoundingMode;
+pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use calculation::create_default_context;
 pub use parsing::get_fun_name_end_of_string;
@@ -22,8 +22,8 @@ pub use parsing::signature::Signature;
 pub use printing::FormattingOptions;
 pub use printing::NumberString;
 pub use storing::FormulaStore;
-pub use storing::Symbol;
 pub use storing::NamedSymbol;
+pub use storing::Symbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
@@ -43,10 +43,7 @@ pub enum Element {
 
     // Expanded formula elements
     /// A function with a stored evaluation expression
-    FunctionWithExpression {
-        arguments: Vec<Element>,
-        expr_value: ExpressionFunType,
-    },
+    FunctionWithExpression { arguments: Vec<Element>, expr_value: ExpressionFunType },
     /// A number defined by an expression
     NumberWithExpression { expr_value: ExpressionNumType },
     /// List of elements to add together
@@ -60,8 +57,6 @@ pub enum Element {
     /// A number
     Number(Number),
 }
-
-
 
 #[derive(Clone, Debug)]
 pub enum Number {
@@ -116,9 +111,6 @@ mod formula_short {
     }
 
     pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
-        Element::FunctionWithExpression {
-            arguments: args.into_iter().collect(),
-            expr_value: fun,
-        }
+        Element::FunctionWithExpression { arguments: args.into_iter().collect(), expr_value: fun }
     }
 }

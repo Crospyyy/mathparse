@@ -767,10 +767,8 @@ pub mod signature {
             opt_fun_args: &mut OptionalFunctionDeclarationArguments, undefined_signatures: &mut Signatures,
             formula: &Element, already_defined: &Signatures,
         ) -> Result<(), String> {
-            let parameter_names = opt_fun_args
-                .as_ref()
-                .map(|v| v.names.iter().cloned().collect())
-                .unwrap_or(HashSet::new());
+            let parameter_names =
+                opt_fun_args.as_ref().map(|v| v.names.iter().cloned().collect()).unwrap_or(HashSet::new());
 
             let all_undefined_names =
                 undefined_signatures.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
@@ -929,9 +927,9 @@ pub mod signature {
         pub(crate) name: String,
         pub(crate) function_args: OptionalFunctionDeclarationArguments,
     }
-    
+
     pub(crate) struct OptionalFunctionDeclarationArguments(Option<FunctionDeclarationArguments>);
-    
+
     impl Deref for OptionalFunctionDeclarationArguments {
         type Target = Option<FunctionDeclarationArguments>;
 
@@ -994,7 +992,10 @@ pub mod signature {
                     return Err("Invalid formula signature provided".to_string());
                 },
             }
-            Ok(Self { name: insert_name.to_owned(), function_args:OptionalFunctionDeclarationArguments(function_args) })
+            Ok(Self {
+                name: insert_name.to_owned(),
+                function_args: OptionalFunctionDeclarationArguments(function_args),
+            })
         }
 
         pub fn get_name(&self) -> &String {
