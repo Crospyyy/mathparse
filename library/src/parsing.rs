@@ -702,7 +702,7 @@ pub mod signature {
 
     impl FromIterator<(String, Signature)> for Signatures {
         fn from_iter<T: IntoIterator<Item = (String, Signature)>>(iter: T) -> Self {
-            iter.into_iter().collect()
+            iter.into_iter().collect::<HashMap<_, _>>().into()
         }
     }
 
