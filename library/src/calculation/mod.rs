@@ -109,13 +109,33 @@ impl Number {
     }
 
     pub(crate) fn is_in_value_range(&self, range: ValueRange) -> bool {
-        todo!()
+        match range {
+            ValueRange::Positive => self.is_positive() && !self.is_zero(),
+            ValueRange::Negative => self.is_negative() && !self.is_zero(),
+            ValueRange::PositiveOrZero => self.is_positive() || self.is_zero(),
+            ValueRange::NegativeOrZero => self.is_negative() || self.is_zero(),
+            ValueRange::NotZero => !self.is_zero(),
+        }
     }
 
     pub(crate) fn is_negative(&self) -> bool {
         match self {
             Number::Rational(r) => r.is_negative(),
             Number::Float(f) => f.is_negative(),
+        }
+    }
+
+    pub(crate) fn is_positive(&self) -> bool {
+        match self {
+            Number::Rational(r) => r.is_positive(),
+            Number::Float(f) => f.is_positive(),
+        }
+    }
+
+    pub(crate) fn is_zero(&self) -> bool {
+        match self {
+            Number::Rational(r) => r.is_zero(),
+            Number::Float(f) => f.is_zero(),
         }
     }
 
