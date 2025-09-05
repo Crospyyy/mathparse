@@ -99,8 +99,11 @@ impl Window {
                     self.update_calculation_result()
                 },
                 UiStateInfo::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
-                    let insert_brackets = self.formula_store.get_signature(&complete_to).is_some_and(|s| {
-                        matches!(s, Signature::Function(..) | Signature::FunctionNOrMoreParams(..))
+                    let insert_brackets = self.formula_store.get_symbol(&complete_to).is_some_and(|s| {
+                        matches!(
+                            s.signature(),
+                            Signature::Function(..) | Signature::FunctionNOrMoreParams(..)
+                        )
                     });
 
                     let mut insert = complete_to[input_term.len()..].to_string();
@@ -245,7 +248,7 @@ impl Window {
         } else if input.contains("=") {
             Some(
                 self.get_result_of_possible_symbol_declaration(&input)
-                    .map(|name| format!("Create new symbol '{}'", name)),
+                    .map(|name| format!("Create new symbol '{}'", name.name())),
             )
         } else {
             Some(self.evaluate_formula(ctx, &input))
@@ -265,11 +268,10 @@ impl Window {
     }
 
     fn update_all_symbol_strings(&mut self) {
-        let mut elements = self.formula_store.get_symbols();
-        elements.sort_by_cached_key(|e| e.name().to_string());
+        let elements = self.formula_store.get_symbols_sorted();
         let ctx = &mut create_default_context();
         self.ui_state.all_symbol_strings =
-            elements.iter().map(|symbol| symbol.get_full_string(ctx)).collect();
+            elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx)).collect();
     }
 
     pub fn get_autocompletion_result(
@@ -281,9 +283,9 @@ impl Window {
         }
         let compatible_symbols = self
             .formula_store
-            .get_symbols()
+            .get_symbols_sorted()
             .into_iter()
-            .filter(|symbol| symbol.name().starts_with(&input_symbol_name))
+            .filter(|(name, _)| name.starts_with(&input_symbol_name))
             .collect::<Vec<_>>();
 
         if compatible_symbols.is_empty() {
@@ -300,7 +302,7 @@ impl Window {
 
 pub struct AutocompletionResult<'a> {
     pub input_term: String,
-    pub possible_symbols: Vec<Symbol<'a>>,
+    pub possible_symbols: Vec<(&'a String, &'a Symbol)>,
     pub longest_common_start: String,
 }
 
@@ -319,13 +321,13 @@ pub fn get_cursor_pos(response: &Response) -> Option<usize> {
     }
 }
 
-pub fn determine_longest_common_start(names: &[Symbol]) -> String {
+pub fn determine_longest_common_start(names: &[(&String, &Symbol)]) -> String {
     if names.is_empty() {
         return String::new();
     }
-    let common_start = names[0].name().to_string();
+    let common_start = names[0].0.to_string();
     let mut longest_common = common_start.len();
-    for name in names.iter().map(|s| s.name()).skip(1) {
+    for name in names.iter().map(|(n, _)| n).skip(1) {
         if longest_common == 0 {
             return String::new();
         }

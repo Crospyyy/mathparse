@@ -20,7 +20,7 @@ pub fn run_formula_evaluator() {
         if line.contains('=') {
             let result = store.add_symbol_from_string(&line, false);
             match result {
-                Ok(name) => println!("Added new symbol '{}'", name),
+                Ok(name) => println!("Added new symbol '{}'", name.name()),
                 Err(s) => println!("Error: {}", s),
             }
         } else {

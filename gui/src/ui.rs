@@ -111,7 +111,7 @@ impl Window {
         let already_input = autocompletion.input_term.len();
 
         response.show_tooltip_ui(|ui| {
-            for symbol in autocompletion.possible_symbols {
+            for (name,symbol) in autocompletion.possible_symbols {
                 let mut job = LayoutJob::default();
                 job.append(
                     &autocompletion.input_term,
@@ -119,14 +119,14 @@ impl Window {
                     TextFormat::simple(FontId::default(), ui.visuals().text_color()),
                 );
                 job.append(
-                    &symbol.get_signature_string()[already_input..],
+                    &symbol.get_signature_string(name)[already_input..],
                     0.0,
                     TextFormat::simple(FontId::default(), ui.visuals().weak_text_color()),
                 );
                 Label::new(job).extend().ui(ui);
             }
         });
-        if ui.input(|i| i.key_pressed(egui::Key::Tab)) {
+        if ui.input(|i| i.key_pressed(Key::Tab)) {
             input.push(UiStateInfo::RequestAutocompletion {
                 cursor_pos,
                 input_term: autocompletion.input_term,

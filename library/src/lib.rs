@@ -23,6 +23,7 @@ pub use printing::FormattingOptions;
 pub use printing::NumberString;
 pub use storing::FormulaStore;
 pub use storing::Symbol;
+pub use storing::NamedSymbol;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

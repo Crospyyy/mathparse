@@ -1,11 +1,11 @@
 use crate::Window;
 use egui::Response;
-use library::{Benchmark, FormattingOptions, NumberContext, NumberString, benchmark};
+use library::{Benchmark, FormattingOptions, NumberContext, NumberString, benchmark, NamedSymbol};
 
 impl Window {
     pub(crate) fn get_result_of_possible_symbol_declaration(
         &mut self, input: &str,
-    ) -> Result<String, String> {
+    ) -> Result<NamedSymbol, String> {
         self.formula_store.add_symbol_from_string(input, true)
     }
 
