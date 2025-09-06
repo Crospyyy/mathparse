@@ -13,6 +13,7 @@ use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 use regex::Regex;
 use std::sync::LazyLock;
+use egui::text_edit::TextEditOutput;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
@@ -139,13 +140,15 @@ impl Window {
     ) {
         self.handle_bracket_input(ui);
 
-        let response = self.show_top_input_textedit(ui);
+        let output = self.show_top_input_textedit(ui);
+        let response = output.response.clone();
         if pressed_shortcut {
             self.select_all_in_textedit(&response);
         }
         self.input_post_process(ui);
 
         if response.has_focus() {
+            self.show_textedit_result(ui, &output);
             self.show_autocompletion(ui, &response, input);
         }
         self.handle_ui_input(input);

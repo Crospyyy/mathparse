@@ -6,9 +6,10 @@ use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId};
 use egui::text::CCursorRange;
+use egui::text_edit::TextEditOutput;
 use egui::{
-    Align, DragValue, FontSelection, Id, Key, Label, Layout, Response, RichText, ScrollArea, Sides, TextEdit,
-    Ui, Widget,
+    Align, Align2, DragValue, FontSelection, Id, Key, Label, LayerId, Layout, Popup, PopupAnchor, Pos2,
+    Response, RichText, ScrollArea, Sides, TextEdit, Tooltip, Ui, Widget,
 };
 use library::FormattingOptions;
 use std::cmp::PartialEq;
@@ -73,15 +74,40 @@ impl UiState {
     }
 }
 
+pub fn caret_pos_from_output(output: &TextEditOutput) -> Option<Pos2> {
+    let cursor_range = output.cursor_range?; // None => no caret / not focused
+    let ccursor = cursor_range.primary;
+    let caret_rect_in_galley = output.galley.pos_from_cursor(ccursor); // relative to galley origin
+    Some(output.galley_pos + caret_rect_in_galley.left_top().to_vec2())
+}
+
+pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
+    output.galley.rect.right_top() + output.galley_pos.to_vec2()
+}
+
 impl Window {
-    pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> Response {
-        ui.add_sized(
-            [ui.available_width(), 20.0],
-            TextEdit::singleline(&mut self.ui_state.top_user_input)
-                .id(self.ui_state.top_user_input_id)
-                .font(FontSelection::FontId(FontId::new(20.0, FontFamily::Proportional)))
-                .lock_focus(true),
-        )
+    pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
+        let font_id = FontId::new(20.0, FontFamily::Proportional);
+        let response = TextEdit::singleline(&mut self.ui_state.top_user_input)
+            .id(self.ui_state.top_user_input_id)
+            .font(FontSelection::FontId(font_id.clone()))
+            .lock_focus(true)
+            .desired_width(ui.available_width())
+            .show(ui);
+        response
+    }
+
+    pub fn show_textedit_result(&self, ui: &mut Ui, output: &TextEditOutput) {
+        let pos = last_caret_pos_from_output(&output);
+        if let Some(Ok(result)) = &self.ui_state.calculation_result {
+            ui.painter().text(
+                pos,
+                Align2::LEFT_TOP,
+                " ".to_string() + &result,
+                FontId::new(20.0, FontFamily::Proportional),
+                ui.visuals().text_color(),
+            );
+        }
     }
 
     pub fn show_result_label(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
