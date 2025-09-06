@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use crate::ui::UiState;
-use egui::ViewportBuilder;
+use egui::{ViewportBuilder, WindowLevel};
 use library::FormulaStore;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicBool;
 pub fn main() {
     use eframe::NativeOptions;
     let viewport =
-        ViewportBuilder::default().with_always_on_top().with_decorations(false).with_transparent(true);
+        ViewportBuilder::default().with_always_on_top().with_decorations(false).with_transparent(true).with_window_level(WindowLevel::AlwaysOnTop);
     eframe::run_native(
         "Quick Mafs",
         NativeOptions { viewport, ..Default::default() },

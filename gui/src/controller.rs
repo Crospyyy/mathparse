@@ -5,6 +5,7 @@ use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{FontFamily, FontId};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
+use egui::text_edit::TextEditOutput;
 use egui::{
     CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, Response, Shadow, Stroke,
     StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
@@ -13,7 +14,6 @@ use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
 use regex::Regex;
 use std::sync::LazyLock;
-use egui::text_edit::TextEditOutput;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
@@ -90,6 +90,7 @@ impl Window {
         window.update_all_symbol_strings();
 
         let context = _cc.egui_ctx.clone();
+        context.send_viewport_cmd(ViewportCommand::Minimized(true));
         let req_focus = window.window_state.request_focus.clone();
         register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
             context.send_viewport_cmd(ViewportCommand::Minimized(false));
