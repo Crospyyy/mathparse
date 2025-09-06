@@ -31,6 +31,10 @@ impl NamedSymbol {
     pub fn name(&self) -> &String {
         &self.name
     }
+
+    pub fn symbol(&self) -> &Symbol {
+        &self.symbol
+    }
 }
 
 impl Symbol {

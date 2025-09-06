@@ -1,6 +1,7 @@
 use crate::Window;
 use egui::Response;
 use library::{Benchmark, FormattingOptions, NumberContext, NumberString, benchmark, NamedSymbol};
+use crate::ui::Page;
 
 impl Window {
     pub(crate) fn get_result_of_possible_symbol_declaration(
@@ -48,4 +49,5 @@ pub enum UiStateInfo {
     TopInputSubmit,
     RoundingAccuracyChanged,
     RequestAutocompletion { cursor_pos: usize, input_term: String, complete_to: String, response: Response },
+    SelectPage(Page)
 }

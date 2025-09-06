@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use crate::ui::UiState;
 use egui::ViewportBuilder;
 use library::FormulaStore;

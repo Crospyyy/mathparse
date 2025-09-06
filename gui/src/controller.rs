@@ -1,11 +1,13 @@
 use crate::logic::UiStateInfo;
-use crate::ui::UiState;
+use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState};
+use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
+use eframe::epaint::{FontFamily, FontId};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::{
-    CentralPanel, Color32, Context, Event, Key, Modifiers, Response, Shadow, Stroke, StrokeKind, Style,
-    TextBuffer, TextEdit, Ui, ViewportCommand, Visuals,
+    CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, Response, Shadow, Stroke,
+    StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
@@ -42,8 +44,11 @@ impl App for Window {
 
             let input = &mut vec![];
             self.show_top_input(ui, input, pressed_shortcut);
-            ui.separator();
-            self.show_all_defined_symbols(ui);
+            self.show_tab_selector(ui, input);
+            match self.ui_state.selected_page {
+                Page::History => self.show_history(ui),
+                Page::DefinedSymbols => self.show_all_defined_symbols(ui),
+            }
             self.handle_ui_input(input);
         });
     }
@@ -68,6 +73,8 @@ pub fn try_center_window(ctx: &Context) -> bool {
 
 impl Window {
     pub(crate) fn new(_cc: &CreationContext) -> Self {
+        let ppp = _cc.egui_ctx.pixels_per_point();
+        _cc.egui_ctx.set_pixels_per_point(ppp * 1.2);
         let mut store = FormulaStore::new_empty();
         store.define_default_symbols().unwrap();
         store.add_symbol_from_string("speed_of_sound_mps = 343", false).unwrap();
@@ -94,10 +101,10 @@ impl Window {
     pub fn handle_ui_input(&mut self, input: &mut Vec<UiStateInfo>) {
         for info in input.drain(..) {
             match info {
-                UiStateInfo::TopInputSubmit => self.try_apply_calculation(),
                 UiStateInfo::TopInputChanged | UiStateInfo::RoundingAccuracyChanged => {
                     self.update_calculation_result()
                 },
+                UiStateInfo::TopInputSubmit => self.try_apply_calculation(),
                 UiStateInfo::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
                     let insert_brackets = self.formula_store.get_symbol(&complete_to).is_some_and(|s| {
                         matches!(
@@ -120,7 +127,49 @@ impl Window {
                     set_cursor_pos(&response, new_cursor_pos);
                     self.update_calculation_result();
                 },
+                UiStateInfo::SelectPage(page) => {
+                    self.ui_state.selected_page = page;
+                },
             }
+        }
+    }
+
+    pub(crate) fn show_top_input(
+        &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
+    ) {
+        self.handle_bracket_input(ui);
+
+        let response = self.show_top_input_textedit(ui);
+        if pressed_shortcut {
+            self.select_all_in_textedit(&response);
+        }
+        self.input_post_process(ui);
+
+        if response.has_focus() {
+            self.show_autocompletion(ui, &response, input);
+        }
+        self.handle_ui_input(input);
+
+        if response.changed() {
+            input.push(UiStateInfo::TopInputChanged);
+        }
+        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+            response.request_focus();
+            input.push(UiStateInfo::TopInputSubmit);
+        }
+
+        self.handle_ui_input(input);
+
+        self.show_result_label(ui, input);
+    }
+
+    fn select_all_in_textedit(&mut self, response: &Response) {
+        if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
+            state.cursor.set_char_range(Some(CCursorRange::two(
+                CCursor::new(0),
+                CCursor::new(self.ui_state.top_user_input.len()),
+            )));
+            state.store(&response.ctx, response.id);
         }
     }
 
@@ -257,10 +306,36 @@ impl Window {
 
     fn try_apply_calculation(&mut self) {
         let input = self.get_processed_input();
-        if input.is_empty() || !input.contains("=") {
+        if input.is_empty() {
             return;
         }
-        if self.formula_store.add_symbol_from_string(&input, false).is_ok() {
+        if !input.contains("=") {
+            if let Some(Ok(result)) = &self.ui_state.calculation_result {
+                if self
+                    .ui_state
+                    .history
+                    .last()
+                    .is_some_and(|entry| matches!(
+                        &entry.content,
+                        HistoryEntryContent::Calculation(e_input, e_result) if e_input == &input && e_result == result)
+                    )
+                {
+                    return;
+                }
+                self.ui_state.history.push(HistoryEntry::new_calculation(
+                    self.ui_state.top_user_input.clone(),
+                    result.clone(),
+                    chrono::Local::now().format("%H:%M").to_string(),
+                ))
+            }
+            return;
+        }
+        let result = self.formula_store.add_symbol_from_string(&input, false);
+        if let Ok(r) = result {
+            self.ui_state.history.push(HistoryEntry::new_symbol_definition(
+                format!("⛃ {}", r.symbol().get_full_string(r.name(), &mut create_default_context())),
+                chrono::Local::now().format("%H:%M").to_string(),
+            ));
             self.ui_state.top_user_input.clear();
             self.update_calculation_result();
             self.update_all_symbol_strings();
