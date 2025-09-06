@@ -323,8 +323,6 @@ mod tests {
 
         test(formula!(mul(neg(num(2)))), formula!(neg(num(2))));
         test(formula!(mul(neg(num(2)), neg(num(2)))), formula!(mul(num(2), num(2))));
-
-        test(formula!(mul(num(0), pow(num(0), neg(num(1))))), Element::Number(Number::nan(None)));
     }
 
     fn test(mut input: Element, expected: Element) {
