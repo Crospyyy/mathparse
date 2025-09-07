@@ -158,7 +158,7 @@ impl Window {
 
     pub(crate) fn show_autocompletion(
         &mut self, ui: &mut Ui, response: &Response, input: &mut Vec<UiStateInfo>,
-    )->bool {
+    ) -> bool {
         let Some(cursor_pos) = get_cursor_pos(&response) else { return false };
         let Some(autocompletion) = self.get_autocompletion_result(&self.ui_state.top_user_input, cursor_pos)
         else {
@@ -223,7 +223,7 @@ impl Window {
     pub fn show_history(&mut self, ui: &mut Ui) {
         let area = ScrollArea::vertical().id_salt("history").auto_shrink(false);
         area.show(ui, |ui| {
-            for text in &self.ui_state.history {
+            for text in self.ui_state.history.iter().rev() {
                 ui.group(|ui| {
                     Sides::new().show(
                         ui,
