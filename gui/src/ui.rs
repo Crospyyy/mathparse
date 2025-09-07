@@ -88,12 +88,15 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 impl Window {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
         let font_id = FontId::new(20.0, FontFamily::Proportional);
+        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
         let response = TextEdit::singleline(&mut self.ui_state.top_user_input)
             .id(self.ui_state.top_user_input_id)
             .font(FontSelection::FontId(font_id.clone()))
             .lock_focus(true)
             .desired_width(ui.available_width())
             .show(ui);
+        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("×", "*");
+
         response
     }
 

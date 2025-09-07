@@ -199,9 +199,12 @@ impl Window {
 
     pub(super) fn handle_bracket_input(&mut self, ui: &mut Ui) {
         let typed_brackets = ui.input_mut(|ip| {
-            let typed_bracket = ip.consume_key(Modifiers::NONE, Key::OpenBracket)
-                | ip.consume_key(Modifiers::SHIFT, Key::Num8);
-            ip.events.retain(|e| e != &Event::Text("(".to_owned()));
+            let typed_bracket = ip.events.iter().any(|e| e == &Event::Text("(".to_owned()));
+            if typed_bracket {
+                ip.consume_key(Modifiers::NONE, Key::OpenBracket);
+                ip.consume_key(Modifiers::SHIFT, Key::Num8);
+                ip.events.retain(|e| e != &Event::Text("(".to_owned()));
+            }
             typed_bracket
         });
         if !typed_brackets {
@@ -234,7 +237,7 @@ impl Window {
     }
 
     pub(super) fn input_post_process(&mut self, ui: &mut Ui) {
-        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
+        self.ui_state.top_user_input.retain(|c| c.is_ascii());
         if !ui.input(|ip| ip.events.iter().any(|e| matches!(e, Event::Text(_)))) {
             return;
         };
