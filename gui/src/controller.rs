@@ -139,7 +139,7 @@ impl Window {
     pub(crate) fn show_top_input(
         &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
     ) {
-        self.handle_bracket_input(ui);
+        self.preprocess_user_input(ui);
 
         let output = self.show_top_input_textedit(ui);
         let response = output.response.clone();
@@ -197,8 +197,12 @@ impl Window {
         }
     }
 
-    pub(super) fn handle_bracket_input(&mut self, ui: &mut Ui) {
+    pub(super) fn preprocess_user_input(&mut self, ui: &mut Ui) {
         let typed_brackets = ui.input_mut(|ip| {
+            ip.events.retain(|e| match e {
+                Event::Text(text) => text.chars().all(|c| c.is_ascii()),
+                _ => true,
+            });
             let typed_bracket = ip.events.iter().any(|e| e == &Event::Text("(".to_owned()));
             if typed_bracket {
                 ip.consume_key(Modifiers::NONE, Key::OpenBracket);
