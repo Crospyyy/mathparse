@@ -68,7 +68,16 @@ pub mod implementation {
         /// Step 0
         pub(crate) fn preprocess_string_minus(input: &str) -> String {
             let without_whitespace = input.replace(" ", "");
-            REGEX_INSERT_PLUS.replace_all(&without_whitespace, "$1+-$2").to_string()
+            let mut modified = without_whitespace;
+            loop {
+                let new = REGEX_INSERT_PLUS.replace_all(&modified, "$1+-$2").to_string();
+                if new == modified {
+                    break;
+                } else {
+                    modified = new;
+                }
+            }
+            modified
         }
 
         /// Step 1
@@ -1109,6 +1118,7 @@ pub mod testing {
                 Some(plus([num("1"), mul([num("2"), num("3")]), neg(mul([num("4"), inv(num("2"))]))])),
             ),
             ("var^--var2", Some(pow(var("var"), neg(neg(var("var2")))))),
+            ("11-3-27/60", Some(plus([num(11), neg(num(3)), neg(mul([num(27), inv(num(60))]))]))),
         ];
         println!("Starting formula parsing tests");
         inputs.into_iter().for_each(|(i, o)| debug_formula_parsing_process(i, o));
