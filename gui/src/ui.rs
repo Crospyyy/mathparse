@@ -158,11 +158,11 @@ impl Window {
 
     pub(crate) fn show_autocompletion(
         &mut self, ui: &mut Ui, response: &Response, input: &mut Vec<UiStateInfo>,
-    ) {
-        let Some(cursor_pos) = get_cursor_pos(&response) else { return };
+    )->bool {
+        let Some(cursor_pos) = get_cursor_pos(&response) else { return false };
         let Some(autocompletion) = self.get_autocompletion_result(&self.ui_state.top_user_input, cursor_pos)
         else {
-            return;
+            return false;
         };
 
         let already_input = autocompletion.input_term.len();
@@ -191,6 +191,7 @@ impl Window {
                 response: response.clone(),
             });
         }
+        true
     }
 
     pub fn show_tab_selector(&self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {

@@ -149,8 +149,10 @@ impl Window {
         self.input_post_process(ui);
 
         if response.has_focus() {
-            self.show_textedit_result(ui, &output);
-            self.show_autocompletion(ui, &response, input);
+            let autocompletion_visible = self.show_autocompletion(ui, &response, input);
+            if autocompletion_visible {
+                self.show_textedit_result(ui, &output);
+            }
         }
         self.handle_ui_input(input);
 
