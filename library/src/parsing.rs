@@ -38,7 +38,7 @@ pub mod implementation {
         pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
             // todo make it possible to write something like `2pi` and have it parsed as `2 * pi`
             let b = benchmark;
-            let cow = benchmark!(b, Element::preprocess_string_minus(&input), "preprocess_string_minus");
+            let cow = benchmark!(b, Element::preprocess_string(&input), "preprocess_string_minus");
             let chars = benchmark!(b, cow.chars().collect::<Vec<_>>(), "convert_to_chars");
             let mut start = 0;
             let mut formula =
@@ -66,8 +66,8 @@ pub mod implementation {
         }
 
         /// Step 0
-        pub(crate) fn preprocess_string_minus(input: &str) -> String {
-            let without_whitespace = input.replace(" ", "");
+        pub(crate) fn preprocess_string(input: &str) -> String {
+            let without_whitespace = input.replace(' ', "").replace('×', "*");
             let mut modified = without_whitespace;
             loop {
                 let new = REGEX_INSERT_PLUS.replace_all(&modified, "$1+-$2").to_string();
@@ -1127,7 +1127,7 @@ pub mod testing {
     fn debug_formula_parsing_process(input: &str, expected_output: Option<Element>) {
         let mut ctx = create_default_context();
         let expected_output = expected_output;
-        let cow = Element::preprocess_string_minus(&input);
+        let cow = Element::preprocess_string(&input);
 
         println!();
         print_heading("Starting formula parsing");

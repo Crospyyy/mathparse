@@ -234,6 +234,7 @@ impl Window {
     }
 
     pub(super) fn input_post_process(&mut self, ui: &mut Ui) {
+        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
         if !ui.input(|ip| ip.events.iter().any(|e| matches!(e, Event::Text(_)))) {
             return;
         };
