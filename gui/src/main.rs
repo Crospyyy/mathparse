@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use crate::ui::UiState;
 use egui::{ViewportBuilder, WindowLevel};
@@ -13,7 +13,7 @@ pub fn main() {
         .with_decorations(false)
         .with_transparent(true)
         .with_window_level(WindowLevel::AlwaysOnTop)
-        .with_taskbar(false);
+        .with_taskbar(cfg!(debug_assertions));
     eframe::run_native(
         "Quick Mafs",
         NativeOptions { viewport, ..Default::default() },
