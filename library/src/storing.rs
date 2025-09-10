@@ -311,18 +311,20 @@ impl InsertionElement {
     pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
         if let Some(insert_args) = &self.parameters {
             if let Element::FunctionWithExpression { expr_value, .. } = &self.formula {
-                if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
-                    return Err(format!(
-                        "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
-                        self.name,
-                        expr_value.get_param_count(),
-                        param_values.len()
-                    ));
+                if insert_args.is_empty() {
+                    if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
+                        return Err(format!(
+                            "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
+                            self.name,
+                            expr_value.get_param_count(),
+                            param_values.len()
+                        ));
+                    }
+                    return Ok(Element::FunctionWithExpression {
+                        arguments: param_values,
+                        expr_value: expr_value.clone(),
+                    });
                 }
-                return Ok(Element::FunctionWithExpression {
-                    arguments: param_values,
-                    expr_value: expr_value.clone(),
-                });
             }
             let self_arguments = param_values;
             if insert_args.len() != self_arguments.len() {
@@ -497,6 +499,9 @@ impl Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::create_default_context;
+    use crate::formula_short::{fun_expr, mul, num, var};
+    use macros::formula_matches;
 
     #[test]
     fn test_float_consts() {
@@ -564,7 +569,6 @@ mod tests {
         let fun = Element::parse("x+y").unwrap();
 
         let mut formula = Element::parse("f(12, f(1, 2))").unwrap();
-        println!("{}", formula.get_debug_string());
         formula
             .insert_symbol(&InsertionElement {
                 name: "f".to_owned(),
@@ -572,7 +576,38 @@ mod tests {
                 formula: fun,
             })
             .unwrap();
-        println!("{}", formula.get_debug_string());
+        assert!(formula_matches!(formula, plus(num(12), plus(num(1), num(2)))));
+        let mut formula = Element::parse("f(3)").unwrap();
+        formula
+            .insert_symbol(&InsertionElement {
+                name: "f".to_owned(),
+                parameters: Some(vec!["x".to_owned()]),
+                formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
+            })
+            .unwrap();
+        if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+            assert_eq!(arguments.len(), 1);
+            assert_eq!(arguments[0], mul([num(3), num(2)]));
+            assert_eq!(expr_value, &ExpressionFunType::Abs);
+        } else {
+            panic!("Expected function with expression");
+        }
+
+        let mut formula = Element::parse("f(3)").unwrap();
+        formula
+            .insert_symbol(&InsertionElement {
+                name: "f".to_owned(),
+                parameters: Some(vec![]),
+                formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
+            })
+            .unwrap();
+        if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+            assert_eq!(arguments.len(), 1);
+            assert_eq!(arguments[0], num(3));
+            assert_eq!(expr_value, &ExpressionFunType::Abs);
+        } else {
+            panic!("Expected function with expression");
+        }
     }
 
     #[test]
