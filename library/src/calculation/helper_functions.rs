@@ -93,7 +93,7 @@ pub(super) fn big_int_to_power_of_inv_of_big_int(a: &BigInt, b: &BigInt, ctx: &m
         expr!(pow(float_a, 1 / float_b), &mut *ctx)
     };
 
-    if ctx.precision() < 164 {
+    if ctx.precision() < 164 || result.is_nan() || result.is_inf() {
         return Number::from(result);
     } // if precision is too low rounding is not possible
 
