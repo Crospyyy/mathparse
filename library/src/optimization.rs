@@ -170,11 +170,11 @@ impl Element {
                     self.optimize_new();
                     return;
                 }
-                if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
-                    let exp_ref = exp.as_ref();
-                    *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
-                    self.optimize_new();
-                }
+				// if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
+				//     let exp_ref = exp.as_ref();
+				//     *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
+				//     self.optimize_new();
+				// }
             },
             Element::FunctionWithExpression { arguments, expr_value } => match expr_value {
                 ExpressionFunType::Floor | ExpressionFunType::Round => {

@@ -139,6 +139,7 @@ impl Window {
     pub(crate) fn show_top_input(
         &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
     ) {
+		let text_before = self.ui_state.top_user_input.clone();
         self.preprocess_user_input(ui);
 
         let output = self.show_top_input_textedit(ui);
@@ -154,9 +155,8 @@ impl Window {
                 self.show_textedit_result(ui, &output);
             }
         }
-        self.handle_ui_input(input);
 
-        if response.changed() {
+		if text_before != self.ui_state.top_user_input {
             input.push(UiStateInfo::TopInputChanged);
         }
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
