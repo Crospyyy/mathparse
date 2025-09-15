@@ -2,7 +2,7 @@ use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
-use num_traits::{Signed, ToPrimitive};
+use num_traits::{Signed, ToPrimitive, Zero};
 use std::cmp::PartialEq;
 use std::mem;
 use std::ops::Mul;
@@ -218,6 +218,55 @@ impl Element {
             None
         }
     }
+
+	pub fn optimize_and_reduce(&mut self) {
+		match self {
+			// Elements, which can't be optimized further
+			Element::Brackets(_)
+			| Element::String(_)
+			| Element::Variable(_)
+			| Element::VariableOrFunction(_)
+			| Element::NumberWithExpression { .. }
+			| Element::Number(_) => {},
+
+			// Elements, which can be optimized
+			Element::Function { arguments, .. } => {
+				for a in arguments {
+					a.optimize_and_reduce();
+				}
+			},
+			Element::FunctionWithExpression { arguments, .. } => {
+				for a in arguments {
+					a.optimize_and_reduce();
+				}
+			},
+			Element::Plus(elements) => {
+				for e in elements.iter_mut() {
+					e.optimize_and_reduce();
+				}
+				let rationals = elements
+					.iter()
+					.filter_map(|e| formula_matches!(e, num(x)))
+					.filter_map(|n| n.get_exact_rational())
+					.collect::<Vec<_>>();
+				let other =
+					elements.iter().filter(|e| !formula_matches!(e, num)).cloned().collect::<Vec<_>>();
+				let sum_rationals = rationals.into_iter().reduce(|a, b| a + b);
+				let mut new_elements = vec![];
+				match sum_rationals {
+					Some(sum) if !sum.is_zero() => new_elements.push(Element::Number(Number::from(sum))),
+					_ => {},
+				}
+				new_elements.extend(other.into_iter().flat_map(|e| { // todo write this to be more efficient
+					quick_match!(&e, Element::Plus(inner) => inner.clone()).unwrap_or(vec![e])
+				}));
+				*elements = new_elements;
+			},
+			Element::Multiply(_) => {},
+			Element::Pow(_, _) => {},
+			Element::Negate(_) => {},
+		}
+	}
 }
 
 #[cfg(test)]
