@@ -260,6 +260,7 @@ impl Element {
                     inverse_check,
                     BigRational::is_zero,
                     false,
+                    true,
                 );
                 if let Some(replacement) = Self::handle_empty_or_one_element(elements, 0) {
                     *self = replacement
@@ -267,8 +268,7 @@ impl Element {
             },
             Element::Multiply(elements) => {
                 let inverse_check = |a: &Element, b: &Element| {
-                    formula_matches!(a, pow({ b }, neg(num(1))))
-                        || formula_matches!(b, pow({ a }, num(-1)))
+                    formula_matches!(a, pow({ b }, num(-1))) || formula_matches!(b, pow({ a }, num(-1)))
                 };
 
                 Self::list_element_optimization(
@@ -277,6 +277,7 @@ impl Element {
                     inverse_check,
                     BigRational::is_one,
                     true,
+                    false,
                 );
                 if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
                     *self = replacement
@@ -286,13 +287,18 @@ impl Element {
                 this_base.optimize_and_reduce();
                 this_exponent.optimize_and_reduce();
 
-                fn is_even(x: &BigInt) -> bool {
-                    let rem = BigInt::from(2);
+                fn is_even(x: &BigRational) -> bool {
+                    let rem = BigRational::from(BigInt::from(2));
                     x.rem(&rem).is_zero()
                 }
 
                 // optimize the element itself
                 if let Some(this_base_number) = formula_matches!(this_base.as_ref(), num(x)) {
+                    if this_base_number.get_exact_rational().is_some_and(|n| n.is_one()) {
+                        // 1^x = 1
+                        *self = Number::from(1).into();
+                        return;
+                    }
                     if this_base_number.is_zero() {
                         if let Some(this_exponent_num) = formula_matches!(this_exponent.as_ref(), num(x)) {
                             if this_exponent_num.is_positive() {
@@ -314,21 +320,51 @@ impl Element {
                     } else if this_base_number.is_negative()
                         && formula_matches!(this_exponent.as_ref(), num(x))
                         .and_then(|x| x.get_exact_rational())
-                        .is_some_and(|x| x.is_integer() && is_even(x.numer()))
+                        .is_some_and(|x| x.is_integer() && is_even(&x))
                     {
                         // (-a)^(even integer) = (a)^(even integer)
                         *this_base = Box::new(this_base_number.abs().into());
                         return;
                     }
+                    if formula_matches!(this_exponent.as_ref(), num(-1)) {
+                        if let Some(r) = this_base_number.get_exact_rational() {
+                            *self = Number::from(r.recip()).into();
+                            return;
+                        }
+                    }
+                }
+
+                if let Some(this_exponent_number) = formula_matches!(this_exponent.as_ref(), num(x)) {
+                    if this_exponent_number.get_exact_rational().is_some_and(|n| n.is_one()) {
+                        // x^1 = x
+                        *self = this_base.as_ref().clone();
+                        return;
+                    }
+                    if this_exponent_number.is_zero() {
+                        // x^0 = 1
+                        *self = Number::from(1).into();
+                        return;
+                    }
                 }
 
                 // optimize nested powers
-                if let Some((inner_b, inner_p)) = formula_matches!(this_base.as_ref(), pow(num(x), x)) {
-                    if inner_b.is_positive() {
+                if let Some((inner_b, inner_p)) = formula_matches!(this_base.as_ref(), pow(x, x)) {
+                    let base_is_positive_num =
+                        formula_matches!(inner_b, num(x)).is_some_and(Number::is_positive);
+                    let inner_exp_rat_int = formula_matches!(inner_p, num(x))
+                        .and_then(Number::get_exact_rational)
+                        .as_ref()
+                        .is_some_and(BigRational::is_integer);
+                    let outer_exp_rat_int = formula_matches!(this_exponent.as_ref(), num(x))
+                        .and_then(Number::get_exact_rational)
+                        .as_ref()
+                        .is_some_and(BigRational::is_integer);
+                    let exponent_is_even_and_outer_exp_is_int = inner_exp_rat_int && outer_exp_rat_int;
+                    if base_is_positive_num || exponent_is_even_and_outer_exp_is_int {
                         // if the base is positive, we can just multiply the exponents
-                        let mut new_pow = mul([inner_p.clone(), this_exponent.as_ref().clone()]);
-                        new_pow.optimize_new();
-                        *self = formula!(pow(num(inner_b.clone()), new_pow));
+                        let new_pow = mul([inner_p.clone(), this_exponent.as_ref().clone()]);
+                        *self = formula!(pow(inner_b.clone(), new_pow));
+                        self.optimize_and_reduce();
                         return;
                     }
                 } else if let Some(inner) = formula_matches!(this_base.as_ref(), mul(x..)) {
@@ -358,7 +394,7 @@ impl Element {
     fn list_element_optimization(
         elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
         inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
-        zero_turns_rest_to_zero: bool,
+        zero_turns_rest_to_zero: bool, is_plus: bool,
     ) {
         // inner optimization
         elements.iter_mut().for_each(Self::optimize_and_reduce);
@@ -385,10 +421,19 @@ impl Element {
             }
         }
         for e in other_elements {
-            if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
-                new_elements.extend(inner.iter().cloned());
+            if is_plus {
+                // todo this is ugly please fix
+                if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
+                    new_elements.extend(inner.iter().cloned());
+                } else {
+                    new_elements.push(e);
+                }
             } else {
-                new_elements.push(e);
+                if let Some(inner) = quick_match!(&e, Element::Multiply(inner) => inner) {
+                    new_elements.extend(inner.iter().cloned());
+                } else {
+                    new_elements.push(e);
+                }
             }
         }
 
@@ -404,27 +449,35 @@ mod tests {
     use crate::formula_short::{inv, mul, nan, num, var};
     use crate::{FormulaStore, create_default_context};
 
+    macro_rules! test {
+        ($input:expr,$expected:expr) => {{
+            let mut input = $input;
+            input.optimize_and_reduce();
+            assert_eq!(input, $expected);
+        }};
+    }
+
     #[test]
     fn test_optimize_new() {
         use crate::formula_short::{inv, mul, num, var};
 
         // doppelte Negation
-        test(formula!(neg(neg(var("a")))), var("a"));
+        test!(formula!(neg(neg(var("a")))), var("a"));
 
         // Plus entfernt Nullen komplett
-        test(formula!(plus(num(0), num(0))), num(0));
+        test!(formula!(plus(num(0), num(0))), num(0));
 
         // Plus reduziert auf einzelnes Element nach Nullentfernung
-        test(formula!(plus(num(0), var("a"), num(0))), var("a"));
+        test!(formula!(plus(num(0), var("a"), num(0))), var("a"));
 
         // Plus mit additivem Inversen ergibt 0
-        test(formula!(plus(var("a"), neg(var("a")))), num(0));
+        test!(formula!(plus(var("a"), neg(var("a")))), num(0));
 
         // Plus mit additiven Inversen und weiterem Term
-        test(formula!(plus(var("a"), neg(var("a")), var("b"))), var("b"));
+        test!(formula!(plus(var("a"), neg(var("a")), var("b"))), var("b"));
 
         // Plus mit mehreren Paaren
-        test(formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c")))), var("b"));
+        test!(formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c")))), var("b"));
 
         // Plus propagiert NaN
         let nan_el = Element::Number(Number::nan(None));
@@ -439,34 +492,31 @@ mod tests {
         assert!(f.is_nan());
 
         // Multiply mit 0 ergibt 0
-        test(formula!(mul(var("a"), num(0), var("b"))), num(0));
+        test!(formula!(mul(var("a"), num(0), var("b"))), num(0));
 
         // Multiply entfernt inverses Paar -> 1
-        test(mul([var("a"), inv(var("a"))]), num(1));
+        test!(mul([var("a"), inv(var("a"))]), num(1));
 
         // Multiply entfernt inverses Paar und reduziert auf einzelnes Element
-        test(formula!(mul(var("a"), var("b"), inv(var("a")))), var("b"));
+        test!(formula!(mul(var("a"), var("b"), inv(var("a")))), var("b"));
 
         // Multiply mit 0 dominiert trotz inverser Faktoren
-        test(formula!(mul(num(0), var("a"), inv(var("a")))), num(0));
+        test!(formula!(mul(num(0), var("a"), inv(var("a")))), num(0));
 
         // Potenz Basis 1
-        test(formula!(pow(num(1), var("x"))), num(1));
+        test!(formula!(pow(num(1), var("x"))), num(1));
 
         // Exponent 1
-        test(formula!(pow(var("a"), num(1))), var("a"));
+        test!(formula!(pow(var("a"), num(1))), var("a"));
 
         // Zusammenführen verschachtelter Exponenten
-        test(formula!(pow(pow(var("a"), num(2)), num(3))), formula!(pow(var("a"), mul(num(2), num(3)))));
+        test!(formula!(pow(pow(num(4), num(2)), num(3))), formula!(pow(num(4), num(6))));
 
         // Mehrfach verschachtelte Exponenten
-        test(
-            formula!(pow(pow(pow(var("a"), num(2)), num(3)), num(4))),
-            formula!(pow(var("a"), mul(num(2), num(3), num(4)))),
-        );
+        test!(formula!(pow(pow(pow(var("a"), num(2)), num(3)), num(4))), formula!(pow(var("a"), num(24))));
 
         // Exponent 1 verhindert weiteres Kombinieren
-        test(formula!(pow(pow(var("a"), num(2)), num(1))), formula!(pow(var("a"), num(2))));
+        test!(formula!(pow(pow(var("a"), num(2)), num(1))), formula!(pow(var("a"), num(2))));
 
         // -(-a)*1 + (0+b) + c*(d*0) => a+b,
         let mut f = formula!(plus(
@@ -478,34 +528,29 @@ mod tests {
         assert_eq!(f, formula!(plus(var("a"), var("b"))));
 
         // x^0 + y*1 => 1 + y
-        test(formula!(plus(pow(var("x"), num(0)), mul(var("y"), num(1)))), formula!(plus(num(1), var("y"))));
+        test!(formula!(plus(pow(var("x"), num(0)), mul(var("y"), num(1)))), formula!(plus(num(1), var("y"))));
 
         // (a+b)+(c+d) -> a+b+c+d
-        test(
+        test!(
             formula!(plus(plus(var("a"), var("b")), plus(var("c"), var("d")))),
-            formula!(plus(var("a"), var("b"), var("c"), var("d"))),
+            formula!(plus(var("a"), var("b"), var("c"), var("d")))
         );
 
         // (a*b)*(c*d) -> a*b*c*d
-        test(
+        test!(
             formula!(mul(mul(var("a"), var("b")), mul(var("c"), var("d")))),
-            formula!(mul(var("a"), var("b"), var("c"), var("d"))),
+            formula!(mul(var("a"), var("b"), var("c"), var("d")))
         );
 
-        test(formula!(mul(var("a"), inv(var("a")))), num(1));
+        test!(formula!(mul(var("a"), inv(var("a")))), num(1));
 
-        test(
-            formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1))))),
-            formula!(pow(num(2), neg(num(1)))),
+        test!(
+            formula!(mul(num(33), pow(mul(num(2), num(33)), neg(num(1))))), // 33 * (2*33)^-1
+            Number::from(BigRational::from((1.into(), 2.into()))).into()
         );
 
-        test(formula!(mul(neg(num(2)))), formula!(neg(num(2))));
-        test(formula!(mul(neg(num(2)), neg(num(2)))), formula!(mul(num(2), num(2))));
-    }
-
-    fn test(mut input: Element, expected: Element) {
-        input.optimize_and_reduce();
-        assert_eq!(input, expected);
+        test!(formula!(mul(neg(num(2)))), formula!(num(-2)));
+        test!(formula!(mul(neg(num(2)), neg(num(2)))), formula!(num(4)));
     }
 
     #[test]
