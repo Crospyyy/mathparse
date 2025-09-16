@@ -459,7 +459,7 @@ pub struct FormattingOptions {
 
 impl Default for FormattingOptions {
     fn default() -> Self {
-        Self { round_to_decimals: 20, non_scientific_decimals: 12, thousands_separator: true }
+        Self { round_to_decimals: 9, non_scientific_decimals: 12, thousands_separator: true }
     }
 }
 
