@@ -71,7 +71,7 @@ impl ExpressionFunType {
             ExpressionFunType::Floor => FunctionExpression::single_argument(Number::floor),
             ExpressionFunType::Ceil => FunctionExpression::single_argument(Number::ceil),
             ExpressionFunType::Round => FunctionExpression::single_argument(Number::round),
-            ExpressionFunType::Abs => FunctionExpression::single_argument(Number::abs),
+            ExpressionFunType::Abs => FunctionExpression::single_argument(|n, _| n.abs()),
             ExpressionFunType::Log2 => FunctionExpression::single_argument(Number::log2),
             ExpressionFunType::Log10 => FunctionExpression::single_argument(Number::log10),
             ExpressionFunType::Ln => FunctionExpression::single_argument(Number::ln),

@@ -259,15 +259,16 @@ impl Element {
                     BigRational::add,
                     inverse_check,
                     BigRational::is_zero,
+                    false,
                 );
-                if elements.len() == 1 {
-                    *self = elements.pop().unwrap();
+                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 0) {
+                    *self = replacement
                 }
             },
             Element::Multiply(elements) => {
                 let inverse_check = |a: &Element, b: &Element| {
                     formula_matches!(a, pow({ b }, neg(num(1))))
-                        || formula_matches!(b, pow({ a }, neg(num(1))))
+                        || formula_matches!(b, pow({ a }, num(-1)))
                 };
 
                 Self::list_element_optimization(
@@ -275,9 +276,10 @@ impl Element {
                     BigRational::mul,
                     inverse_check,
                     BigRational::is_one,
+                    true,
                 );
-                if elements.len() == 1 {
-                    *self = elements.pop().unwrap();
+                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
+                    *self = replacement
                 }
             },
             Element::Pow(this_base, this_exponent) => {
@@ -343,6 +345,11 @@ impl Element {
                 x.optimize_and_reduce();
                 if let Some(num) = formula_matches!(x.as_ref(), num(x)) {
                     *self = num.neg().into();
+                    return;
+                }
+                if let Some(inner) = formula_matches!(x.as_ref(), neg(x)) {
+                    *self = inner.clone();
+                    return;
                 }
             },
         }
@@ -351,6 +358,7 @@ impl Element {
     fn list_element_optimization(
         elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
         inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
+        zero_turns_rest_to_zero: bool,
     ) {
         // inner optimization
         elements.iter_mut().for_each(Self::optimize_and_reduce);
@@ -369,15 +377,19 @@ impl Element {
 
         // rebuild elements
         let mut new_elements = vec![];
+        if let Some(combined) = combined_rational {
+            new_elements.push(Number::from(combined.clone()).into());
+            if zero_turns_rest_to_zero && combined.is_zero() {
+                *elements = new_elements;
+                return;
+            }
+        }
         for e in other_elements {
             if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
                 new_elements.extend(inner.iter().cloned());
             } else {
                 new_elements.push(e);
             }
-        }
-        if let Some(combined) = combined_rational {
-            new_elements.push(Number::from(combined).into())
         }
 
         *elements = new_elements;
@@ -492,7 +504,7 @@ mod tests {
     }
 
     fn test(mut input: Element, expected: Element) {
-        input.optimize_new();
+        input.optimize_and_reduce();
         assert_eq!(input, expected);
     }
 

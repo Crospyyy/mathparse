@@ -91,11 +91,11 @@ impl FormulaStore {
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
         dbg!(formula.get_string(&mut create_default_context()));
-        benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
+        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
         dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
         dbg!(formula.get_string(&mut create_default_context()));
-        benchmark!(benchmark, formula.optimize_new(), "Formula Optimization");
+        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
         dbg!(formula.get_string(&mut create_default_context()));
 
         let result = benchmark!(
