@@ -35,12 +35,13 @@ impl Number {
         }
     }
 
-    pub fn abs(&self, ctx: &mut Context) -> Self {
+    pub fn abs(&self) -> Self {
         if let Some(r) = self.get_exact_rational() {
-            Self::from(r.abs())
-        } else {
-            let float = self.get_float(ctx);
-            Self::from(inexact_if_needed!(float.abs(), float))
+            return Self::from(r.abs());
+        }
+        match self {
+            Number::Float(f) => Self::from(inexact_if_needed!(f.abs(), f)),
+            _ => unreachable!(),
         }
     }
 

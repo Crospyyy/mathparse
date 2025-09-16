@@ -1,12 +1,14 @@
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
+use crate::formula_short::{fun_expr, inv, mul, num, num_expr, pow};
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
+use astro_float::Error;
 use macros::formula_matches;
+use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::PartialEq;
 use std::mem;
-use std::ops::{Add, Mul};
+use std::ops::{Add, Mul, Rem};
 use strum::{EnumCount, IntoEnumIterator};
 
 macro_rules! quick_match {
@@ -278,21 +280,63 @@ impl Element {
                     *self = elements.pop().unwrap();
                 }
             },
-            Element::Pow(b, e) => {
-                b.optimize_and_reduce();
-                e.optimize_and_reduce();
-                if let Some((inner_b, inner_p)) = formula_matches!(b.as_ref(), pow(num(x), x)) {
-                    if inner_b.is_zero() {
-                        *self = num(0);
+            Element::Pow(this_base, this_exponent) => {
+                this_base.optimize_and_reduce();
+                this_exponent.optimize_and_reduce();
+
+                fn is_even(x: &BigInt) -> bool {
+                    let rem = BigInt::from(2);
+                    x.rem(&rem).is_zero()
+                }
+
+                // optimize the element itself
+                if let Some(this_base_number) = formula_matches!(this_base.as_ref(), num(x)) {
+                    if this_base_number.is_zero() {
+                        if let Some(this_exponent_num) = formula_matches!(this_exponent.as_ref(), num(x)) {
+                            if this_exponent_num.is_positive() {
+                                // zero^positive_number = 0
+                                *self = Number::from(0).into();
+                                return;
+                            }
+                            if this_exponent_num.is_negative() {
+                                // zero^negative_number = NaN (division by zero)
+                                *self = Number::nan(Some(Error::DivisionByZero)).into();
+                                return;
+                            }
+                            if this_exponent_num.is_zero() {
+                                // zero^0 = 1 (by convention)
+                                *self = Number::from(1).into();
+                                return;
+                            }
+                        }
+                    } else if this_base_number.is_negative()
+                        && formula_matches!(this_exponent.as_ref(), num(x))
+                        .and_then(|x| x.get_exact_rational())
+                        .is_some_and(|x| x.is_integer() && is_even(x.numer()))
+                    {
+                        // (-a)^(even integer) = (a)^(even integer)
+                        *this_base = Box::new(this_base_number.abs().into());
                         return;
                     }
+                }
+
+                // optimize nested powers
+                if let Some((inner_b, inner_p)) = formula_matches!(this_base.as_ref(), pow(num(x), x)) {
                     if inner_b.is_positive() {
-                        let mut new_pow = formula!(mul([inner_p.clone(), e.as_ref().clone()]));
+                        // if the base is positive, we can just multiply the exponents
+                        let mut new_pow = mul([inner_p.clone(), this_exponent.as_ref().clone()]);
                         new_pow.optimize_new();
                         *self = formula!(pow(num(inner_b.clone()), new_pow));
-                    } else {
-                        // todo continue here
+                        return;
                     }
+                } else if let Some(inner) = formula_matches!(this_base.as_ref(), mul(x..)) {
+                    let new_elements = inner
+                        .iter()
+                        .map(|el| pow((*el).clone(), this_exponent.as_ref().clone()))
+                        .collect::<Vec<_>>();
+                    *self = mul(new_elements);
+                    self.optimize_and_reduce();
+                    return;
                 }
             },
             Element::Negate(x) => {
