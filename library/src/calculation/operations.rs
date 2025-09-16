@@ -28,7 +28,7 @@ impl Number {
 
 // implement operations for just one number
 impl Number {
-    pub fn neg(&self, _ctx: &mut Context) -> Self {
+    pub fn neg(&self) -> Self {
         match self {
             Self::Rational(r) => Self::from(-r),
             Self::Float(f) => Self::from(inexact_if_needed!(f.neg(), f)),

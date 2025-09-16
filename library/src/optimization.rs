@@ -2,10 +2,11 @@ use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use macros::formula_matches;
-use num_traits::{Signed, ToPrimitive, Zero};
+use num_rational::BigRational;
+use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::PartialEq;
 use std::mem;
-use std::ops::Mul;
+use std::ops::{Add, Mul};
 use strum::{EnumCount, IntoEnumIterator};
 
 macro_rules! quick_match {
@@ -28,6 +29,27 @@ fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&m
         }
     }
     *list = new_list;
+}
+
+fn remove_inverse_elements(elements: &mut Vec<Element>, inverse_check: impl Fn(&Element, &Element) -> bool) {
+    if elements.len() >= 2 {
+        let mut to_remove = vec![false; elements.len()];
+        'outer: for i in 0..elements.len() - 1 {
+            for j in i + 1..elements.len() {
+                if to_remove[j] {
+                    continue;
+                }
+                if inverse_check(&elements[i], &elements[j]) {
+                    to_remove[i] = true;
+                    to_remove[j] = true;
+                    continue 'outer;
+                }
+            }
+        }
+        for (i, _) in to_remove.into_iter().enumerate().filter(|x| x.1).rev() {
+            elements.remove(i);
+        }
+    }
 }
 
 impl Element {
@@ -66,26 +88,11 @@ impl Element {
                 }
                 elements.retain(|e| !formula_matches!(e, num(0)));
 
-                if elements.len() >= 2 {
-                    let mut to_remove = vec![false; elements.len()];
-                    'outer: for i in 0..elements.len() - 1 {
-                        for j in i + 1..elements.len() {
-                            if to_remove[j] {
-                                continue;
-                            }
-                            if formula_matches!(elements[i], neg({ &elements[j] }))
-                                || formula_matches!(elements[j], neg({ &elements[i] }))
-                            {
-                                to_remove[i] = true;
-                                to_remove[j] = true;
-                                continue 'outer;
-                            }
-                        }
-                    }
-                    for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
-                        elements.remove(i);
-                    }
-                }
+                let inverse_check = |a: &Element, b: &Element| {
+                    formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
+                };
+
+                remove_inverse_elements(elements, inverse_check);
 
                 if let Some(replacement) = Self::handle_empty_or_one_element(elements, 0) {
                     *self = replacement
@@ -170,11 +177,11 @@ impl Element {
                     self.optimize_new();
                     return;
                 }
-				// if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
-				//     let exp_ref = exp.as_ref();
-				//     *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
-				//     self.optimize_new();
-				// }
+                // if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
+                //     let exp_ref = exp.as_ref();
+                //     *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
+                //     self.optimize_new();
+                // }
             },
             Element::FunctionWithExpression { arguments, expr_value } => match expr_value {
                 ExpressionFunType::Floor | ExpressionFunType::Round => {
@@ -219,54 +226,120 @@ impl Element {
         }
     }
 
-	pub fn optimize_and_reduce(&mut self) {
-		match self {
-			// Elements, which can't be optimized further
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Number(_) => {},
+    pub fn optimize_and_reduce(&mut self) {
+        match self {
+            // Elements, which can't be optimized further
+            Element::Brackets(_)
+            | Element::String(_)
+            | Element::Variable(_)
+            | Element::VariableOrFunction(_)
+            | Element::NumberWithExpression { .. }
+            | Element::Number(_) => {},
 
-			// Elements, which can be optimized
-			Element::Function { arguments, .. } => {
-				for a in arguments {
-					a.optimize_and_reduce();
-				}
-			},
-			Element::FunctionWithExpression { arguments, .. } => {
-				for a in arguments {
-					a.optimize_and_reduce();
-				}
-			},
-			Element::Plus(elements) => {
-				for e in elements.iter_mut() {
-					e.optimize_and_reduce();
-				}
-				let rationals = elements
-					.iter()
-					.filter_map(|e| formula_matches!(e, num(x)))
-					.filter_map(|n| n.get_exact_rational())
-					.collect::<Vec<_>>();
-				let other =
-					elements.iter().filter(|e| !formula_matches!(e, num)).cloned().collect::<Vec<_>>();
-				let sum_rationals = rationals.into_iter().reduce(|a, b| a + b);
-				let mut new_elements = vec![];
-				match sum_rationals {
-					Some(sum) if !sum.is_zero() => new_elements.push(Element::Number(Number::from(sum))),
-					_ => {},
-				}
-				new_elements.extend(other.into_iter().flat_map(|e| { // todo write this to be more efficient
-					quick_match!(&e, Element::Plus(inner) => inner.clone()).unwrap_or(vec![e])
-				}));
-				*elements = new_elements;
-			},
-			Element::Multiply(_) => {},
-			Element::Pow(_, _) => {},
-			Element::Negate(_) => {},
-		}
-	}
+            // Elements, which can be optimized
+            Element::Function { arguments, .. } => {
+                for a in arguments {
+                    a.optimize_and_reduce();
+                }
+            },
+            Element::FunctionWithExpression { arguments, .. } => {
+                for a in arguments {
+                    a.optimize_and_reduce();
+                }
+            },
+            Element::Plus(elements) => {
+                let inverse_check = |a: &Element, b: &Element| {
+                    formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
+                };
+
+                Self::list_element_optimization(
+                    elements,
+                    BigRational::add,
+                    inverse_check,
+                    BigRational::is_zero,
+                );
+                if elements.len() == 1 {
+                    *self = elements.pop().unwrap();
+                }
+            },
+            Element::Multiply(elements) => {
+                let inverse_check = |a: &Element, b: &Element| {
+                    formula_matches!(a, pow({ b }, neg(num(1))))
+                        || formula_matches!(b, pow({ a }, neg(num(1))))
+                };
+
+                Self::list_element_optimization(
+                    elements,
+                    BigRational::mul,
+                    inverse_check,
+                    BigRational::is_one,
+                );
+                if elements.len() == 1 {
+                    *self = elements.pop().unwrap();
+                }
+            },
+            Element::Pow(b, e) => {
+                b.optimize_and_reduce();
+                e.optimize_and_reduce();
+                if let Some((inner_b, inner_p)) = formula_matches!(b.as_ref(), pow(num(x), x)) {
+                    if inner_b.is_zero() {
+                        *self = num(0);
+                        return;
+                    }
+                    if inner_b.is_positive() {
+                        let mut new_pow = formula!(mul([inner_p.clone(), e.as_ref().clone()]));
+                        new_pow.optimize_new();
+                        *self = formula!(pow(num(inner_b.clone()), new_pow));
+                    } else {
+                        // todo continue here
+                    }
+                }
+            },
+            Element::Negate(x) => {
+                x.optimize_and_reduce();
+                if let Some(num) = formula_matches!(x.as_ref(), num(x)) {
+                    *self = num.neg().into();
+                }
+            },
+        }
+    }
+
+    fn list_element_optimization(
+        elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
+        inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
+    ) {
+        // inner optimization
+        elements.iter_mut().for_each(Self::optimize_and_reduce);
+
+        // determine the sum of all the rational numbers inside elements
+        let combined_rational = elements
+            .iter()
+            .filter_map(|e| formula_matches!(e, num(x)))
+            .filter_map(|n| n.get_exact_rational())
+            .reduce(combine_operation)
+            .filter(|e| !neutral_element_check(e));
+
+        // collect all non-rational elements
+        let other_elements =
+            elements.iter().filter(|e| !formula_matches!(e, num)).cloned().collect::<Vec<_>>();
+
+        // rebuild elements
+        let mut new_elements = vec![];
+        for e in other_elements {
+            if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
+                new_elements.extend(inner.iter().cloned());
+            } else {
+                new_elements.push(e);
+            }
+        }
+        if let Some(combined) = combined_rational {
+            new_elements.push(Number::from(combined).into())
+        }
+
+        *elements = new_elements;
+
+        remove_inverse_elements(elements, inverse_check);
+    }
 }
 
 #[cfg(test)]

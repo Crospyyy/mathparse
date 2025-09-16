@@ -31,7 +31,7 @@ impl Element {
                 let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
                 Some(product)
             },
-            Element::Negate(e) => e.eval(ctx).map(|n| n.neg(ctx)),
+            Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
             Element::Number(n) => Some(n.clone()),
             Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
             Element::NumberWithExpression { expr_value } => Some(expr_value.get_function()(ctx)),

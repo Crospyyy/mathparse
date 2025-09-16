@@ -119,3 +119,9 @@ mod formula_short {
         Element::FunctionWithExpression { arguments: args.into_iter().collect(), expr_value: fun }
     }
 }
+
+impl From<Number> for Element {
+    fn from(value: Number) -> Self {
+        Element::Number(value)
+    }
+}
