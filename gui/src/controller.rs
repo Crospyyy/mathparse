@@ -11,7 +11,9 @@ use egui::{
     StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
 };
 use global_shortcuts::register_global_shortcut;
-use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string};
+use library::{
+    FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
+};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -139,7 +141,7 @@ impl Window {
     pub(crate) fn show_top_input(
         &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
     ) {
-		let text_before = self.ui_state.top_user_input.clone();
+        let text_before = self.ui_state.top_user_input.clone();
         self.preprocess_user_input(ui);
 
         let output = self.show_top_input_textedit(ui);
@@ -156,7 +158,7 @@ impl Window {
             }
         }
 
-		if text_before != self.ui_state.top_user_input {
+        if text_before != self.ui_state.top_user_input {
             input.push(UiStateInfo::TopInputChanged);
         }
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
@@ -198,22 +200,34 @@ impl Window {
     }
 
     pub(super) fn preprocess_user_input(&mut self, ui: &mut Ui) {
-        let typed_brackets = ui.input_mut(|ip| {
+        let Some(mut typed_brackets) = ui.input_mut(|ip| {
             ip.events.retain(|e| match e {
                 Event::Text(text) => text.chars().all(|c| c.is_ascii()),
                 _ => true,
             });
-            let typed_bracket = ip.events.iter().any(|e| e == &Event::Text("(".to_owned()));
-            if typed_bracket {
+            let text_bracket_check = |t: &&String| t.ends_with("(");
+            if let Some(bracket_string) = ip
+                .events
+                .iter()
+                .flat_map(|e| quick_match!(e, Event::Text(t)=>t))
+                .filter(text_bracket_check)
+                .next()
+                .cloned()
+            {
                 ip.consume_key(Modifiers::NONE, Key::OpenBracket);
                 ip.consume_key(Modifiers::SHIFT, Key::Num8);
-                ip.events.retain(|e| e != &Event::Text("(".to_owned()));
+                ip.events.retain(|e| match e {
+                    Event::Text(t) => !text_bracket_check(&t),
+                    _ => true,
+                });
+                Some(bracket_string)
+            } else {
+                None
             }
-            typed_bracket
-        });
-        if !typed_brackets {
+        }) else {
             return;
-        }
+        };
+
         let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
             return;
         };
@@ -221,11 +235,12 @@ impl Window {
             return;
         };
         if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
-            self.ui_state.top_user_input.insert_str(
-                cursor_pos,
-                if cursor_pos == self.ui_state.top_user_input.len() { "()" } else { "(" },
-            );
-            state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + 1))));
+            let move_cursor = typed_brackets.len();
+            if cursor_pos == self.ui_state.top_user_input.len() {
+                typed_brackets += ")";
+            }
+            self.ui_state.top_user_input.insert_str(cursor_pos, &typed_brackets);
+            state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + move_cursor))));
         } else {
             let [min, max] = cursors.sorted_cursors().map(|c| c.index);
             let string_before = &self.ui_state.top_user_input[..min];

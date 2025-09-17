@@ -11,6 +11,7 @@ use std::mem;
 use std::ops::{Add, Mul, Rem};
 use strum::{EnumCount, IntoEnumIterator};
 
+#[macro_export]
 macro_rules! quick_match {
     ($input:expr,$pat:pat => $expr:expr) => {
         match $input {
