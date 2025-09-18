@@ -22,8 +22,11 @@ mod trait_implementations;
 static REGEX_NUMBER_UNDERSCORE_REMOVAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)_(\d)").unwrap());
 
 pub fn create_default_context() -> NumberContext {
+    create_context(1024)
+}
+pub fn create_context(bits: usize) -> NumberContext {
     NumberContext::new(
-        1024,
+        bits,
         RoundingMode::ToEven,
         Consts::new().expect("Constants cache initialized"),
         -100000,

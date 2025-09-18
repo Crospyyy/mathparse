@@ -85,7 +85,7 @@ impl FormulaStore {
         Ok(())
     }
 
-    pub(crate) fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<(), String> {
+    fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<(), String> {
         if self.symbols.contains_key(name) {
             return Err(format!("The formula {} is already defined", name));
         }
@@ -253,7 +253,7 @@ impl FormulaStore {
         Ok(NamedSymbol::new(symbol_name_and_args.name, symbol))
     }
 
-    pub fn add_expression_var(
+    fn add_expression_var(
         &mut self, name: impl ToString, expr_value: ExpressionNumType, dry_run: bool,
     ) -> Result<(), String> {
         let parameter_names = None;
@@ -262,7 +262,7 @@ impl FormulaStore {
         self.add_symbol_new(&name.to_string(), Symbol::new(signature, parameter_names, formula), dry_run)
     }
 
-    pub fn add_expression_fun(
+    fn add_expression_fun(
         &mut self, name: impl ToString, expr_value: ExpressionFunType, dry_run: bool,
     ) -> Result<(), String> {
         let params = Some(vec![]); // todo add param names

@@ -1,8 +1,12 @@
+use crate::calculation::create_context;
 use crate::expression_values::FunctionExpression;
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, Number, benchmark, create_default_context};
+use crate::{Benchmark, Element, Number, RoundingMode, benchmark, create_default_context};
+use astro_float::BigFloat;
 use astro_float::ctx::Context;
+use num_rational::BigRational;
 use std::collections::HashSet;
+use std::ops::RangeInclusive;
 
 impl Element {
     pub fn eval(&self, ctx: &mut Context) -> Option<Number> {
@@ -131,6 +135,46 @@ impl FormulaStore {
 
         Ok(())
     }
+
+    pub fn eval_dynamic_precision(
+        &mut self, formula_str: &str, precision_range: RangeInclusive<u32>,
+    ) -> Result<DynamicResult, String> {
+        let min_precision = *precision_range.start();
+        let mut precision = min_precision;
+        let mut ctx = create_context(precision as usize);
+        let first_result = self.eval(formula_str, &mut ctx)?;
+
+        let mut last_rounded = match first_result {
+            Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
+            Number::Float(f) => f,
+        };
+        precision *= 2;
+        while precision <= *precision_range.end() {
+            let result = self.eval(formula_str, &mut ctx)?;
+            let mut rounded = match result {
+                Number::Float(f) => f,
+                Number::Rational(r) => {
+                    return Ok(DynamicResult::Exact(r));
+                },
+            }
+                .round(min_precision as usize, RoundingMode::ToEven);
+            rounded.set_inexact(true);
+
+            if last_rounded == rounded {
+                return Ok(DynamicResult::Checked { num: rounded, precision });
+            }
+
+            last_rounded = rounded;
+            precision *= 2;
+        }
+        Ok(DynamicResult::ReachedLimit(last_rounded))
+    }
+}
+
+pub enum DynamicResult {
+    Exact(BigRational),
+    Checked { num: BigFloat, precision: u32 },
+    ReachedLimit(BigFloat),
 }
 
 #[cfg(test)]

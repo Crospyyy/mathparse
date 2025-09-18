@@ -11,6 +11,7 @@ mod parsing;
 mod printing;
 mod storing;
 mod testing;
+mod outer_store_interation;
 
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
