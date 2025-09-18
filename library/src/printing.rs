@@ -1,3 +1,5 @@
+use crate::calculation::create_context;
+use crate::evaluation::DynamicResult;
 use crate::expression_values::{ExpressionFunType, FunctionExpression};
 use crate::parsing::signature::ParamCount;
 use crate::{Element, ExpressionNumType, Number};
@@ -480,7 +482,9 @@ impl FormattingOptions {
     }
 }
 
-fn rational_to_string(ratio: &BigRational, formatting_options: FormattingOptions) -> (String, bool) {
+pub(crate) fn rational_to_string(
+    ratio: &BigRational, formatting_options: FormattingOptions,
+) -> (String, bool) {
     let scientific = long_division(&ratio.numer(), &ratio.denom(), formatting_options.round_to_decimals);
     (scientific.0.to_string(formatting_options), scientific.1)
 }
@@ -547,6 +551,44 @@ fn long_division(
         ScientificNumber::round_decimals_vec(rounding_decimals, &mut exponent, &result_vec);
     has_been_rounded |= has_rounded;
     (ScientificNumber::new(negative, result_rounded, exponent), has_been_rounded)
+}
+
+impl DynamicResult {
+    pub fn to_string_detailed(&self, formatting_options: FormattingOptions) -> FormattedCalculationOutput {
+        match self {
+            DynamicResult::Exact(r) => {
+                let (string, rounded) = rational_to_string(r, formatting_options);
+                FormattedCalculationOutput::Exact { result: string, has_rounded: rounded }
+            },
+            DynamicResult::Checked { num, precision } => {
+                let mut context = create_context(*precision as usize);
+                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+                    scientific.to_string(formatting_options)
+                } else {
+                    num.to_string()
+                };
+                FormattedCalculationOutput::ApproximationChecked {
+                    result: string,
+                    precision_bits: *precision,
+                }
+            },
+            DynamicResult::ReachedLimit(num) => {
+                let mut context = create_context(num.precision().unwrap_or(1));
+                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+                    scientific.to_string(formatting_options)
+                } else {
+                    num.to_string()
+                };
+                FormattedCalculationOutput::ApproximationReachedLimit { result: string }
+            },
+        }
+    }
+}
+
+enum FormattedCalculationOutput {
+    Exact { result: String, has_rounded: bool },
+    ApproximationChecked { result: String, precision_bits: u32 },
+    ApproximationReachedLimit { result: String },
 }
 
 #[cfg(test)]

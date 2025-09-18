@@ -21,7 +21,7 @@ impl FormulaStore {
 	}
 }
 
-enum RunResult {
+pub enum RunResult {
 	ParseFailed(String),
 	CalculationFailed(String),
 	FailedToAddSymbol(String),

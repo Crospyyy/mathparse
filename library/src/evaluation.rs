@@ -137,9 +137,9 @@ impl FormulaStore {
     }
 
     pub fn eval_dynamic_precision(
-        &mut self, formula_str: &str, precision_range: RangeInclusive<u32>,
+        &mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
     ) -> Result<DynamicResult, String> {
-        let min_precision = *precision_range.start();
+        let min_precision = *precision_range_bits.start();
         let mut precision = min_precision;
         let mut ctx = create_context(precision as usize);
         let first_result = self.eval(formula_str, &mut ctx)?;
@@ -149,7 +149,7 @@ impl FormulaStore {
             Number::Float(f) => f,
         };
         precision *= 2;
-        while precision <= *precision_range.end() {
+        while precision <= *precision_range_bits.end() {
             let result = self.eval(formula_str, &mut ctx)?;
             let mut rounded = match result {
                 Number::Float(f) => f,
@@ -157,7 +157,7 @@ impl FormulaStore {
                     return Ok(DynamicResult::Exact(r));
                 },
             }
-                .round(min_precision as usize, RoundingMode::ToEven);
+            .round(min_precision as usize, RoundingMode::ToEven);
             rounded.set_inexact(true);
 
             if last_rounded == rounded {
