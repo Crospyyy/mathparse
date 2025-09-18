@@ -11,9 +11,7 @@ use egui::{
     StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
 };
 use global_shortcuts::register_global_shortcut;
-use library::{
-    FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
-};
+use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string, quick_match, RunResult, FormattingOptions, FormattedCalculationOutput};
 use regex::Regex;
 use std::sync::LazyLock;
 
@@ -323,13 +321,39 @@ impl Window {
 
         self.ui_state.calculation_result = if input.is_empty() {
             None
-        } else if input.contains("=") {
+        } else  {
+            let result = self.formula_store.run(input, true);
             Some(
-                self.get_result_of_possible_symbol_declaration(&input)
-                    .map(|name| format!("Create new symbol '{}'", name.name())),
+                match result {
+                    RunResult::ParseFailed(s) => Err(format!("Parse Error: {}", s)),
+                    RunResult::CalculationFailed(s) => Err(format!("Calculation Error: {}", s)),
+                    RunResult::FailedToAddSymbol(s) => Err(format!("Error adding symbol: {}", s)),
+                    RunResult::CalculationResult(r) => {
+                        let formatting_options = FormattingOptions::default()
+                            .with_rounding(self.ui_state.output_digits);
+                        let output = r.to_string_detailed(formatting_options);
+                        Ok(match output {
+                            FormattedCalculationOutput::Exact {result,has_rounded } => {
+                                if has_rounded {
+                                    format!("= {} (rounded)", result)
+                                } else {
+                                    format!("= {}", result)
+                                }
+                            }
+                            FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
+                                format!("≈ {} ({} bit precision)", result, precision_bits)
+                            }
+                            FormattedCalculationOutput::ApproximationReachedLimit { result } => {
+                                format!("≈ {} (reached precision limit)", result)
+                            }
+                        })
+                    }
+                    RunResult::AddedSymbol(s) => Ok(format!(
+                        "Create new symbol: {}",
+                        s.symbol().get_full_string(s.name(), ctx)
+                    )),
+                }
             )
-        } else {
-            Some(self.evaluate_formula(ctx, &input))
         }
     }
 

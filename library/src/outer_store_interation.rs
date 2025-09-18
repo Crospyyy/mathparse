@@ -13,7 +13,7 @@ impl FormulaStore {
 				Err(err) => RunResult::FailedToAddSymbol(err),
 			}
 		} else {
-			match self.eval_dynamic_precision(&input, 512..=2 ^ 20) {
+			match self.eval_dynamic_precision(&input, 512..=(1 << 20)) {
 				Ok(result) => RunResult::CalculationResult(result),
 				Err(err) => RunResult::CalculationFailed(err),
 			}

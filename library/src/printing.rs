@@ -585,7 +585,7 @@ impl DynamicResult {
     }
 }
 
-enum FormattedCalculationOutput {
+pub enum FormattedCalculationOutput {
     Exact { result: String, has_rounded: bool },
     ApproximationChecked { result: String, precision_bits: u32 },
     ApproximationReachedLimit { result: String },

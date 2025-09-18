@@ -94,11 +94,11 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        dbg!(formula.get_string(&mut create_default_context()));
+        // dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(&mut create_default_context()));
+        // dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
-        dbg!(formula.get_string(&mut create_default_context()));
+        // dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
         dbg!(formula.get_string(&mut create_default_context()));
 
@@ -139,25 +139,34 @@ impl FormulaStore {
     pub fn eval_dynamic_precision(
         &mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
     ) -> Result<DynamicResult, String> {
+        println!();
+        dbg!(&precision_range_bits.end());
+
         let min_precision = *precision_range_bits.start();
         let mut precision = min_precision;
         let mut ctx = create_context(precision as usize);
+        dbg!(precision);
         let first_result = self.eval(formula_str, &mut ctx)?;
 
         let mut last_rounded = match first_result {
             Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
             Number::Float(f) => f,
         };
+        println!("{}", last_rounded);
         precision *= 2;
         while precision <= *precision_range_bits.end() {
+            dbg!(precision);
+            ctx = create_context(precision as usize);
             let result = self.eval(formula_str, &mut ctx)?;
+
             let mut rounded = match result {
                 Number::Float(f) => f,
                 Number::Rational(r) => {
                     return Ok(DynamicResult::Exact(r));
                 },
-            }
-            .round(min_precision as usize, RoundingMode::ToEven);
+            };
+            println!("{}", rounded);
+            rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
             rounded.set_inexact(true);
 
             if last_rounded == rounded {

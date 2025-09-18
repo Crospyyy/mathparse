@@ -22,9 +22,12 @@ pub use parsing::get_fun_name_end_of_string;
 pub use parsing::signature::Signature;
 pub use printing::FormattingOptions;
 pub use printing::NumberString;
+pub use printing::FormattedCalculationOutput;
 pub use storing::FormulaStore;
 pub use storing::NamedSymbol;
 pub use storing::Symbol;
+pub use evaluation::DynamicResult;
+pub use outer_store_interation::RunResult;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
