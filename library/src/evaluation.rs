@@ -165,9 +165,9 @@ impl FormulaStore {
                     return Ok(DynamicResult::Exact(r));
                 },
             };
-            println!("{}", rounded);
             rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
             rounded.set_inexact(true);
+            println!("{}", rounded);
 
             if last_rounded == rounded {
                 return Ok(DynamicResult::Checked { num: rounded, precision });
