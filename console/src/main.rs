@@ -31,7 +31,7 @@ pub fn run_formula_evaluator() {
                     if result.is_exact() {
                         println!("= {}", result_string);
                     } else {
-                        println!("~= {}", result_string);
+                        println!("≈ {}", result_string);
                     }
                 },
                 Err(s) => {

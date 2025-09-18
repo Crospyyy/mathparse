@@ -1,7 +1,7 @@
 use crate::Window;
-use egui::Response;
-use library::{Benchmark, FormattingOptions, NumberContext, NumberString, benchmark, NamedSymbol};
 use crate::ui::Page;
+use egui::Response;
+use library::{Benchmark, FormattingOptions, NamedSymbol, NumberContext, NumberString, benchmark};
 
 impl Window {
     pub(crate) fn get_result_of_possible_symbol_declaration(
@@ -30,7 +30,7 @@ impl Window {
                 b.print_times();
 
                 match result_str {
-                    NumberString::Imprecise(str) => format!("~= {}", str),
+                    NumberString::Imprecise(str) => format!("≈ {}", str),
                     NumberString::Precise { string, is_rounded } => {
                         if is_rounded {
                             format!("= {} (rounded)", string)
@@ -49,5 +49,5 @@ pub enum UiStateInfo {
     TopInputSubmit,
     RoundingAccuracyChanged,
     RequestAutocompletion { cursor_pos: usize, input_term: String, complete_to: String, response: Response },
-    SelectPage(Page)
+    SelectPage(Page),
 }
