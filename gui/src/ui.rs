@@ -5,11 +5,12 @@ use crate::ui::HistoryEntryContent::{Calculation, SymbolDefinition};
 use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId};
+use egui::containers::menu::{MenuButton, MenuConfig};
 use egui::text::CCursorRange;
 use egui::text_edit::TextEditOutput;
 use egui::{
-    Align, Align2, DragValue, FontSelection, Id, Key, Label, LayerId, Layout, Popup, PopupAnchor, Pos2,
-    Response, RichText, ScrollArea, Sides, TextEdit, Tooltip, Ui, Widget,
+    Align, Align2, DragValue, FontSelection, Id, Key, Label, LayerId, Layout, Popup, PopupAnchor,
+    PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sides, TextEdit, Tooltip, Ui, Widget,
 };
 use library::FormattingOptions;
 use std::cmp::PartialEq;
@@ -100,7 +101,7 @@ impl Window {
         response
     }
 
-    pub fn show_textedit_result(&self, ui: &mut Ui, output: &TextEditOutput) {
+    pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) {
         let pos = last_caret_pos_from_output(&output);
         if let Some(Ok(result)) = &self.ui_state.calculation_result {
             let result = result.split_once('(').map(|b| b.0.trim()).unwrap_or(result);
@@ -156,7 +157,9 @@ impl Window {
                 }
             },
             |ui| {
-                ui.menu_button("⛭", |ui| {
+                let button = MenuButton::new("⛭")
+                    .config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside));
+                button.ui(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label("Round Digits:");
                         let drag_val_resp =

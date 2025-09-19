@@ -156,7 +156,7 @@ impl Window {
         if response.has_focus() {
             let autocompletion_visible = self.show_autocompletion(ui, &response, input);
             if autocompletion_visible {
-                self.show_textedit_result(ui, &output);
+                self.show_inline_result(ui, &output);
             }
         }
 
