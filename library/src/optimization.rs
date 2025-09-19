@@ -502,19 +502,10 @@ fn list_element_optimization(
         }
     }
     for e in other_elements {
-        if is_plus {
-            // todo this is ugly please fix
-            if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
-                new_elements.extend(inner.iter().cloned());
-            } else {
-                new_elements.push(e);
-            }
-        } else {
-            if let Some(inner) = quick_match!(&e, Element::Multiply(inner) => inner) {
-                new_elements.extend(inner.iter().cloned());
-            } else {
-                new_elements.push(e);
-            }
+        match (is_plus, &e) {
+            (true, Element::Plus(inner)) => new_elements.extend(inner.iter().cloned()),
+            (false, Element::Multiply(inner)) => new_elements.extend(inner.iter().cloned()),
+            _ => new_elements.push(e),
         }
     }
 
