@@ -152,6 +152,9 @@ impl FormulaStore {
             Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
             Number::Float(f) => f,
         };
+        if last_rounded.is_nan() {
+            return Ok(DynamicResult::Checked { num: last_rounded, precision });
+        }
         println!("{}", last_rounded);
         precision *= 2;
         while precision <= *precision_range_bits.end() {
@@ -165,6 +168,9 @@ impl FormulaStore {
                     return Ok(DynamicResult::Exact(r));
                 },
             };
+            if rounded.is_nan() {
+                return Ok(DynamicResult::Checked { num: rounded, precision });
+            }
             rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
             rounded.set_inexact(true);
             println!("{}", rounded);
