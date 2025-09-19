@@ -192,7 +192,7 @@ mod tests {
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
     use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
     use crate::storing::FormulaStore;
-    use crate::{Element, Number};
+    use crate::{Element, FormattingOptions, Number};
     use astro_float::ctx::Context;
     use astro_float::{Error, expr};
 
@@ -384,5 +384,50 @@ mod tests {
         assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2);
         store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
         assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2 + 1);
+    }
+
+    #[test]
+    fn test_general_evaluation() {
+        let mut store = FormulaStore::new_empty();
+        store.define_default_symbols().unwrap();
+
+        fn count_digits(s: &str) -> usize {
+            let s: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+            s.trim_start_matches("0").len()
+        }
+        macro_rules! check_calculation {
+            ($formula:expr, $expected:expr) => {
+                check_calculation!($formula, $expected, count_digits($expected))
+            };
+            ($formula:expr, $expected:expr, $rounding:expr) => {{
+                let (formula, output) = ($formula, $expected);
+                let fmt = FormattingOptions::default().with_rounding($rounding);
+                let result = store
+                    .run(formula, false)
+                    .calculation_result()
+                    .unwrap()
+                    .to_string_detailed(fmt)
+                    .get_string()
+                    .clone();
+                assert_eq!(
+                    result, output,
+                    "For formula '{}', expected '{}', but got '{}'",
+                    formula, output, result
+                );
+            }};
+        }
+        check_calculation!("((12 + 3) * sin(0.5)) / (2 ^ 3)", "0.89892288488288062551241487852919635265338131488862626597865614961037813");
+        check_calculation!("(cos(1) + (7 - (3 + 2))) * ( (10 / 2) + tan(0.25) )", "13.350157200603297892624056197885460276733113344409248718867431711422992");
+        check_calculation!(
+            "( ( (25 / 5) + (2 ^ 3) ) * ( (sqrt(9) - 1) + sin(3.14 / 2) ) )",
+            "38.99999587811385"
+        );
+        check_calculation!("(((3.5 + 1.5) * (2.2 - 0.2)) / ( (10 - 8) ^ 2 )) + cos(0)", "3.5", 100);
+        check_calculation!("( (100 - (50 / (5 + 5))) * ( (20 / (2 ^ 2)) + 3 ) ) - tan(1)", "758.4425922753451");
+        check_calculation!("( ( ( (2 + 3) * (4 + 1) ) - ( (9 - 7) * (8 / 2) ) ) ^ 2 ) + sin(2)", "289.9092974268257");
+        check_calculation!("( (ln(e ^ 2)) + (ln(1000) - ln(10)) + cos(2)) / ( (5 + 5) / 2 )", "1.23780466988819");
+        check_calculation!("((sin(1) ^ 2) + (cos(1) ^ 2)) * 42", "42", 100);
+        check_calculation!("(tan(0.5) + (sin(0.25) * cos(0.75))) / (2 ^ (1/2))", "0.5142965902018098");
+        check_calculation!("((ln(100) + ln(e)) * (sin(3.14159) + cos(3.14159 / 2)))", "0.00002231073359233416412239818251719053988230415986601072682456917655910148");
     }
 }

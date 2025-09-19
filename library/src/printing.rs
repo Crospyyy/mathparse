@@ -591,6 +591,16 @@ pub enum FormattedCalculationOutput {
     ApproximationReachedLimit { result: String },
 }
 
+impl FormattedCalculationOutput {
+    pub(crate) fn get_string(&self) -> &String {
+        match self {
+            FormattedCalculationOutput::Exact { result, .. } => result,
+            FormattedCalculationOutput::ApproximationChecked { result, .. } => result,
+            FormattedCalculationOutput::ApproximationReachedLimit { result } => result,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::FormattingOptions;
