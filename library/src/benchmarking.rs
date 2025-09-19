@@ -14,20 +14,12 @@ macro_rules! benchmark {
 pub enum Benchmark {
     Disabled,
     JustTotalDuration(Duration),
-    Enabled {
-        sub_start_time: Option<Instant>,
-        total_duration: Duration,
-        tasks: HashMap<String, (usize, Benchmark)>,
-    },
+    Enabled { sub_start_time: Option<Instant>, total_duration: Duration, tasks: Vec<(String, Benchmark)> },
 }
 
 impl Benchmark {
     pub fn new() -> Self {
-        Benchmark::Enabled {
-            sub_start_time: None,
-            total_duration: Duration::new(0, 0),
-            tasks: HashMap::new(),
-        }
+        Benchmark::Enabled { sub_start_time: None, total_duration: Duration::new(0, 0), tasks: vec![] }
     }
 
     pub(crate) fn empty_with_total_duration(duration: Duration) -> Self {
@@ -51,9 +43,7 @@ impl Benchmark {
             },
             Benchmark::Enabled { total_duration, tasks, .. } => {
                 println!("{indent_str}{name}: {:?}", total_duration);
-                let mut tasks_vec: Vec<_> = tasks.iter().collect();
-                tasks_vec.sort_by_key(|(_, (idx, _))| *idx);
-                for (name, (_idx, task)) in tasks_vec {
+                for (name, task) in tasks {
                     task.print_times_internal(indent + 1, name);
                 }
             },
@@ -80,14 +70,14 @@ impl Benchmark {
                 panic!("Benchmark was not started, cannot complete.");
             };
             *total_duration += duration;
-            tasks.insert(name.to_string(), (tasks.len(), Benchmark::empty_with_total_duration(duration)));
+            tasks.push((name.to_string(), Benchmark::empty_with_total_duration(duration)));
         }
     }
 
     pub(crate) fn add_task_with_benchmark(&mut self, name: &str, benchmark: Benchmark) {
         if let Benchmark::Enabled { tasks, total_duration, .. } = self {
             *total_duration += benchmark.get_total_duration();
-            tasks.insert(name.to_string(), (tasks.len(), benchmark));
+            tasks.push((name.to_string(), benchmark));
         }
     }
 
