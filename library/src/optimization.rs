@@ -1,5 +1,5 @@
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-use crate::formula_short::{fun_expr, inv, mul, num, num_expr, pow};
+use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
 use crate::{Element, FormulaStore, Number, create_default_context, formula};
 use astro_float::Error;
 use macros::formula_matches;
@@ -8,7 +8,7 @@ use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::PartialEq;
 use std::mem;
-use std::ops::{Add, Mul, Rem};
+use std::ops::{Add, Mul, Neg, Rem};
 use strum::{EnumCount, IntoEnumIterator};
 
 #[macro_export]
@@ -245,9 +245,53 @@ impl Element {
                     a.optimize_and_reduce();
                 }
             },
-            Element::FunctionWithExpression { arguments, .. } => {
-                for a in arguments {
+            Element::FunctionWithExpression { arguments, expr_value } => {
+                for a in arguments.iter_mut() {
                     a.optimize_and_reduce();
+                }
+                match expr_value {
+                    ExpressionFunType::Sin => {
+                        let [arg] = arguments.as_slice() else {
+                            return;
+                        };
+                        let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
+                        let rem = fun_expr(ExpressionFunType::Rem, [divided.clone(), num(2)]);
+                        let mut mul = mul([rem.clone(), num(2)]);
+                        mul.optimize_and_reduce();
+                        if let Some(x) = formula_matches!(mul, num(x)) {
+                            if x == 0 || x.abs() == 2 {
+                                *self = Number::from(0).into();
+                                return;
+                            }
+                            if x.abs() == 1 {
+                                *self = Number::from(if x == 1 { 1 } else { -1 }).into();
+                                return;
+                            }
+                        }
+                        let corrected = fun_expr(ExpressionFunType::SinWithRadians, [mul]);
+                        *self = corrected;
+                    },
+                    ExpressionFunType::Rem => {
+                        let [arg1, arg2] = arguments.as_slice() else {
+                            return;
+                        };
+                        let Some(arg1_num) =
+                            formula_matches!(arg1, num(x)).and_then(|x| x.get_exact_rational())
+                        else {
+                            return;
+                        };
+                        let Some(arg2_num) =
+                            formula_matches!(arg2, num(x)).and_then(|x| x.get_exact_rational())
+                        else {
+                            return;
+                        };
+                        let mut result = arg1_num.clone().rem(&arg2_num);
+                        if result.is_negative() {
+                            result += &arg2_num;
+                        }
+                        *self = Number::from(result).into();
+                    },
+                    _ => {},
                 }
             },
             Element::Plus(elements) => {
@@ -255,7 +299,7 @@ impl Element {
                     formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
                 };
 
-                Self::list_element_optimization(
+                let result = list_element_optimization(
                     elements,
                     BigRational::add,
                     inverse_check,
@@ -272,7 +316,7 @@ impl Element {
                     formula_matches!(a, pow({ b }, num(-1))) || formula_matches!(b, pow({ a }, num(-1)))
                 };
 
-                Self::list_element_optimization(
+                let result = list_element_optimization(
                     elements,
                     BigRational::mul,
                     inverse_check,
@@ -282,6 +326,10 @@ impl Element {
                 );
                 if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
                     *self = replacement
+                }
+                if result.add_outer_neg {
+                    *self = neg(self.clone());
+                    self.optimize_and_reduce();
                 }
             },
             Element::Pow(this_base, this_exponent) => {
@@ -320,8 +368,8 @@ impl Element {
                         }
                     } else if this_base_number.is_negative()
                         && formula_matches!(this_exponent.as_ref(), num(x))
-                        .and_then(|x| x.get_exact_rational())
-                        .is_some_and(|x| x.is_integer() && is_even(&x))
+                            .and_then(|x| x.get_exact_rational())
+                            .is_some_and(|x| x.is_integer() && is_even(&x))
                     {
                         // (-a)^(even integer) = (a)^(even integer)
                         *this_base = Box::new(this_base_number.abs().into());
@@ -391,65 +439,89 @@ impl Element {
             },
         }
     }
+}
+struct ListElementOptimizationResult {
+    add_outer_neg: bool,
+}
 
-    fn list_element_optimization(
-        elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
-        inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
-        zero_turns_rest_to_zero: bool, is_plus: bool,
-    ) {
-        // inner optimization
-        elements.iter_mut().for_each(Self::optimize_and_reduce);
-
-        if let Some(nan) = elements.iter().find(|e| e.is_nan()) {
-            *elements = vec![nan.clone()];
-            return;
-        }
-
-        // determine the sum of all the rational numbers inside elements
-        let combined_rational = elements
-            .iter()
-            .filter_map(|e| formula_matches!(e, num(x)))
-            .filter_map(|n| n.get_exact_rational())
-            .reduce(combine_operation)
-            .filter(|e| !neutral_element_check(e));
-
-        // collect all non-rational elements
-        let other_elements = elements
-            .iter()
-            .filter(|e| formula_matches!(e, num(x)).is_none_or(|e| e.get_exact_rational().is_none()))
-            .cloned()
-            .collect::<Vec<_>>();
-
-        // rebuild elements
-        let mut new_elements = vec![];
-        if let Some(combined) = combined_rational {
-            new_elements.push(Number::from(combined.clone()).into());
-            if zero_turns_rest_to_zero && combined.is_zero() {
-                *elements = new_elements;
-                return;
-            }
-        }
-        for e in other_elements {
-            if is_plus {
-                // todo this is ugly please fix
-                if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
-                    new_elements.extend(inner.iter().cloned());
-                } else {
-                    new_elements.push(e);
-                }
-            } else {
-                if let Some(inner) = quick_match!(&e, Element::Multiply(inner) => inner) {
-                    new_elements.extend(inner.iter().cloned());
-                } else {
-                    new_elements.push(e);
-                }
-            }
-        }
-
-        *elements = new_elements;
-
-        remove_inverse_elements(elements, inverse_check);
+impl ListElementOptimizationResult {
+    fn new() -> Self {
+        Self { add_outer_neg: false }
     }
+}
+
+fn list_element_optimization(
+    elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
+    inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
+    zero_turns_rest_to_zero: bool, is_plus: bool,
+) -> ListElementOptimizationResult {
+    // inner optimization
+    elements.iter_mut().for_each(Element::optimize_and_reduce);
+
+    if let Some(nan) = elements.iter().find(|e| e.is_nan()) {
+        *elements = vec![nan.clone()];
+        return ListElementOptimizationResult::new();
+    }
+
+    // determine the sum of all the rational numbers inside elements
+    let combined_rational = elements
+        .iter()
+        .filter_map(|e| formula_matches!(e, num(x)))
+        .filter_map(|n| n.get_exact_rational())
+        .reduce(combine_operation)
+        .filter(|e| !neutral_element_check(e));
+
+    // collect all non-rational elements
+    let mut other_elements = elements
+        .iter()
+        .filter(|e| formula_matches!(e, num(x)).is_none_or(|e| e.get_exact_rational().is_none()))
+        .cloned()
+        .collect::<Vec<_>>();
+
+    let mut add_outer_neg = false;
+    if !is_plus {
+        for e in other_elements.iter_mut() {
+            if let Some(neg) = formula_matches!(e, neg(x)) {
+                *e = neg.clone();
+                add_outer_neg ^= true;
+            }
+        }
+    }
+
+    // rebuild elements
+    let mut new_elements = vec![];
+    if let Some(mut combined) = combined_rational {
+        if add_outer_neg {
+            add_outer_neg = false;
+            combined = combined.neg();
+        }
+        new_elements.push(Number::from(combined.clone()).into());
+        if zero_turns_rest_to_zero && combined.is_zero() {
+            *elements = new_elements;
+            return ListElementOptimizationResult::new();
+        }
+    }
+    for e in other_elements {
+        if is_plus {
+            // todo this is ugly please fix
+            if let Some(inner) = quick_match!(&e, Element::Plus(inner) => inner) {
+                new_elements.extend(inner.iter().cloned());
+            } else {
+                new_elements.push(e);
+            }
+        } else {
+            if let Some(inner) = quick_match!(&e, Element::Multiply(inner) => inner) {
+                new_elements.extend(inner.iter().cloned());
+            } else {
+                new_elements.push(e);
+            }
+        }
+    }
+
+    *elements = new_elements;
+
+    remove_inverse_elements(elements, inverse_check);
+    ListElementOptimizationResult { add_outer_neg }
 }
 
 #[cfg(test)]

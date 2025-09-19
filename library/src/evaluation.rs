@@ -86,7 +86,7 @@ impl FormulaStore {
         self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
     }
 
-    pub fn eval_with_benchmark(
+    fn eval_with_benchmark(
         &self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
     ) -> Result<Number, String> {
         let mut inner_bench = benchmark.new_sub_bench();

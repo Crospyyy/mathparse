@@ -11,6 +11,7 @@ use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
+use std::iter::once;
 
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
@@ -134,7 +135,7 @@ impl Formula {
 }
 
 impl Display for Formula {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Formula::Plus(elements) => {
                 write!(f, "{}", elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + "))
@@ -206,12 +207,27 @@ impl Display for Formula {
     }
 }
 
+fn camel_to_snake_case(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + s.len() / 4);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 impl Display for ExpressionFunType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             ExpressionFunType::AssertValueRange(r) => f.write_str(&format!("check_{:?}", r).to_lowercase()),
             ExpressionFunType::Custom(c) => f.write_str(&format!("custom_{}", c.name)),
-            _ => f.write_str(&format!("{:?}", self).to_lowercase()),
+            _ => f.write_str(&camel_to_snake_case(&format!("{:?}", self))),
         }
     }
 }
