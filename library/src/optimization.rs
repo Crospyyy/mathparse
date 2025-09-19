@@ -400,6 +400,11 @@ impl Element {
         // inner optimization
         elements.iter_mut().for_each(Self::optimize_and_reduce);
 
+        if let Some(nan) = elements.iter().find(|e| e.is_nan()) {
+            *elements = vec![nan.clone()];
+            return;
+        }
+
         // determine the sum of all the rational numbers inside elements
         let combined_rational = elements
             .iter()
@@ -409,8 +414,11 @@ impl Element {
             .filter(|e| !neutral_element_check(e));
 
         // collect all non-rational elements
-        let other_elements =
-            elements.iter().filter(|e| !formula_matches!(e, num)).cloned().collect::<Vec<_>>();
+        let other_elements = elements
+            .iter()
+            .filter(|e| formula_matches!(e, num(x)).is_none_or(|e| e.get_exact_rational().is_none()))
+            .cloned()
+            .collect::<Vec<_>>();
 
         // rebuild elements
         let mut new_elements = vec![];
@@ -509,6 +517,15 @@ mod tests {
 
         // Exponent 1
         test!(formula!(pow(var("a"), num(1))), var("a"));
+
+        // 0^-1 = NaN (Division by zero)
+        test!(formula!(pow(num(0), num(-1))), Number::nan(Some(Error::DivisionByZero)).into());
+
+        // 1/0 = NaN (Division by zero)
+        test!(formula!(mul(num(1), pow(num(0), num(-1)))), Number::nan(Some(Error::DivisionByZero)).into());
+
+        // 0/0 = NaN (Division by zero)
+        test!(formula!(mul(num(0), pow(num(0), num(-1)))), Number::nan(Some(Error::DivisionByZero)).into());
 
         // Zusammenführen verschachtelter Exponenten
         test!(formula!(pow(pow(num(4), num(2)), num(3))), formula!(pow(num(4), num(6))));

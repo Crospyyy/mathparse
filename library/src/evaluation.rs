@@ -94,11 +94,11 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        // dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        // dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
-        // dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(&mut create_default_context()));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
         dbg!(formula.get_string(&mut create_default_context()));
 
@@ -416,18 +416,47 @@ mod tests {
                 );
             }};
         }
-        check_calculation!("((12 + 3) * sin(0.5)) / (2 ^ 3)", "0.89892288488288062551241487852919635265338131488862626597865614961037813");
-        check_calculation!("(cos(1) + (7 - (3 + 2))) * ( (10 / 2) + tan(0.25) )", "13.350157200603297892624056197885460276733113344409248718867431711422992");
+        check_calculation!(
+            "((12 + 3) * sin(0.5)) / (2 ^ 3)",
+            "0.89892288488288062551241487852919635265338131488862626597865614961037813"
+        );
+        check_calculation!(
+            "(cos(1) + (7 - (3 + 2))) * ( (10 / 2) + tan(0.25) )",
+            "13.350157200603297892624056197885460276733113344409248718867431711422992"
+        );
         check_calculation!(
             "( ( (25 / 5) + (2 ^ 3) ) * ( (sqrt(9) - 1) + sin(3.14 / 2) ) )",
             "38.99999587811385"
         );
         check_calculation!("(((3.5 + 1.5) * (2.2 - 0.2)) / ( (10 - 8) ^ 2 )) + cos(0)", "3.5", 100);
-        check_calculation!("( (100 - (50 / (5 + 5))) * ( (20 / (2 ^ 2)) + 3 ) ) - tan(1)", "758.4425922753451");
-        check_calculation!("( ( ( (2 + 3) * (4 + 1) ) - ( (9 - 7) * (8 / 2) ) ) ^ 2 ) + sin(2)", "289.9092974268257");
-        check_calculation!("( (ln(e ^ 2)) + (ln(1000) - ln(10)) + cos(2)) / ( (5 + 5) / 2 )", "1.23780466988819");
+        check_calculation!(
+            "( (100 - (50 / (5 + 5))) * ( (20 / (2 ^ 2)) + 3 ) ) - tan(1)",
+            "758.4425922753451"
+        );
+        check_calculation!(
+            "( ( ( (2 + 3) * (4 + 1) ) - ( (9 - 7) * (8 / 2) ) ) ^ 2 ) + sin(2)",
+            "289.9092974268257"
+        );
+        check_calculation!(
+            "( (ln(e ^ 2)) + (ln(1000) - ln(10)) + cos(2)) / ( (5 + 5) / 2 )",
+            "1.23780466988819"
+        );
         check_calculation!("((sin(1) ^ 2) + (cos(1) ^ 2)) * 42", "42", 100);
         check_calculation!("(tan(0.5) + (sin(0.25) * cos(0.75))) / (2 ^ (1/2))", "0.5142965902018098");
-        check_calculation!("((ln(100) + ln(e)) * (sin(3.14159) + cos(3.14159 / 2)))", "0.00002231073359233416412239818251719053988230415986601072682456917655910148");
+        check_calculation!(
+            "((ln(100) + ln(e)) * (sin(3.14159) + cos(3.14159 / 2)))",
+            "0.00002231073359233416412239818251719053988230415986601072682456917655910148"
+        );
+
+        check_calculation!("1/0", "NaN");
+        check_calculation!("0/0", "NaN");
+        check_calculation!("sqrt(-1)", "NaN");
+        check_calculation!("ln(0)", "-Inf");
+        check_calculation!("ln(-10)", "NaN");
+        check_calculation!("0^0", "1");
+        check_calculation!("(1/0) - (1/0)", "NaN");
+        check_calculation!("0.1 + 0.2", "0.3");
+        check_calculation!("(-2)^0.5", "NaN");
+        check_calculation!("5 * - -2", "10");
     }
 }
