@@ -11,9 +11,13 @@ use egui::{
     StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
 };
 use global_shortcuts::register_global_shortcut;
-use library::{FormulaStore, Signature, Symbol, create_default_context, get_fun_name_end_of_string, quick_match, RunResult, FormattingOptions, FormattedCalculationOutput};
+use library::{
+    FormattedCalculationOutput, FormattingOptions, FormulaStore, RunResult, Signature, Symbol,
+    create_default_context, get_fun_name_end_of_string, quick_match,
+};
 use regex::Regex;
 use std::sync::LazyLock;
+use std::thread;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
@@ -321,39 +325,36 @@ impl Window {
 
         self.ui_state.calculation_result = if input.is_empty() {
             None
-        } else  {
+        } else {
             let result = self.formula_store.run(input, true);
-            Some(
-                match result {
-                    RunResult::ParseFailed(s) => Err(format!("Parse Error: {}", s)),
-                    RunResult::CalculationFailed(s) => Err(format!("Calculation Error: {}", s)),
-                    RunResult::FailedToAddSymbol(s) => Err(format!("Error adding symbol: {}", s)),
-                    RunResult::CalculationResult(r) => {
-                        let formatting_options = FormattingOptions::default()
-                            .with_rounding(self.ui_state.output_digits);
-                        let output = r.to_string_detailed(formatting_options);
-                        Ok(match output {
-                            FormattedCalculationOutput::Exact {result,has_rounded } => {
-                                if has_rounded {
-                                    format!("= {} (rounded)", result)
-                                } else {
-                                    format!("= {}", result)
-                                }
+            Some(match result {
+                RunResult::ParseFailed(s) => Err(format!("Parse Error: {}", s)),
+                RunResult::CalculationFailed(s) => Err(format!("Calculation Error: {}", s)),
+                RunResult::FailedToAddSymbol(s) => Err(format!("Error adding symbol: {}", s)),
+                RunResult::CalculationResult(r) => {
+                    let formatting_options =
+                        FormattingOptions::default().with_rounding(self.ui_state.output_digits);
+                    let output = r.to_string_detailed(formatting_options);
+                    Ok(match output {
+                        FormattedCalculationOutput::Exact { result, has_rounded } => {
+                            if has_rounded {
+                                format!("= {} (rounded)", result)
+                            } else {
+                                format!("= {}", result)
                             }
-                            FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
-                                format!("≈ {} ({} bit precision)", result, precision_bits)
-                            }
-                            FormattedCalculationOutput::ApproximationReachedLimit { result } => {
-                                format!("≈ {} (reached precision limit)", result)
-                            }
-                        })
-                    }
-                    RunResult::AddedSymbol(s) => Ok(format!(
-                        "Create new symbol: {}",
-                        s.symbol().get_full_string(s.name(), ctx)
-                    )),
-                }
-            )
+                        },
+                        FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
+                            format!("≈ {} ({} bit precision)", result, precision_bits)
+                        },
+                        FormattedCalculationOutput::ApproximationReachedLimit { result } => {
+                            format!("≈ {} (reached precision limit)", result)
+                        },
+                    })
+                },
+                RunResult::AddedSymbol(s) => {
+                    Ok(format!("Create new symbol: {}", s.symbol().get_full_string(s.name(), ctx)))
+                },
+            })
         }
     }
 
