@@ -103,6 +103,7 @@ impl Window {
     pub fn show_textedit_result(&self, ui: &mut Ui, output: &TextEditOutput) {
         let pos = last_caret_pos_from_output(&output);
         if let Some(Ok(result)) = &self.ui_state.calculation_result {
+            let result = result.split_once('(').map(|b| b.0.trim()).unwrap_or(result);
             ui.painter().text(
                 pos,
                 Align2::LEFT_TOP,
@@ -115,19 +116,27 @@ impl Window {
 
     pub fn show_result_label(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
         // todo only show an error icon and display the error message in a tooltip
-        let mut job = LayoutJob::default();
-        let text = match &self.ui_state.calculation_result {
-            Some(Ok(result)) => result,
-            Some(Err(_)) => "=  !",
-            None => "",
-        };
 
-        let mut format =
-            TextFormat { font_id: FontId::new(20.0, FontFamily::Proportional), ..Default::default() };
+        let mut format = TextFormat { font_id: FontId::proportional(20.0), ..Default::default() };
         if self.ui_state.calculation_result.as_ref().is_some_and(|r| r.is_err()) {
             format.color = Color32::ORANGE.gamma_multiply(0.7);
         }
-        job.append(text, 0.0, format);
+        let mut small_format = TextFormat { font_id: FontId::proportional(15.0), ..Default::default() };
+        small_format.color = small_format.color.gamma_multiply(0.7);
+
+        let mut job = LayoutJob::default();
+        match &self.ui_state.calculation_result {
+            Some(Ok(result)) => {
+                if let Some((first, second)) = result.split_once('(') {
+                    job.append(first, 0.0, format);
+                    job.append("(", 0.0, small_format.clone());
+                    job.append(second, 0.0, small_format);
+                }
+            },
+            Some(Err(_)) => job.append("=  !", 0.0, format),
+            None => {},
+        };
+
         job.wrap = TextWrapping {
             max_width: ui.available_width(),
             max_rows: usize::MAX,
