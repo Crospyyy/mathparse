@@ -131,6 +131,8 @@ impl Window {
                     job.append(first, 0.0, format);
                     job.append("(", 0.0, small_format.clone());
                     job.append(second, 0.0, small_format);
+                } else {
+                    job.append(result, 0.0, format);
                 }
             },
             Some(Err(_)) => job.append("=  !", 0.0, format),
