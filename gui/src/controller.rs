@@ -7,8 +7,8 @@ use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, Response, Shadow, Stroke,
-    StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
+    CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, PointerButton, Response, Shadow,
+    Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -16,6 +16,7 @@ use library::{
     create_default_context, get_fun_name_end_of_string, quick_match,
 };
 use regex::Regex;
+use std::process::exit;
 use std::sync::LazyLock;
 use std::thread;
 
@@ -42,9 +43,16 @@ impl App for Window {
         let frame = egui::containers::Frame::window(&Style::default());
 
         CentralPanel::default().frame(frame).show(ctx, |ui| {
-            let resp = ui.interact(ui.max_rect(), egui::Id::new("window-drag-bg"), egui::Sense::drag());
-            if resp.dragged() {
+            let resp =
+                ui.interact(ui.max_rect(), egui::Id::new("window-drag-bg"), egui::Sense::click_and_drag());
+            if resp.dragged_by(PointerButton::Primary) {
                 ctx.send_viewport_cmd(ViewportCommand::StartDrag);
+            } else {
+                resp.context_menu(|ui| {
+                    if ui.button("Terminate the program").clicked() {
+                        exit(0);
+                    }
+                });
             }
 
             let input = &mut vec![];
