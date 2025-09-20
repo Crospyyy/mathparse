@@ -114,8 +114,8 @@ impl FormulaStore {
     pub(crate) fn expand_formula(
         &self, formula: &mut Element, ignore_names: &HashSet<String>,
     ) -> Result<(), String> {
+        // todo look into how to do this more efficiently
         let mut all_names = HashSet::new();
-
         loop {
             let before = all_names.clone();
             all_names.clear();

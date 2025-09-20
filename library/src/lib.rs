@@ -7,27 +7,22 @@ pub(crate) mod calculation;
 mod evaluation;
 mod expression_values;
 mod optimization;
+mod outer_store_interation;
 mod parsing;
 mod printing;
 mod storing;
 mod testing;
-mod outer_store_interation;
 
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use calculation::create_default_context;
-pub use parsing::get_fun_name_end_of_string;
-pub use parsing::signature::Signature;
-pub use printing::FormattingOptions;
-pub use printing::NumberString;
-pub use printing::FormattedCalculationOutput;
-pub use storing::FormulaStore;
-pub use storing::NamedSymbol;
-pub use storing::Symbol;
 pub use evaluation::DynamicResult;
 pub use outer_store_interation::RunResult;
+pub use parsing::{Signature, get_fun_name_end_of_string};
+pub use printing::{FormattedCalculationOutput, FormattingOptions, NumberString};
+pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {

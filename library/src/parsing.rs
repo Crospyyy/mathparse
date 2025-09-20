@@ -1,4 +1,5 @@
 pub use implementation::get_fun_name_end_of_string;
+pub use signature::Signature;
 
 pub mod implementation {
     use crate::{Benchmark, Element, Number, benchmark};
