@@ -1,14 +1,15 @@
 use crate::logic::UiStateInfo;
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState};
-use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
+use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
 use eframe::epaint::{FontFamily, FontId};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, PointerButton, Response, Shadow,
-    Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand, Visuals, Widget,
+    AtomExt, Button, CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, PointerButton,
+    Response, RichText, Shadow, Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand,
+    Visuals, Widget, WidgetText,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -49,8 +50,23 @@ impl App for Window {
                 ctx.send_viewport_cmd(ViewportCommand::StartDrag);
             } else {
                 resp.context_menu(|ui| {
-                    if ui.button("Terminate the program").clicked() {
+                    let mut extended_button =
+                        |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
+
+                    if extended_button("❌ Quit").clicked() {
                         exit(0);
+                    }
+                    if extended_button(if self.window_state.pinned {
+                        "⏷ Unpin the window"
+                    } else {
+                        "📌 Pin the window"
+                    })
+                    .clicked()
+                    {
+                        self.window_state.pinned ^= true;
+                        if !self.window_state.pinned {
+                            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+                        }
                     }
                 });
             }
@@ -199,7 +215,7 @@ impl Window {
             *pressed_shortcut = true;
         }
         let has_focus = ctx.input(|ip| ip.raw.focused);
-        if self.window_state.last_frame_had_focus && !has_focus {
+        if !self.window_state.pinned && self.window_state.last_frame_had_focus && !has_focus {
             ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
         }
         self.window_state.last_frame_had_focus = has_focus;

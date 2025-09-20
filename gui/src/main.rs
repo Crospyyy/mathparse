@@ -32,11 +32,12 @@ struct WindowState {
     request_focus: Arc<AtomicBool>,
     last_frame_had_focus: bool,
     centered: bool,
+    pinned:bool,
 }
 
 impl WindowState {
     fn new() -> Self {
-        Self { request_focus: Arc::new(AtomicBool::new(false)), last_frame_had_focus: false, centered: false }
+        Self { request_focus: Arc::new(AtomicBool::new(false)), last_frame_had_focus: false, centered: false, pinned: false }
     }
 }
 
