@@ -53,9 +53,6 @@ impl App for Window {
                     let mut extended_button =
                         |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
 
-                    if extended_button("❌ Quit").clicked() {
-                        exit(0);
-                    }
                     if extended_button(if self.window_state.pinned {
                         "⏷ Unpin the window"
                     } else {
@@ -67,6 +64,10 @@ impl App for Window {
                         if !self.window_state.pinned {
                             ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
                         }
+                    }
+
+                    if extended_button("❌ Quit").clicked() {
+                        exit(0);
                     }
                 });
             }
