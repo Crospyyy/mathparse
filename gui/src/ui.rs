@@ -64,7 +64,7 @@ impl Display for Page {
 impl UiState {
     pub(super) fn new() -> Self {
         Self {
-            top_user_input: "".to_string(),
+            top_user_input: "".to_owned(),
             top_user_input_id: "Formula Input".into(),
             calculation_result: None,
             output_digits: FormattingOptions::default().round_to_decimals,
@@ -108,7 +108,7 @@ impl Window {
             ui.painter().text(
                 pos,
                 Align2::LEFT_TOP,
-                " ".to_string() + &result,
+                " ".to_owned() + &result,
                 FontId::new(20.0, FontFamily::Proportional),
                 ui.visuals().text_color(),
             );

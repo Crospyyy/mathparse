@@ -60,7 +60,7 @@ pub mod implementation {
                 "convert_to_variables_where_possible"
             );
             if formula.anything_unparsed() {
-                Err("Parts of the formula could not be parsed".to_string())
+                Err("Parts of the formula could not be parsed".to_owned())
             } else {
                 Ok(formula)
             }
@@ -284,7 +284,7 @@ pub mod implementation {
         fn invert(&mut self) {
             *self = Element::Pow(
                 Box::new(self.clone()),
-                Box::new(Element::Negate(Box::new(Element::String("1".to_string())))),
+                Box::new(Element::Negate(Box::new(Element::String("1".to_owned())))),
             );
         }
 
@@ -993,13 +993,13 @@ pub mod signature {
                             fn_args.names.push(name.clone());
                             fn_args.signatures.insert(name.clone(), Signature::NumberOrFunction);
                         } else {
-                            return Err("Invalid argument in function signature".to_string());
+                            return Err("Invalid argument in function signature".to_owned());
                         }
                     }
                     function_args = Some(fn_args)
                 },
                 _ => {
-                    return Err("Invalid formula signature provided".to_string());
+                    return Err("Invalid formula signature provided".to_owned());
                 },
             }
             Ok(Self {
@@ -1188,7 +1188,7 @@ pub mod testing {
         }
 
         let output = if brackets.anything_unparsed() {
-            Err("Parts of the formula could not be parsed".to_string())
+            Err("Parts of the formula could not be parsed".to_owned())
         } else {
             Ok(brackets)
         };
@@ -1264,7 +1264,7 @@ pub mod testing {
                     println!("Failed to parse: {}", formula);
                     debug_formula_parsing_process(
                         &formula.to_string(),
-                        Some(Element::String("Something".to_string())),
+                        Some(Element::String("Something".to_owned())),
                     )
                 }
             }

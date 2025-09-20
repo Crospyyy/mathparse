@@ -212,8 +212,7 @@ impl Window {
                 .events
                 .iter()
                 .flat_map(|e| quick_match!(e, Event::Text(t)=>t))
-                .filter(text_bracket_check)
-                .next()
+                .find(text_bracket_check)
                 .cloned()
             {
                 ip.consume_key(Modifiers::NONE, Key::OpenBracket);

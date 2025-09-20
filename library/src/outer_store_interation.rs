@@ -6,7 +6,7 @@ impl FormulaStore {
         let input = input.to_string();
         if let Some((symbol, definition)) = input.split_once("=") {
             if symbol.contains('=') || definition.contains('=') {
-                return RunResult::ParseFailed("Only one '=' is allowed in a formula".to_string());
+                return RunResult::ParseFailed("Only one '=' is allowed in a formula".to_owned());
             }
             match self.add_symbol_from_string(&input, dry_run) {
                 Ok(symbol) => RunResult::AddedSymbol(symbol),

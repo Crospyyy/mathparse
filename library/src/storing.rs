@@ -59,10 +59,10 @@ impl Symbol {
             Signature::NumberOrFunction => name.to_string(),
             Signature::Number => name.to_string(),
             Signature::Function(_) => {
-                format!("{}({})", name, self.params.as_ref().map_or("".to_string(), |p| p.join(", ")))
+                format!("{}({})", name, self.params.as_ref().map_or("".to_owned(), |p| p.join(", ")))
             },
             Signature::FunctionNOrMoreParams(n) => format!("{}({}..)", name, n),
-            Signature::Conflicting => "Conflicting".to_string(),
+            Signature::Conflicting => "Conflicting".to_owned(),
         }
     }
 
@@ -557,7 +557,7 @@ mod tests {
         store.add_symbol_from_string("fun2(x,y)=fun(add, x, y)", false).unwrap();
         let insert = store.get_insertion_element_expanded("fun2", &HashSet::new()).unwrap();
         assert_eq!(insert.name, "fun2");
-        assert_eq!(insert.parameters, Some(vec!["x".to_string(), "y".to_string()]));
+        assert_eq!(insert.parameters, Some(vec!["x".to_owned(), "y".to_owned()]));
         assert_eq!(insert.formula, plus([var("x"), var("y")]));
         dbg!(insert);
     }

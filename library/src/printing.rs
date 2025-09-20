@@ -344,7 +344,7 @@ impl ScientificNumber {
         let (rounded, _has_rounded) =
             ScientificNumber::round_decimals_vec(round_to_decimals, &mut modified_exponent, &self.base);
         if rounded.is_empty() {
-            return "0".to_string();
+            return "0".to_owned();
         }
         if Self::should_print_scientific(&rounded, modified_exponent, options) {
             Self::create_scientific_string(&rounded, modified_exponent, self.negative)
