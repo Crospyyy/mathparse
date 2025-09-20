@@ -21,19 +21,6 @@ macro_rules! quick_match {
     };
 }
 
-fn flatten_list<T: Clone>(list: &mut Vec<T>, flatten_fn: fn(&mut T) -> Option<&mut Vec<T>>) {
-    let mut new_list = vec![];
-    for e in list.iter_mut() {
-        if let Some(inner) = flatten_fn(e) {
-            flatten_list(inner, flatten_fn);
-            new_list.append(inner);
-        } else {
-            new_list.push(e.clone());
-        }
-    }
-    *list = new_list;
-}
-
 fn remove_inverse_elements(elements: &mut Vec<Element>, inverse_check: impl Fn(&Element, &Element) -> bool) {
     if elements.len() >= 2 {
         let mut to_remove = vec![false; elements.len()];
