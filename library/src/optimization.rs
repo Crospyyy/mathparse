@@ -75,150 +75,6 @@ impl Element {
         }
     }
 
-    pub(crate) fn optimize_new(&mut self) {
-        self.run_on_children(&mut |child| {
-            child.optimize_new();
-            false
-        });
-        match self {
-            Element::Plus(elements) => {
-                if elements.iter().any(|e| formula_matches!(e, plus)) {
-                    flatten_list(elements, |e| quick_match!(e, Element::Plus(inner) => inner))
-                }
-                if let Some(e) = elements.iter().find(|e| e.is_nan()) {
-                    *self = e.clone();
-                    return;
-                }
-                elements.retain(|e| !formula_matches!(e, num(0)));
-
-                let inverse_check = |a: &Element, b: &Element| {
-                    formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
-                };
-
-                remove_inverse_elements(elements, inverse_check);
-
-                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 0) {
-                    *self = replacement
-                }
-            },
-            Element::Multiply(elements) => {
-                let mut outer_neg = false;
-                for e in elements.iter_mut() {
-                    if let Element::Negate(inner) = e {
-                        outer_neg ^= true;
-                        *e = mem::replace(inner, Element::Number(Number::nan(None)));
-                    }
-                }
-                if elements.iter().any(|e| formula_matches!(e, mul)) {
-                    flatten_list(elements, |e| quick_match!(e, Element::Multiply(inner) => inner))
-                }
-
-                if let Some(e) = elements.iter().find(|e| e.is_nan()) {
-                    *self = e.clone();
-                    return;
-                }
-                if elements.iter().any(|e| formula_matches!(e, num(0))) {
-                    *self = formula!(num(0));
-                    return;
-                }
-                elements.retain(|e| !formula_matches!(e, num(1)));
-
-                if elements.len() >= 2 {
-                    let mut to_remove = vec![false; elements.len()];
-                    'outer: for i in 0..elements.len() - 1 {
-                        for j in i + 1..elements.len() {
-                            if to_remove[j] {
-                                continue;
-                            }
-                            if formula_matches!(elements[i], pow({ &elements[j] }, neg(num(1))))
-                                || formula_matches!(elements[j], pow({ &elements[i] }, neg(num(1))))
-                            {
-                                to_remove[i] = true;
-                                to_remove[j] = true;
-                                continue 'outer;
-                            }
-                        }
-                    }
-                    for (i, _) in to_remove.iter().copied().enumerate().filter(|x| x.1).rev() {
-                        elements.remove(i);
-                    }
-                }
-
-                if let Some(replacement) = Self::handle_empty_or_one_element(elements, 1) {
-                    *self = if outer_neg { formula!(neg(replacement)) } else { replacement }
-                }
-            },
-            Element::Negate(n) => {
-                if let Element::Negate(e) = n.as_ref() {
-                    *self = e.as_ref().clone();
-                    return;
-                }
-            },
-            Element::Pow(base, exp) => {
-                if let Some(num) = formula_matches!(base.as_ref(), num(x)) {
-                    if num == 1 {
-                        *self = formula!(num(num.clone()));
-                    }
-                    return;
-                }
-                if let Some(x) = formula_matches!(exp.as_ref(), num(x)) {
-                    if x == 1 {
-                        *self = base.as_ref().clone();
-                        return;
-                    }
-                    if x == 0 {
-                        *self = formula!(num(1));
-                        return;
-                    }
-                }
-                if let Some(elements) = quick_match!(base.as_mut(), Element::Multiply(inner) => inner) {
-                    for element in elements.iter_mut() {
-                        let exp = exp.as_ref().clone();
-                        *element = formula!(pow(element, exp))
-                    }
-                    *self = Element::Multiply(elements.clone());
-                    self.optimize_new();
-                    return;
-                }
-                // if let Some((inner_base, inner_exp)) = formula_matches!(base.as_ref(), pow(x, x)) {
-                //     let exp_ref = exp.as_ref();
-                //     *self = formula!(pow(inner_base, mul(inner_exp, exp_ref)));
-                //     self.optimize_new();
-                // }
-            },
-            Element::FunctionWithExpression { arguments, expr_value } => match expr_value {
-                ExpressionFunType::Floor | ExpressionFunType::Round => {
-                    if arguments.len() == 1
-                        && formula_matches!(arguments[0], num(x)).is_some_and(|n| n.is_integer())
-                    {
-                        *self = arguments[0].clone();
-                        return;
-                    }
-                },
-                ExpressionFunType::Sin => {
-                    if arguments.len() == 1 {
-                        let arg = &arguments[0];
-                        let divided = mul([arg.clone(), inv(num_expr(ExpressionNumType::Pi))]);
-                        let mut rem = fun_expr(ExpressionFunType::Rem, [divided.clone(), num(2)]);
-                        rem.optimize_new();
-                        let corrected =
-                            fun_expr(ExpressionFunType::SinWithRadians, [mul([rem.clone(), num(2)])]);
-                        *self = corrected;
-                        return;
-                    }
-                },
-                _ => {},
-            },
-            Element::Function { .. }
-            | Element::Variable(_)
-            | Element::VariableOrFunction(_)
-            | Element::NumberWithExpression { .. }
-            | Element::Number(_)
-            | Element::Brackets(_)
-            | Element::String(_) => {},
-        }
-    }
-
     fn handle_empty_or_one_element(elements: &Vec<Element>, neutral_element: u16) -> Option<Element> {
         if elements.is_empty() {
             Some(formula!(num(neutral_element as i32)))
@@ -554,13 +410,13 @@ mod tests {
         // Plus propagiert NaN
         let nan_el = Element::Number(Number::nan(None));
         let mut f = formula!(plus(var("x"), nan_el, var("y")));
-        f.optimize_new();
+        f.optimize_and_reduce();
         assert!(f.is_nan());
 
         // Multiply propagiert NaN
         let nan_el2 = Element::Number(Number::nan(None));
         let mut f = mul([var("x"), nan_el2.clone(), var("y")]);
-        f.optimize_new();
+        f.optimize_and_reduce();
         assert!(f.is_nan());
 
         // Multiply mit 0 ergibt 0
@@ -605,7 +461,7 @@ mod tests {
             plus(num(0), var("b")),
             mul(var("c"), mul(var("d"), num(0)))
         ));
-        f.optimize_new();
+        f.optimize_and_reduce();
         assert_eq!(f, formula!(plus(var("a"), var("b"))));
 
         // x^0 + y*1 => 1 + y
