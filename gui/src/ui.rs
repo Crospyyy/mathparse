@@ -137,7 +137,7 @@ impl Window {
                 }
             },
             Some(Err(_)) => job.append("=  !", 0.0, format),
-            None => {},
+            None => job.append("", 0.0, format),
         };
 
         job.wrap = TextWrapping {
@@ -147,7 +147,6 @@ impl Window {
             overflow_character: None,
         };
         let error_string = self.ui_state.calculation_result.as_ref().and_then(|r| r.as_ref().err());
-
         Sides::new().show(
             ui,
             |ui| {
