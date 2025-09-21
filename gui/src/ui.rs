@@ -34,15 +34,24 @@ pub struct HistoryEntry {
 pub enum HistoryEntryContent {
     Calculation(String, String),
     SymbolDefinition(String),
+    ClearedSymbols,
 }
 
 impl HistoryEntry {
-    pub fn new_calculation(input: String, result: String, time: String) -> Self {
-        Self { content: Calculation(input, result), time }
+    pub fn new_calculation(input: String, result: String) -> Self {
+        Self { content: Calculation(input, result), time: Self::get_current_time() }
     }
 
-    pub fn new_symbol_definition(string: String, time: String) -> Self {
-        Self { content: SymbolDefinition(string), time }
+    pub fn new_symbol_definition(string: String) -> Self {
+        Self { content: SymbolDefinition(string), time: Self::get_current_time() }
+    }
+
+    pub fn cleared_symbols() -> Self {
+        Self { content: HistoryEntryContent::ClearedSymbols, time: Self::get_current_time() }
+    }
+
+    fn get_current_time() -> String {
+        chrono::Local::now().format("%H:%M").to_string()
     }
 }
 
@@ -211,10 +220,24 @@ impl Window {
     }
 
     pub fn show_tab_selector(&self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
-        ui.horizontal(|ui| {
-            self.add_selectable_label(ui, input, Page::History, "Show calculation history");
-            self.add_selectable_label(ui, input, Page::DefinedSymbols, "Show defined symbols");
-        });
+        let x = Sides::default().show(
+            ui,
+            |ui| {
+                self.add_selectable_label(ui, input, Page::History, "Show calculation history");
+                self.add_selectable_label(ui, input, Page::DefinedSymbols, "Show defined symbols");
+            },
+            |ui| match self.ui_state.selected_page {
+                Page::History => (ui.button("Clear Symbols").clicked(), ui.button("Clear History").clicked()),
+                Page::DefinedSymbols => (false, false),
+            },
+        );
+        // todo change input to channels or something similar
+        if x.1.0 {
+            input.push(UiStateInfo::ClearCustomSymbols)
+        }
+        if x.1.1 { 
+            input.push(UiStateInfo::ClearHistory)
+        }
     }
 
     fn add_selectable_label(&self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, page: Page, description: &str) {
@@ -255,6 +278,9 @@ impl Window {
                             },
                             SymbolDefinition(text) => {
                                 ui.label(RichText::new(text).size(17.0));
+                            },
+                            HistoryEntryContent::ClearedSymbols => {
+                                ui.label(RichText::new("🗑 Cleared Symbols").size(17.0));
                             },
                         },
                         |ui| {

@@ -7,4 +7,6 @@ pub enum UiStateInfo {
     RoundingAccuracyChanged,
     RequestAutocompletion { cursor_pos: usize, input_term: String, complete_to: String, response: Response },
     SelectPage(Page),
+    ClearCustomSymbols,
+    ClearHistory,
 }

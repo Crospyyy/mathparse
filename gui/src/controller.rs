@@ -170,6 +170,25 @@ impl Window {
                 UiStateInfo::SelectPage(page) => {
                     self.ui_state.selected_page = page;
                 },
+                UiStateInfo::ClearCustomSymbols => { // todo keep track of custom symbols
+                    let mut return_now = false;
+                    for e in self.ui_state.history.iter().rev() {
+                        match e.content {
+                            HistoryEntryContent::SymbolDefinition(_) => break,
+                            HistoryEntryContent::ClearedSymbols => return_now = true,
+                            _ => {},
+                        }
+                    }
+                    if return_now {
+                        continue;
+                    }
+                    self.formula_store = FormulaStore::new_empty();
+                    self.formula_store.define_default_symbols().unwrap();
+                    self.ui_state.history.push(HistoryEntry::cleared_symbols());
+                },
+                UiStateInfo::ClearHistory => {
+                    self.ui_state.history.clear();
+                },
             }
         }
     }
@@ -412,20 +431,18 @@ impl Window {
                 {
                     return;
                 }
-                self.ui_state.history.push(HistoryEntry::new_calculation(
-                    self.ui_state.top_user_input.clone(),
-                    result.clone(),
-                    chrono::Local::now().format("%H:%M").to_string(),
-                ))
+                self.ui_state
+                    .history
+                    .push(HistoryEntry::new_calculation(self.ui_state.top_user_input.clone(), result.clone()))
             }
             return;
         }
         let result = self.formula_store.add_symbol_from_string(&input, false);
         if let Ok(r) = result {
-            self.ui_state.history.push(HistoryEntry::new_symbol_definition(
-                format!("⛃ {}", r.symbol().get_full_string(r.name(), &mut create_default_context())),
-                chrono::Local::now().format("%H:%M").to_string(),
-            ));
+            self.ui_state.history.push(HistoryEntry::new_symbol_definition(format!(
+                "⛃ {}",
+                r.symbol().get_full_string(r.name(), &mut create_default_context())
+            )));
             self.ui_state.top_user_input.clear();
             self.update_calculation_result();
             self.update_all_symbol_strings();
