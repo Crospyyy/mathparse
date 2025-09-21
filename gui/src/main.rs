@@ -8,12 +8,13 @@ use std::sync::atomic::AtomicBool;
 
 pub fn main() {
     use eframe::NativeOptions;
-    let mut viewport =
-        ViewportBuilder::default().with_decorations(false).with_transparent(true);
+    let viewport = ViewportBuilder::default()
+        .with_decorations(false)
+        .with_transparent(true)
+        .with_taskbar(cfg!(debug_assertions));
     #[cfg(not(debug_assertions))]
     let viewport = viewport.with_always_on_top();
 
-    viewport = viewport.with_taskbar(cfg!(debug_assertions));
     eframe::run_native(
         "Quick Mafs",
         NativeOptions { viewport, ..Default::default() },

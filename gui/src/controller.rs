@@ -7,9 +7,9 @@ use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    AtomExt, Button, CentralPanel, Color32, Context, DragValue, Event, Key, Label, Modifiers, PointerButton,
-    Response, RichText, Shadow, Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, ViewportCommand,
-    Visuals, Widget, WidgetText,
+    AtomExt, Button, CentralPanel, Color32, Context, DragValue, Event, Key, KeyboardShortcut, Label,
+    Modifiers, PointerButton, RawInput, Response, RichText, Shadow, Stroke, StrokeKind, Style, TextBuffer,
+    TextEdit, Ui, ViewportCommand, Visuals, Widget, WidgetText,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -51,25 +51,7 @@ impl App for Window {
                 ctx.send_viewport_cmd(ViewportCommand::StartDrag);
             } else {
                 resp.context_menu(|ui| {
-                    let mut extended_button =
-                        |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
-
-                    if extended_button(if self.window_state.pinned {
-                        "⏷ Unpin the window"
-                    } else {
-                        "📌 Pin the window"
-                    })
-                    .clicked()
-                    {
-                        self.window_state.pinned ^= true;
-                        if !self.window_state.pinned {
-                            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-                        }
-                    }
-
-                    if extended_button("❌ Quit").clicked() {
-                        exit(0);
-                    }
+                    self.show_background_context_menu(ctx, ui);
                 });
             }
 
@@ -86,6 +68,30 @@ impl App for Window {
 
     fn clear_color(&self, _visuals: &Visuals) -> [f32; 4] {
         egui::Rgba::TRANSPARENT.to_array()
+    }
+
+    fn raw_input_hook(&mut self, ctx: &Context, raw_input: &mut RawInput) {
+        let is_focussed = ctx.memory(|m| m.focused().is_none());
+        let pressed_escape = raw_input
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
+        if is_focussed && pressed_escape {
+            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+        }
+
+        // match alt + space
+        if raw_input.modifiers.alt // todo find a way to prevent the windows window menu from opening
+            && raw_input
+            .events
+            .iter()
+            .any(|x| matches!(x, Event::Key { key: Key::Space, pressed: true, repeat: false, .. }))
+        {
+            raw_input.events.retain(|e| {
+                !matches!(e, Event::Key { key: Key::Space, .. }) && !matches!(e, Event::Text(t) if t == " ")
+            });
+            self.request_top_input_focus(ctx);
+        }
     }
 }
 
@@ -170,7 +176,8 @@ impl Window {
                 UiStateInfo::SelectPage(page) => {
                     self.ui_state.selected_page = page;
                 },
-                UiStateInfo::ClearCustomSymbols => { // todo keep track of custom symbols
+                UiStateInfo::ClearCustomSymbols => {
+                    // todo keep track of custom symbols
                     let mut return_now = false;
                     for e in self.ui_state.history.iter().rev() {
                         match e.content {
@@ -240,7 +247,7 @@ impl Window {
         let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
         if requested_focus {
             self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
-            ctx.memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
+            self.request_top_input_focus(ctx);
             *pressed_shortcut = true;
         }
         let has_focus = ctx.input(|ip| ip.raw.focused);
@@ -252,6 +259,10 @@ impl Window {
         if !self.window_state.centered {
             self.window_state.centered = try_center_window(ctx);
         }
+    }
+
+    fn request_top_input_focus(&mut self, ctx: &Context) {
+        ctx.memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
     }
 
     pub(super) fn preprocess_user_input(&mut self, ui: &mut Ui) {
@@ -479,6 +490,27 @@ impl Window {
             possible_symbols: compatible_symbols,
             longest_common_start,
         })
+    }
+
+    fn show_background_context_menu(&mut self, ctx: &Context, ui: &mut Ui) {
+        let mut extended_button = |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
+
+        if extended_button(if self.window_state.pinned {
+            "⏷ Unpin the window"
+        } else {
+            "📌 Pin the window"
+        })
+        .clicked()
+        {
+            self.window_state.pinned ^= true;
+            if !self.window_state.pinned {
+                ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+            }
+        }
+
+        if extended_button("❌ Quit").clicked() {
+            exit(0);
+        }
     }
 }
 
