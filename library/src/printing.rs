@@ -1,8 +1,8 @@
 use crate::calculation::create_context;
 use crate::evaluation::DynamicResult;
-use crate::expression_values::{ExpressionFunType, FunctionExpression};
+use crate::expression_values::ExpressionFunType;
 use crate::parsing::signature::ParamCount;
-use crate::{Element, ExpressionNumType, Number};
+use crate::{Element, ExpressionNumType, Number, create_default_context};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Radix};
 use colored::Colorize;
@@ -11,7 +11,107 @@ use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::Ordering;
 use std::fmt::{Display, Formatter};
-use std::iter::once;
+
+pub enum Formula {
+    Plus(Vec<Formula>),
+    Multiply(Vec<Formula>),
+    Negate(Box<Formula>),
+    Number(String),
+    Variable(String),
+    Pow(Box<Formula>, Box<Formula>),
+    Division(Box<Formula>, Box<Formula>),
+    Function { name: String, arguments: Vec<Formula> },
+    ForcedBrackets(Vec<Self>),
+}
+
+#[derive(Debug, PartialEq)]
+pub(super) struct ScientificNumber {
+    negative: bool,
+    /// Can be empty, in which case the number is 0
+    base: Vec<u8>,
+    exponent: i64,
+}
+
+/// Options for formatting numbers to strings
+/// * `round_to_decimals`: Number of significant digits to round to
+/// * `non_scientific_decimals`: Maximum exponent (positive or negative) to print in non-scientific format
+/// * `thousands_separator`: Whether to include thousand separators in non-scientific format
+/// ### Examples:
+/// - 1234567.89 with thousands_separator = true -> "1,234,567.89"
+/// - 1.2345 with round_to_decimals = 3 -> "1.23"
+/// - 1.2345 with round_to_decimals = 1 or 0 -> "1"
+#[derive(Debug, Clone, Copy)]
+pub struct FormattingOptions {
+    pub round_to_decimals: usize,
+    pub non_scientific_decimals: usize,
+    pub thousands_separator: bool,
+}
+
+pub enum FormattedCalculationOutput {
+    Exact { result: String, has_rounded: bool },
+    ApproximationChecked { result: String, precision_bits: u32 },
+    ApproximationReachedLimit { result: String },
+}
+
+impl Formula {
+    fn get_priority(&self) -> usize {
+        match self {
+            Formula::Plus(_) => 0,
+            Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
+            Formula::Pow(..) => 2,
+            Formula::Number(_)
+            | Formula::Variable(_)
+            | Formula::Function { .. }
+            | Formula::ForcedBrackets(_) => 3,
+        }
+    }
+
+    fn from_element(
+        element: &Element, formatting_options: FormattingOptions, mark_unparsed_red: bool, ctx: &mut Context,
+    ) -> Self {
+        macro_rules! create_formula {
+            ($element:expr) => {
+                Self::from_element($element, formatting_options, mark_unparsed_red, ctx)
+            };
+        }
+
+        match element {
+            Element::Plus(elements) => {
+                let elements = elements.iter().map(|e| create_formula!(e)).collect();
+                Formula::Plus(elements)
+            },
+            Element::Multiply(elements) => {
+                let elements = elements.iter().map(|e| create_formula!(e)).collect();
+                Formula::Multiply(elements)
+            },
+            Element::Negate(e) => Formula::Negate(Box::new(create_formula!(e))),
+            Element::Number(num) => Formula::Number(num.to_string_reuse_context(formatting_options, ctx)),
+            Element::Variable(name) => Formula::Variable(name.clone()),
+            Element::VariableOrFunction(name) => Formula::Variable(name.clone()),
+            Element::Pow(base, exponent) => {
+                Formula::Pow(Box::new(create_formula!(base)), Box::new(create_formula!(exponent)))
+            },
+            Element::Function { name, arguments } => Formula::Function {
+                name: name.clone(),
+                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
+            },
+
+            Element::Brackets(elements) => {
+                Formula::ForcedBrackets(elements.iter().map(|e| create_formula!(e)).collect())
+            },
+            Element::String(s) => {
+                Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
+            },
+            Element::FunctionWithExpression { arguments, expr_value: debug_name, .. } => Formula::Function {
+                name: format!("fun_expr:{debug_name}"),
+                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
+            },
+            Element::NumberWithExpression { expr_value: debug_name, .. } => {
+                Formula::Variable(format!("num_expr:{debug_name}",))
+            },
+        }
+    }
+}
 
 impl Element {
     pub fn get_string(&self, ctx: &mut Context) -> String {
@@ -62,222 +162,25 @@ impl Element {
     }
 }
 
-pub enum Formula {
-    Plus(Vec<Formula>),
-    Multiply(Vec<Formula>),
-    Negate(Box<Formula>),
-    Number(String),
-    Variable(String),
-    Pow(Box<Formula>, Box<Formula>),
-    Division(Box<Formula>, Box<Formula>),
-    Function { name: String, arguments: Vec<Formula> },
-    ForcedBrackets(Vec<Self>),
-}
-
-impl Formula {
-    fn get_priority(&self) -> usize {
-        match self {
-            Formula::Plus(_) => 0,
-            Formula::Multiply(_) | Formula::Division(..) | Formula::Negate(_) => 1,
-            Formula::Pow(..) => 2,
-            Formula::Number(_)
-            | Formula::Variable(_)
-            | Formula::Function { .. }
-            | Formula::ForcedBrackets(_) => 3,
-        }
-    }
-
-    fn from_element(
-        element: &Element, formatting_options: FormattingOptions, mark_unparsed_red: bool, ctx: &mut Context,
-    ) -> Self {
-        macro_rules! create_formula {
-            ($element:expr) => {
-                Self::from_element($element, formatting_options, mark_unparsed_red, ctx)
-            };
-        }
-
-        match element {
-            Element::Plus(elements) => {
-                let elements = elements.iter().map(|e| create_formula!(e)).collect();
-                Formula::Plus(elements)
-            },
-            Element::Multiply(elements) => {
-                let elements = elements.iter().map(|e| create_formula!(e)).collect();
-                Formula::Multiply(elements)
-            },
-            Element::Negate(e) => Formula::Negate(Box::new(create_formula!(e))),
-            Element::Number(num) => Formula::Number(num.to_string(formatting_options, ctx)),
-            Element::Variable(name) => Formula::Variable(name.clone()),
-            Element::VariableOrFunction(name) => Formula::Variable(name.clone()),
-            Element::Pow(base, exponent) => {
-                Formula::Pow(Box::new(create_formula!(base)), Box::new(create_formula!(exponent)))
-            },
-            Element::Function { name, arguments } => Formula::Function {
-                name: name.clone(),
-                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
-            },
-
-            Element::Brackets(elements) => {
-                Formula::ForcedBrackets(elements.iter().map(|e| create_formula!(e)).collect())
-            },
-            Element::String(s) => {
-                Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
-            },
-            Element::FunctionWithExpression { arguments, expr_value: debug_name, .. } => Formula::Function {
-                name: format!("fun_expr:{debug_name}"),
-                arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
-            },
-            Element::NumberWithExpression { expr_value: debug_name, .. } => {
-                Formula::Variable(format!("num_expr:{debug_name}",))
-            },
-        }
-    }
-}
-
-impl Display for Formula {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Formula::Plus(elements) => {
-                write!(f, "{}", elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + "))
-            },
-            Formula::Multiply(elements) => {
-                let string = elements
-                    .iter()
-                    .map(|e| {
-                        if e.get_priority() < self.get_priority() {
-                            format!("({})", e)
-                        } else {
-                            e.to_string()
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" * ");
-                write!(f, "{}", string)
-            },
-            Formula::Negate(e) => {
-                if matches!(e.as_ref(), Formula::Plus(..) | Formula::Multiply(..)) {
-                    write!(f, "-({})", e)
-                } else {
-                    write!(f, "-{}", e)
-                }
-            },
-            Formula::Number(n) | Formula::Variable(n) => write!(f, "{}", n),
-            Formula::Pow(base, exponent) => {
-                if base.get_priority() <= self.get_priority() {
-                    write!(f, "({})^", base)?;
-                } else {
-                    write!(f, "{}^", base)?;
-                }
-                if exponent.get_priority() < self.get_priority()
-                    && !matches!(exponent.as_ref(), Formula::Negate(_))
-                {
-                    write!(f, "({})", exponent)
-                } else {
-                    write!(f, "{}", exponent)
-                }
-            },
-            Formula::Division(numerator, denominator) => {
-                if numerator.get_priority() < self.get_priority() {
-                    write!(f, "({})/", numerator)?;
-                } else {
-                    write!(f, "{}/", numerator)?;
-                }
-                if denominator.get_priority() <= self.get_priority() {
-                    write!(f, "({})", denominator)
-                } else {
-                    write!(f, "{}", denominator)
-                }
-            },
-            Formula::Function { name, arguments } => {
-                write!(
-                    f,
-                    "{}({})",
-                    name,
-                    arguments.iter().map(|a| format!("{}", a)).collect::<Vec<_>>().join(", ")
-                )
-            },
-            Formula::ForcedBrackets(elements) => {
-                write!(
-                    f,
-                    "({})",
-                    elements.iter().map(Self::to_string).reduce(|a, b| a + &b).unwrap_or_default()
-                )
-            },
-        }
-    }
-}
-
-fn camel_to_snake_case(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + s.len() / 4);
-    for (i, c) in s.chars().enumerate() {
-        if c.is_ascii_uppercase() {
-            if i > 0 {
-                out.push('_');
-            }
-            out.push(c.to_ascii_lowercase());
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-impl Display for ExpressionFunType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ExpressionFunType::AssertValueRange(r) => f.write_str(&format!("check_{:?}", r).to_lowercase()),
-            ExpressionFunType::Custom(c) => f.write_str(&format!("custom_{}", c.name)),
-            _ => f.write_str(&camel_to_snake_case(&format!("{:?}", self))),
-        }
-    }
-}
-
-impl Display for ExpressionNumType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            ExpressionNumType::Pi => "pi",
-            ExpressionNumType::E => "e",
-        })
-    }
-}
-
-pub enum NumberString {
-    Imprecise(String),
-    Precise { string: String, is_rounded: bool },
-}
-
 impl Number {
-    pub fn to_string(&self, formatting_options: FormattingOptions, ctx: &mut Context) -> String {
-        let float = self.get_float(ctx);
-        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
-            scientific.to_string(formatting_options)
-        } else {
-            float.to_string()
-        }
-    }
-
-    pub fn to_string_detailed(
+    pub fn to_string_reuse_context(
         &self, formatting_options: FormattingOptions, ctx: &mut Context,
-    ) -> NumberString {
-        if let Some(num_rational) = self.get_exact_rational() {
-            let (string, is_rounded) = rational_to_string(&num_rational, formatting_options);
-            return NumberString::Precise { string, is_rounded };
-        }
-        let float = self.get_float(ctx);
-        if let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) {
-            NumberString::Imprecise(scientific.to_string(formatting_options))
+    ) -> String {
+        (if let Some(num_rational) = self.get_exact_rational() {
+            rational_to_string(&num_rational, formatting_options).0
         } else {
-            NumberString::Imprecise(float.to_string())
-        }
+            let float = self.get_float(ctx);
+            let Some(scientific) = ScientificNumber::from_big_float(&float, ctx) else {
+                return float.to_string();
+            };
+            scientific.to_string(formatting_options)
+        })
+            .to_string()
     }
-}
 
-#[derive(Debug, PartialEq)]
-pub(super) struct ScientificNumber {
-    negative: bool,
-    /// Can be empty, in which case the number is 0
-    base: Vec<u8>,
-    exponent: i64,
+    pub fn to_string(&self, formatting_options: FormattingOptions) -> String {
+        self.to_string_reuse_context(formatting_options, &mut create_default_context())
+    }
 }
 
 impl ScientificNumber {
@@ -460,27 +363,6 @@ impl ScientificNumber {
     }
 }
 
-/// Options for formatting numbers to strings
-/// * `round_to_decimals`: Number of significant digits to round to
-/// * `non_scientific_decimals`: Maximum exponent (positive or negative) to print in non-scientific format
-/// * `thousands_separator`: Whether to include thousand separators in non-scientific format
-/// ### Examples:
-/// - 1234567.89 with thousands_separator = true -> "1,234,567.89"
-/// - 1.2345 with round_to_decimals = 3 -> "1.23"
-/// - 1.2345 with round_to_decimals = 1 or 0 -> "1"
-#[derive(Debug, Clone, Copy)]
-pub struct FormattingOptions {
-    pub round_to_decimals: usize,
-    pub non_scientific_decimals: usize,
-    pub thousands_separator: bool,
-}
-
-impl Default for FormattingOptions {
-    fn default() -> Self {
-        Self { round_to_decimals: 9, non_scientific_decimals: 12, thousands_separator: true }
-    }
-}
-
 impl FormattingOptions {
     pub fn with_rounding(mut self, decimals: usize) -> Self {
         self.round_to_decimals = decimals;
@@ -498,7 +380,162 @@ impl FormattingOptions {
     }
 }
 
-pub(crate) fn rational_to_string(
+impl DynamicResult {
+    pub fn to_string_detailed(&self, formatting_options: FormattingOptions) -> FormattedCalculationOutput {
+        match self {
+            DynamicResult::Exact(r) => {
+                let (string, rounded) = rational_to_string(r, formatting_options);
+                FormattedCalculationOutput::Exact { result: string, has_rounded: rounded }
+            },
+            DynamicResult::Checked { num, precision } => {
+                let mut context = create_context(*precision as usize);
+                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+                    scientific.to_string(formatting_options)
+                } else {
+                    num.to_string()
+                };
+                FormattedCalculationOutput::ApproximationChecked {
+                    result: string,
+                    precision_bits: *precision,
+                }
+            },
+            DynamicResult::ReachedLimit(num) => {
+                let mut context = create_context(num.precision().unwrap_or(1));
+                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+                    scientific.to_string(formatting_options)
+                } else {
+                    num.to_string()
+                };
+                FormattedCalculationOutput::ApproximationReachedLimit { result: string }
+            },
+        }
+    }
+}
+
+impl FormattedCalculationOutput {
+    pub(crate) fn get_string(&self) -> &String {
+        match self {
+            FormattedCalculationOutput::Exact { result, .. } => result,
+            FormattedCalculationOutput::ApproximationChecked { result, .. } => result,
+            FormattedCalculationOutput::ApproximationReachedLimit { result } => result,
+        }
+    }
+}
+
+impl Display for Formula {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Formula::Plus(elements) => {
+                write!(f, "{}", elements.iter().map(|e| format!("{}", e)).collect::<Vec<_>>().join(" + "))
+            },
+            Formula::Multiply(elements) => {
+                let string = elements
+                    .iter()
+                    .map(|e| {
+                        if e.get_priority() < self.get_priority() {
+                            format!("({})", e)
+                        } else {
+                            e.to_string()
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" * ");
+                write!(f, "{}", string)
+            },
+            Formula::Negate(e) => {
+                if matches!(e.as_ref(), Formula::Plus(..) | Formula::Multiply(..)) {
+                    write!(f, "-({})", e)
+                } else {
+                    write!(f, "-{}", e)
+                }
+            },
+            Formula::Number(n) | Formula::Variable(n) => write!(f, "{}", n),
+            Formula::Pow(base, exponent) => {
+                if base.get_priority() <= self.get_priority() {
+                    write!(f, "({})^", base)?;
+                } else {
+                    write!(f, "{}^", base)?;
+                }
+                if exponent.get_priority() < self.get_priority()
+                    && !matches!(exponent.as_ref(), Formula::Negate(_))
+                {
+                    write!(f, "({})", exponent)
+                } else {
+                    write!(f, "{}", exponent)
+                }
+            },
+            Formula::Division(numerator, denominator) => {
+                if numerator.get_priority() < self.get_priority() {
+                    write!(f, "({})/", numerator)?;
+                } else {
+                    write!(f, "{}/", numerator)?;
+                }
+                if denominator.get_priority() <= self.get_priority() {
+                    write!(f, "({})", denominator)
+                } else {
+                    write!(f, "{}", denominator)
+                }
+            },
+            Formula::Function { name, arguments } => {
+                write!(
+                    f,
+                    "{}({})",
+                    name,
+                    arguments.iter().map(|a| format!("{}", a)).collect::<Vec<_>>().join(", ")
+                )
+            },
+            Formula::ForcedBrackets(elements) => {
+                write!(
+                    f,
+                    "({})",
+                    elements.iter().map(Self::to_string).reduce(|a, b| a + &b).unwrap_or_default()
+                )
+            },
+        }
+    }
+}
+
+impl Display for ExpressionFunType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ExpressionFunType::AssertValueRange(r) => f.write_str(&format!("check_{:?}", r).to_lowercase()),
+            ExpressionFunType::Custom(c) => f.write_str(&format!("custom_{}", c.name)),
+            _ => f.write_str(&camel_to_snake_case(&format!("{:?}", self))),
+        }
+    }
+}
+
+impl Display for ExpressionNumType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ExpressionNumType::Pi => "pi",
+            ExpressionNumType::E => "e",
+        })
+    }
+}
+
+impl Default for FormattingOptions {
+    fn default() -> Self {
+        Self { round_to_decimals: 9, non_scientific_decimals: 12, thousands_separator: true }
+    }
+}
+
+fn camel_to_snake_case(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + s.len() / 4);
+    for (i, c) in s.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn rational_to_string(
     ratio: &BigRational, formatting_options: FormattingOptions,
 ) -> (String, bool) {
     let scientific = long_division(&ratio.numer(), &ratio.denom(), formatting_options.round_to_decimals);
@@ -567,54 +604,6 @@ fn long_division(
         ScientificNumber::round_decimals_vec(rounding_decimals, &mut exponent, &result_vec);
     has_been_rounded |= has_rounded;
     (ScientificNumber::new(negative, result_rounded, exponent), has_been_rounded)
-}
-
-impl DynamicResult {
-    pub fn to_string_detailed(&self, formatting_options: FormattingOptions) -> FormattedCalculationOutput {
-        match self {
-            DynamicResult::Exact(r) => {
-                let (string, rounded) = rational_to_string(r, formatting_options);
-                FormattedCalculationOutput::Exact { result: string, has_rounded: rounded }
-            },
-            DynamicResult::Checked { num, precision } => {
-                let mut context = create_context(*precision as usize);
-                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
-                    scientific.to_string(formatting_options)
-                } else {
-                    num.to_string()
-                };
-                FormattedCalculationOutput::ApproximationChecked {
-                    result: string,
-                    precision_bits: *precision,
-                }
-            },
-            DynamicResult::ReachedLimit(num) => {
-                let mut context = create_context(num.precision().unwrap_or(1));
-                let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
-                    scientific.to_string(formatting_options)
-                } else {
-                    num.to_string()
-                };
-                FormattedCalculationOutput::ApproximationReachedLimit { result: string }
-            },
-        }
-    }
-}
-
-pub enum FormattedCalculationOutput {
-    Exact { result: String, has_rounded: bool },
-    ApproximationChecked { result: String, precision_bits: u32 },
-    ApproximationReachedLimit { result: String },
-}
-
-impl FormattedCalculationOutput {
-    pub(crate) fn get_string(&self) -> &String {
-        match self {
-            FormattedCalculationOutput::Exact { result, .. } => result,
-            FormattedCalculationOutput::ApproximationChecked { result, .. } => result,
-            FormattedCalculationOutput::ApproximationReachedLimit { result } => result,
-        }
-    }
 }
 
 #[cfg(test)]

@@ -361,7 +361,7 @@ fn list_element_optimization(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::formula_short::{inv, mul, nan, num, var};
+    use crate::formula_short::{inv, mul, num, var};
     use crate::{FormulaStore, create_default_context};
 
     macro_rules! test {

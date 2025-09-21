@@ -50,7 +50,7 @@ pub fn test_power_rational_and_rational() {
 
 #[test]
 fn test_create_number_from_string() {
-    let mut ctx = create_default_context();
+    let ctx = &mut create_default_context();
 
     let mut assert_output_eq = |a: &str, b: Option<(Number, &str)>| {
         println!("Testing: {} == {:?}", a, b);
@@ -59,7 +59,7 @@ fn test_create_number_from_string() {
         assert_eq!(number.as_ref(), b.as_ref().map(|s| &s.0));
         println!("Testing conversion to string");
         assert_eq!(
-            number.map(|n| n.to_string(FormattingOptions::default(), &mut ctx)),
+            number.map(|n| n.to_string_reuse_context(FormattingOptions::default(), ctx)),
             b.as_ref().map(|s| s.1.to_string())
         );
     };
@@ -121,7 +121,7 @@ fn test_calculation_string_output() {
         // Base case:
         (($calc:expr, $expected:expr, $rounding:expr)) => (
             println!("Checking: {} == {} with rounding {}", stringify!($calc), $expected, $rounding);
-            assert_eq!($calc.to_string(FormattingOptions::default().with_rounding($rounding), ctx), $expected)
+            assert_eq!($calc.to_string_reuse_context(FormattingOptions::default().with_rounding($rounding), ctx), $expected)
         );
         // `$x` followed by at least one `$y,`
         (($calc:expr, $expected:expr, $rounding:expr), $(($a:expr, $b:expr, $c:expr)), + ) => (

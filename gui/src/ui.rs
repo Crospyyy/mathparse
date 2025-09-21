@@ -20,7 +20,7 @@ pub(super) struct UiState {
     pub(super) top_user_input: String,
     pub(super) top_user_input_id: Id,
     pub(super) calculation_result: Option<Result<String, String>>,
-    pub(super) output_digits: usize,
+    pub(super) rounding_digits: usize,
     pub all_symbol_strings: Vec<String>,
     pub history: Vec<HistoryEntry>,
     pub selected_page: Page,
@@ -67,7 +67,7 @@ impl UiState {
             top_user_input: "".to_owned(),
             top_user_input_id: "Formula Input".into(),
             calculation_result: None,
-            output_digits: FormattingOptions::default().round_to_decimals,
+            rounding_digits: FormattingOptions::default().round_to_decimals,
             all_symbol_strings: vec![],
             history: vec![],
             selected_page: Page::History,
@@ -162,7 +162,7 @@ impl Window {
                     ui.horizontal(|ui| {
                         ui.label("Round Digits:");
                         let drag_val_resp =
-                            DragValue::new(&mut self.ui_state.output_digits).range(1..=100).ui(ui);
+                            DragValue::new(&mut self.ui_state.rounding_digits).range(1..=100).ui(ui);
                         if drag_val_resp.changed() {
                             input.push(UiStateInfo::RoundingAccuracyChanged);
                         }

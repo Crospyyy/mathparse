@@ -1011,17 +1011,6 @@ pub mod signature {
         pub fn get_name(&self) -> &String {
             &self.name
         }
-
-        pub(crate) fn create_symbol(self, formula: Element) -> Symbol {
-            Symbol::new(
-                self.function_args
-                    .as_ref()
-                    .map(|args| Signature::Function(args.get_signatures_in_right_order()))
-                    .unwrap_or(Signature::Number),
-                self.function_args.0.map(|b| b.names),
-                formula,
-            )
-        }
     }
 
     impl From<&SymbolDeclarationData> for Signature {
@@ -1040,47 +1029,7 @@ pub mod testing {
     use crate::Element;
     use crate::calculation::create_default_context;
     use crate::formula_short::*;
-    use crate::printing::FormattingOptions;
     use astro_float::ctx::Context;
-
-    #[allow(unused)]
-    pub fn test_with_user_input() {
-        use std::io::Write;
-        use std::io::stdin;
-
-        let mut ctx = create_default_context();
-
-        loop {
-            print!("Enter a formula to parse (or '' to quit):\n> ");
-            std::io::stdout().flush().unwrap();
-            let mut input = String::new();
-            stdin().read_line(&mut input).unwrap();
-            let input = input.trim();
-
-            if input.is_empty() {
-                return;
-            }
-
-            let Ok(element) = Element::parse(input) else {
-                println!("Could not parse the formula: {}", input);
-                println!();
-                continue;
-            };
-            println!();
-            println!("Parsed formula");
-            print!("= ");
-            println!("{}", element.get_string(&mut ctx));
-            print!("= ");
-            println!("{}", element.get_debug_string());
-            println!();
-            if let Some(num) = element.eval(&mut ctx) {
-                println!("Calculated Result: {}", num.to_string(FormattingOptions::default(), &mut ctx));
-            } else {
-                println!("Calculated Result: Could not evaluate the formula.");
-            }
-            println!();
-        }
-    }
 
     #[test]
     fn test_parsing_on_manual_formulas() {

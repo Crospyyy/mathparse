@@ -27,7 +27,7 @@ pub fn run_formula_evaluator() {
             let result1 = store.eval(&line, ctx);
             match result1 {
                 Ok(result) => {
-                    let result_string = result.to_string(FormattingOptions::default(), ctx);
+                    let result_string = result.to_string_reuse_context(FormattingOptions::default(), ctx);
                     if result.is_exact() {
                         println!("= {}", result_string);
                     } else {

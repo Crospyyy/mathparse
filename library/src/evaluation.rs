@@ -8,8 +8,14 @@ use num_rational::BigRational;
 use std::collections::HashSet;
 use std::ops::RangeInclusive;
 
+pub enum DynamicResult {
+    Exact(BigRational),
+    Checked { num: BigFloat, precision: u32 },
+    ReachedLimit(BigFloat),
+}
+
 impl Element {
-    pub fn eval(&self, ctx: &mut Context) -> Option<Number> {
+    fn eval(&self, ctx: &mut Context) -> Option<Number> {
         match self {
             Element::Brackets(_)
             | Element::String(_)
@@ -55,7 +61,7 @@ impl Element {
         }
     }
 
-    pub(crate) fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
+    fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
         match self {
             Element::Brackets(_)
             | Element::String(_)
@@ -94,13 +100,13 @@ impl FormulaStore {
             .map_err(|err| format!("Could not parse formula: {err}"))?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(ctx));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(ctx));
         benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
-        dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(ctx));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(&mut create_default_context()));
+        dbg!(formula.get_string(ctx));
 
         let result = benchmark!(
             benchmark,
@@ -184,12 +190,8 @@ impl FormulaStore {
         }
         Ok(DynamicResult::ReachedLimit(last_rounded))
     }
-}
 
-pub enum DynamicResult {
-    Exact(BigRational),
-    Checked { num: BigFloat, precision: u32 },
-    ReachedLimit(BigFloat),
+    pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
 }
 
 #[cfg(test)]

@@ -6,34 +6,62 @@ impl FormulaStore {
         let input = input.to_string();
         if let Some((symbol, definition)) = input.split_once("=") {
             if symbol.contains('=') || definition.contains('=') {
-                return RunResult::ParseFailed("Only one '=' is allowed in a formula".to_owned());
+                return RunError::ParseFailed("Only one '=' is allowed in a formula".to_owned()).into();
             }
             match self.add_symbol_from_string(&input, dry_run) {
-                Ok(symbol) => RunResult::AddedSymbol(symbol),
-                Err(err) => RunResult::FailedToAddSymbol(err),
+                Ok(symbol) => RunSuccess::AddedSymbol(symbol).into(),
+                Err(err) => RunError::FailedToAddSymbol(err).into(),
             }
         } else {
-            match self.eval_dynamic_precision(&input, 512..=(1 << 20)) {
-                Ok(result) => RunResult::CalculationResult(result),
-                Err(err) => RunResult::CalculationFailed(err),
+            match self.eval_dynamic_precision(&input, FormulaStore::DEFAULT_PRECISION_RANGE) {
+                Ok(result) => RunSuccess::CalculationResult(result).into(),
+                Err(err) => RunError::CalculationFailed(err).into(),
             }
         }
     }
 }
 
 pub enum RunResult {
+    Ok(RunSuccess),
+    Err(RunError),
+}
+
+pub enum RunSuccess {
+    AddedSymbol(NamedSymbol),
+    CalculationResult(DynamicResult),
+}
+
+pub enum RunError {
     ParseFailed(String),
     CalculationFailed(String),
     FailedToAddSymbol(String),
-    CalculationResult(DynamicResult),
-    AddedSymbol(NamedSymbol),
 }
 
 impl RunResult {
     pub fn calculation_result(self) -> Option<DynamicResult> {
         match self {
-            RunResult::CalculationResult(res) => Some(res),
+            RunResult::Ok(RunSuccess::CalculationResult(res)) => Some(res),
             _ => None,
         }
+    }
+}
+
+impl RunError {
+    fn to_string(self) -> String {
+        match self {
+            RunError::ParseFailed(s) | RunError::CalculationFailed(s) | RunError::FailedToAddSymbol(s) => s,
+        }
+    }
+}
+
+impl Into<RunResult> for RunSuccess {
+    fn into(self) -> RunResult {
+        RunResult::Ok(self)
+    }
+}
+
+impl Into<RunResult> for RunError {
+    fn into(self) -> RunResult {
+        RunResult::Err(self)
     }
 }

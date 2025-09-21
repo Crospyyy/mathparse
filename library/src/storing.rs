@@ -23,113 +23,19 @@ pub struct NamedSymbol {
     symbol: Symbol,
 }
 
-impl NamedSymbol {
-    fn new(name: String, symbol: Symbol) -> NamedSymbol {
-        Self { name, symbol }
-    }
-
-    pub fn name(&self) -> &String {
-        &self.name
-    }
-
-    pub fn symbol(&self) -> &Symbol {
-        &self.symbol
-    }
+#[derive(Debug)]
+pub struct InsertionElement {
+    name: String,
+    parameters: Option<Vec<String>>,
+    formula: Element,
 }
 
-impl Symbol {
-    pub(crate) fn new(signature: Signature, params: Option<Vec<String>>, formula: Element) -> Self {
-        Self { signature, params, formula }
-    }
-
-    pub fn signature(&self) -> &Signature {
-        &self.signature
-    }
-
-    pub fn params(&self) -> Option<&Vec<String>> {
-        self.params.as_ref()
-    }
-
-    pub fn formula(&self) -> &Element {
-        &self.formula
-    }
-
-    pub fn get_signature_string(&self, name: &str) -> String {
-        match self.signature {
-            Signature::NumberOrFunction => name.to_string(),
-            Signature::Number => name.to_string(),
-            Signature::Function(_) => {
-                format!("{}({})", name, self.params.as_ref().map_or("".to_owned(), |p| p.join(", ")))
-            },
-            Signature::FunctionNOrMoreParams(n) => format!("{}({}..)", name, n),
-            Signature::Conflicting => "Conflicting".to_owned(),
-        }
-    }
-
-    pub fn get_full_string(&self, name: &str, ctx: &mut NumberContext) -> String {
-        format!("{} = {}", self.get_signature_string(name), self.formula.get_string(ctx))
-    }
-}
-
+// public functions
 impl FormulaStore {
     pub fn get_symbols_sorted(&'_ self) -> Vec<(&String, &Symbol)> {
         let mut vec = self.symbols.iter().collect::<Vec<_>>();
         vec.sort_by(|a, b| a.0.cmp(b.0));
         vec
-    }
-
-    fn check_symbol_name_availability(&self, name: &String) -> Result<(), String> {
-        if self.symbols.contains_key(name) {
-            return Err(format!("The formula {} is already defined", name));
-        }
-        Ok(())
-    }
-
-    fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<(), String> {
-        if self.symbols.contains_key(name) {
-            return Err(format!("The formula {} is already defined", name));
-        }
-        if !dry_run {
-            self.symbols.insert(name.to_string(), symbol);
-        }
-        Ok(())
-    }
-
-    fn resolve_new_symbol(
-        &self, mut opt_func_args: OptionalFunctionDeclarationArguments, content: Element,
-    ) -> Result<Symbol, String> {
-        let defined_signatures: Signatures =
-            self.symbols.iter().map(|(name, symbol)| (name.clone(), symbol.signature.clone())).collect();
-
-        Self::resolve_formula_and_refine_call_signature(&mut opt_func_args, &content, &defined_signatures)?;
-
-        Ok(opt_func_args.create_symbol(content))
-    }
-
-    fn resolve_formula_and_refine_call_signature(
-        symbol_name_and_args: &mut OptionalFunctionDeclarationArguments, content: &Element,
-        defined_signatures: &Signatures,
-    ) -> Result<(), String> {
-        // Initialize signatures and
-        // add the already defined functions with variable argument count
-        let mut required_signatures: Signatures = defined_signatures.clone();
-        required_signatures.retain(|_, signature| matches!(signature, Signature::FunctionNOrMoreParams(_)));
-        required_signatures.add_all_undefined_symbols_of_formula(&content);
-
-        Signatures::refine_signature_and_undefined(
-            symbol_name_and_args,
-            &mut required_signatures,
-            &content,
-            &defined_signatures,
-        )?;
-
-        if !required_signatures.is_empty() {
-            return Err(format!(
-                "The formula requires the following elements to be defined: {:?}",
-                required_signatures.0
-            ));
-        }
-        Ok(())
     }
 
     pub fn define_default_symbols(&mut self) -> Result<(), String> {
@@ -172,7 +78,7 @@ impl FormulaStore {
                     }
                 },
             )
-            .into(),
+                .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -189,7 +95,7 @@ impl FormulaStore {
                     }
                 },
             )
-            .into(),
+                .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -206,7 +112,7 @@ impl FormulaStore {
                     }
                 },
             )
-            .into(),
+                .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -216,7 +122,7 @@ impl FormulaStore {
                 ParamCount::AtLeast(0),
                 |args: Vec<Number>, ctx: &mut Context| Number::sum(&args, ctx),
             )
-            .into(),
+                .into(),
             false,
         )?;
 
@@ -239,6 +145,89 @@ impl FormulaStore {
         let def = Element::parse(def).map_err(|err| format!("Second formula could not be parsed: {err}"))?;
 
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
+    }
+
+    pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
+        let symbol = self.symbols.get(name)?;
+        Some(InsertionElement {
+            name: name.to_string(),
+            parameters: symbol.params.clone(),
+            formula: symbol.formula.clone(),
+        })
+    }
+
+    pub(crate) fn get_insertion_element_expanded(
+        &self, name: &str, ignore_names: &HashSet<String>,
+    ) -> Result<InsertionElement, String> {
+        let symbol = self.symbols.get(name).ok_or(format!("Symbol `{name}` not found"))?;
+
+        let mut formula = symbol.formula.clone();
+        let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
+
+        self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
+
+        Ok(InsertionElement { name: name.to_string(), parameters: symbol.params.clone(), formula })
+    }
+
+    pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
+        self.symbols.get(name)
+    }
+}
+
+// private functions
+impl FormulaStore {
+    fn resolve_formula_and_refine_call_signature(
+        symbol_name_and_args: &mut OptionalFunctionDeclarationArguments, content: &Element,
+        defined_signatures: &Signatures,
+    ) -> Result<(), String> {
+        // Initialize signatures and
+        // add the already defined functions with variable argument count
+        let mut required_signatures: Signatures = defined_signatures.clone();
+        required_signatures.retain(|_, signature| matches!(signature, Signature::FunctionNOrMoreParams(_)));
+        required_signatures.add_all_undefined_symbols_of_formula(&content);
+
+        Signatures::refine_signature_and_undefined(
+            symbol_name_and_args,
+            &mut required_signatures,
+            &content,
+            &defined_signatures,
+        )?;
+
+        if !required_signatures.is_empty() {
+            return Err(format!(
+                "The formula requires the following elements to be defined: {:?}",
+                required_signatures.0
+            ));
+        }
+        Ok(())
+    }
+
+    fn check_symbol_name_availability(&self, name: &String) -> Result<(), String> {
+        if self.symbols.contains_key(name) {
+            return Err(format!("The formula {} is already defined", name));
+        }
+        Ok(())
+    }
+
+    fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<(), String> {
+        if self.symbols.contains_key(name) {
+            return Err(format!("The formula {} is already defined", name));
+        }
+        if !dry_run {
+            self.symbols.insert(name.to_string(), symbol);
+        }
+        Ok(())
+    }
+
+    fn resolve_new_symbol(
+        &self, mut opt_func_args: OptionalFunctionDeclarationArguments, content: Element,
+    ) -> Result<Symbol, String> {
+        let defined_signatures: Signatures =
+            self.symbols.iter().map(|(name, symbol)| (name.clone(), symbol.signature.clone())).collect();
+
+        Self::resolve_formula_and_refine_call_signature(&mut opt_func_args, &content, &defined_signatures)?;
+
+        Ok(opt_func_args.create_symbol(content))
     }
 
     fn add_symbol_from_sig_and_def(
@@ -273,38 +262,54 @@ impl FormulaStore {
         let element = Element::FunctionWithExpression { arguments: vec![], expr_value };
         self.add_symbol_new(&name.to_string(), Symbol::new(signature, params, element), dry_run)
     }
+}
 
-    pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
-        let symbol = self.symbols.get(name)?;
-        Some(InsertionElement {
-            name: name.to_string(),
-            parameters: symbol.params.clone(),
-            formula: symbol.formula.clone(),
-        })
-    }
-    pub(crate) fn get_insertion_element_expanded(
-        &self, name: &str, ignore_names: &HashSet<String>,
-    ) -> Result<InsertionElement, String> {
-        let symbol = self.symbols.get(name).ok_or(format!("Symbol `{name}` not found"))?;
-
-        let mut formula = symbol.formula.clone();
-        let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
-
-        self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
-
-        Ok(InsertionElement { name: name.to_string(), parameters: symbol.params.clone(), formula })
+impl Symbol {
+    pub(crate) fn new(signature: Signature, params: Option<Vec<String>>, formula: Element) -> Self {
+        Self { signature, params, formula }
     }
 
-    pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
-        self.symbols.get(name)
+    pub fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    pub fn params(&self) -> Option<&Vec<String>> {
+        self.params.as_ref()
+    }
+
+    pub fn formula(&self) -> &Element {
+        &self.formula
+    }
+
+    pub fn get_signature_string(&self, name: &str) -> String {
+        match self.signature {
+            Signature::NumberOrFunction => name.to_string(),
+            Signature::Number => name.to_string(),
+            Signature::Function(_) => {
+                format!("{}({})", name, self.params.as_ref().map_or("".to_owned(), |p| p.join(", ")))
+            },
+            Signature::FunctionNOrMoreParams(n) => format!("{}({}..)", name, n),
+            Signature::Conflicting => "Conflicting".to_owned(),
+        }
+    }
+
+    pub fn get_full_string(&self, name: &str, ctx: &mut NumberContext) -> String {
+        format!("{} = {}", self.get_signature_string(name), self.formula.get_string(ctx))
     }
 }
 
-#[derive(Debug)]
-pub struct InsertionElement {
-    name: String,
-    parameters: Option<Vec<String>>,
-    formula: Element,
+impl NamedSymbol {
+    fn new(name: String, symbol: Symbol) -> NamedSymbol {
+        Self { name, symbol }
+    }
+
+    pub fn name(&self) -> &String {
+        &self.name
+    }
+
+    pub fn symbol(&self) -> &Symbol {
+        &self.symbol
+    }
 }
 
 impl InsertionElement {
@@ -415,51 +420,6 @@ impl Element {
                     ));
                 },
             }
-
-            // // this is the logic that was used before
-            // let types_equal = if insert.arguments.is_some() {
-            //     matches!(self, Element::Function { .. })
-            // } else {
-            //     matches!(self, Element::Variable(_) | Element::VariableOrFunction(_))
-            //         | (matches!(self, Element::Function { .. })
-            //             && matches!(insert.formula, Element::VariableOrFunction(_)))
-            // };
-            // if !types_equal {
-            //     return Err(format!(
-            //         "Insertion element and formula don't match (self: {:?}, insert: {:?})",
-            //         self, insert
-            //     )
-            //     .to_owned());
-            // }
-            // if let Some(insert_args) = &insert.arguments {
-            //     let Element::Function { arguments: self_arguments, .. } = self else {
-            //         panic!("This should be unreachable")
-            //     };
-            //     if insert_args.len() != self_arguments.len() {
-            //         dbg!(insert_args);
-            //         dbg!(self_arguments);
-            //         return Err("The function used in the formula and the supplied function have different parameter counts".to_owned());
-            //     }
-            //     let mut new_formula = insert.formula.clone();
-            //     for (in_arg, val) in insert_args.iter().zip(self_arguments) {
-            //         new_formula.insert_symbol(
-            //             &InsertionElement {
-            //                 name: in_arg.clone(),
-            //                 arguments: None,
-            //                 formula: val.clone(),
-            //             },
-            //             found_function_elements_to_replace,
-            //             replace_fun_args,
-            //         )?
-            //     }
-            //     *self = new_formula;
-            // } else if let (Element::Function { name, .. }, Element::VariableOrFunction(new_name)) =
-            //     (&mut *self, &insert.formula)
-            // {
-            //     *name = new_name.clone();
-            // } else {
-            //     *self = insert.formula.clone();
-            // }
         }
         match self {
             Element::Brackets(_)

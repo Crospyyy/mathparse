@@ -19,9 +19,9 @@ pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use calculation::create_default_context;
 pub use evaluation::DynamicResult;
-pub use outer_store_interation::RunResult;
+pub use outer_store_interation::{RunError, RunResult, RunSuccess};
 pub use parsing::{Signature, get_fun_name_end_of_string};
-pub use printing::{FormattedCalculationOutput, FormattingOptions, NumberString};
+pub use printing::{FormattedCalculationOutput, FormattingOptions};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,10 +67,10 @@ pub enum Number {
 mod formula_short {
     use crate::expression_values::{ExpressionFunType, ExpressionNumType};
     use crate::{Element, Number};
-    use astro_float::BigFloat;
+    use astro_float::{BigFloat, Error};
 
-    pub fn nan() -> Element {
-        Element::Number(Number::nan(None))
+    pub fn nan(error: Option<Error>) -> Element {
+        Element::Number(Number::nan(error))
     }
 
     pub fn num(num: impl ToString) -> Element {

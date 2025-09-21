@@ -13,8 +13,8 @@ use egui::{
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
-    FormattedCalculationOutput, FormattingOptions, FormulaStore, RunResult, Signature, Symbol,
-    create_default_context, get_fun_name_end_of_string, quick_match,
+    FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, Signature,
+    Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
 };
 use regex::Regex;
 use std::process::exit;
@@ -344,41 +344,44 @@ impl Window {
     }
 
     fn update_calculation_result(&mut self) {
-        let ctx = &mut create_default_context();
         let input = self.get_processed_input();
 
         self.ui_state.calculation_result = if input.is_empty() {
             None
         } else {
             let result = self.formula_store.run(input, true);
-            Some(match result {
-                RunResult::ParseFailed(s) => Err(format!("Parse Error: {}", s)),
-                RunResult::CalculationFailed(s) => Err(format!("Calculation Error: {}", s)),
-                RunResult::FailedToAddSymbol(s) => Err(format!("Error adding symbol: {}", s)),
-                RunResult::CalculationResult(r) => {
-                    let formatting_options =
-                        FormattingOptions::default().with_rounding(self.ui_state.output_digits);
-                    let output = r.to_string_detailed(formatting_options);
-                    Ok(match output {
-                        FormattedCalculationOutput::Exact { result, has_rounded } => {
-                            if has_rounded {
-                                format!("= {} (rounded)", result)
-                            } else {
-                                format!("= {}", result)
-                            }
-                        },
-                        FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
-                            format!("≈ {} ({} bit precision)", result, precision_bits)
-                        },
-                        FormattedCalculationOutput::ApproximationReachedLimit { result } => {
-                            format!("≈ {} (reached precision limit)", result)
-                        },
-                    })
-                },
-                RunResult::AddedSymbol(s) => {
-                    Ok(format!("Create new symbol: {}", s.symbol().get_full_string(s.name(), ctx)))
-                },
-            })
+            Some(Self::generate_output_string(result, self.ui_state.rounding_digits))
+        }
+    }
+
+    fn generate_output_string(result: RunResult, rounding_digits: usize) -> Result<String, String> {
+        match result {
+            RunResult::Err(RunError::ParseFailed(s)) => Err(format!("Parse Error: {}", s)),
+            RunResult::Err(RunError::CalculationFailed(s)) => Err(format!("Calculation Error: {}", s)),
+            RunResult::Err(RunError::FailedToAddSymbol(s)) => Err(format!("Error adding symbol: {}", s)),
+            RunResult::Ok(RunSuccess::CalculationResult(r)) => {
+                let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
+                let output = r.to_string_detailed(formatting_options);
+                Ok(match output {
+                    FormattedCalculationOutput::Exact { result, has_rounded } => {
+                        if has_rounded {
+                            format!("= {} (rounded)", result)
+                        } else {
+                            format!("= {}", result)
+                        }
+                    },
+                    FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
+                        format!("≈ {} ({} bit precision)", result, precision_bits)
+                    },
+                    FormattedCalculationOutput::ApproximationReachedLimit { result } => {
+                        format!("≈ {} (reached precision limit)", result)
+                    },
+                })
+            },
+            RunResult::Ok(RunSuccess::AddedSymbol(s)) => Ok(format!(
+                "Create new symbol: {}",
+                s.symbol().get_full_string(s.name(), &mut create_default_context())
+            )),
         }
     }
 
