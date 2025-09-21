@@ -3,8 +3,10 @@ use crate::parsing::signature::{
     OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
 use crate::{Element, ExpressionFunType, ExpressionNumType, Number, NumberContext};
+use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
+use thiserror::Error;
 
 pub struct FormulaStore {
     symbols: HashMap<String, Symbol>,
@@ -38,7 +40,7 @@ impl FormulaStore {
         vec
     }
 
-    pub fn define_default_symbols(&mut self) -> Result<(), String> {
+    pub fn define_default_symbols(&mut self) -> Result<()> {
         macro_rules! define_functions {
             ($($op:ident),+) => {
                 $(self.add_expression_fun(&stringify!($op).to_lowercase(), ExpressionFunType::$op, false)?);+
@@ -78,7 +80,7 @@ impl FormulaStore {
                     }
                 },
             )
-                .into(),
+            .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -95,7 +97,7 @@ impl FormulaStore {
                     }
                 },
             )
-                .into(),
+            .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -112,7 +114,7 @@ impl FormulaStore {
                     }
                 },
             )
-                .into(),
+            .into(),
             false,
         )?;
         self.add_expression_fun(
@@ -122,7 +124,7 @@ impl FormulaStore {
                 ParamCount::AtLeast(0),
                 |args: Vec<Number>, ctx: &mut Context| Number::sum(&args, ctx),
             )
-                .into(),
+            .into(),
             false,
         )?;
 
@@ -139,10 +141,10 @@ impl FormulaStore {
         FormulaStore { symbols: HashMap::new() }
     }
 
-    pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<NamedSymbol, String> {
-        let (sig, def) = string.split_once("=").ok_or("String doesn't contain '='".to_owned())?;
-        let sig = Element::parse(sig).map_err(|err| format!("First formula could not be parsed: {err}"))?;
-        let def = Element::parse(def).map_err(|err| format!("Second formula could not be parsed: {err}"))?;
+    pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<NamedSymbol> {
+        let (sig, def) = string.split_once("=").ok_or(anyhow!("String doesn't contain '='"))?;
+        let sig = Element::parse(sig).map_err(|err| anyhow!("First formula could not be parsed: {err}"))?;
+        let def = Element::parse(def).map_err(|err| anyhow!("Second formula could not be parsed: {err}"))?;
 
         self.add_symbol_from_sig_and_def(sig, def, dry_run)
     }
@@ -158,8 +160,8 @@ impl FormulaStore {
 
     pub(crate) fn get_insertion_element_expanded(
         &self, name: &str, ignore_names: &HashSet<String>,
-    ) -> Result<InsertionElement, String> {
-        let symbol = self.symbols.get(name).ok_or(format!("Symbol `{name}` not found"))?;
+    ) -> Result<InsertionElement> {
+        let symbol = self.symbols.get(name).ok_or(anyhow!("Symbol `{name}` not found"))?;
 
         let mut formula = symbol.formula.clone();
         let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
@@ -179,7 +181,7 @@ impl FormulaStore {
     fn resolve_formula_and_refine_call_signature(
         symbol_name_and_args: &mut OptionalFunctionDeclarationArguments, content: &Element,
         defined_signatures: &Signatures,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         // Initialize signatures and
         // add the already defined functions with variable argument count
         let mut required_signatures: Signatures = defined_signatures.clone();
@@ -194,7 +196,7 @@ impl FormulaStore {
         )?;
 
         if !required_signatures.is_empty() {
-            return Err(format!(
+            return Err(anyhow!(
                 "The formula requires the following elements to be defined: {:?}",
                 required_signatures.0
             ));
@@ -202,16 +204,16 @@ impl FormulaStore {
         Ok(())
     }
 
-    fn check_symbol_name_availability(&self, name: &String) -> Result<(), String> {
+    fn check_symbol_name_availability(&self, name: &String) -> Result<()> {
         if self.symbols.contains_key(name) {
-            return Err(format!("The formula {} is already defined", name));
+            return Err(anyhow!("The formula {} is already defined", name));
         }
         Ok(())
     }
 
-    fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<(), String> {
+    fn add_symbol_new(&mut self, name: &str, symbol: Symbol, dry_run: bool) -> Result<()> {
         if self.symbols.contains_key(name) {
-            return Err(format!("The formula {} is already defined", name));
+            return Err(anyhow!("The formula {} is already defined", name));
         }
         if !dry_run {
             self.symbols.insert(name.to_string(), symbol);
@@ -221,7 +223,7 @@ impl FormulaStore {
 
     fn resolve_new_symbol(
         &self, mut opt_func_args: OptionalFunctionDeclarationArguments, content: Element,
-    ) -> Result<Symbol, String> {
+    ) -> Result<Symbol> {
         let defined_signatures: Signatures =
             self.symbols.iter().map(|(name, symbol)| (name.clone(), symbol.signature.clone())).collect();
 
@@ -232,7 +234,7 @@ impl FormulaStore {
 
     fn add_symbol_from_sig_and_def(
         &mut self, sig: Element, def: Element, dry_run: bool,
-    ) -> Result<NamedSymbol, String> {
+    ) -> Result<NamedSymbol> {
         let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
         self.check_symbol_name_availability(symbol_name_and_args.get_name())?;
 
@@ -244,7 +246,7 @@ impl FormulaStore {
 
     fn add_expression_var(
         &mut self, name: impl ToString, expr_value: ExpressionNumType, dry_run: bool,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let parameter_names = None;
         let signature = Signature::Number;
         let formula = Element::NumberWithExpression { expr_value };
@@ -253,7 +255,7 @@ impl FormulaStore {
 
     fn add_expression_fun(
         &mut self, name: impl ToString, expr_value: ExpressionFunType, dry_run: bool,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         let params = Some(vec![]); // todo add param names
         let signature = match expr_value.get_param_count() {
             ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
@@ -313,12 +315,12 @@ impl NamedSymbol {
 }
 
 impl InsertionElement {
-    pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element, String> {
+    pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element> {
         if let Some(insert_args) = &self.parameters {
             if let Element::FunctionWithExpression { expr_value, .. } = &self.formula {
                 if insert_args.is_empty() {
                     if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
                             self.name,
                             expr_value.get_param_count(),
@@ -335,10 +337,9 @@ impl InsertionElement {
             if insert_args.len() != self_arguments.len() {
                 dbg!(insert_args);
                 dbg!(self_arguments);
-                return Err(
-					"The function used in the formula and the supplied function have different parameter counts"
-						.to_owned(),
-				);
+                return Err(anyhow!(
+                    "The function used in the formula and the supplied function have different parameter counts"
+                ));
             }
             let mut new_formula = self.formula.clone();
             for (in_arg, val) in insert_args.iter().zip(self_arguments) {
@@ -350,12 +351,12 @@ impl InsertionElement {
             }
             return Ok(new_formula);
         }
-        Err("No arguments provided for insertion".to_owned())
+        Err(anyhow!("No arguments provided for insertion"))
     }
 }
 
 impl Element {
-    pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<(), String> {
+    pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<()> {
         match self {
             Element::Brackets(elements)
             | Element::Plus(elements)
@@ -395,9 +396,10 @@ impl Element {
                         *self = insert.insert_param_values(self_arguments.clone())?;
                     },
                     (..) => {
-                        return Err(format!(
+                        return Err(anyhow!(
                             "Insertion element and formula don't match (self: {:?}, insert: {:?})",
-                            self, insert
+                            self,
+                            insert
                         ));
                     },
                 },
@@ -414,9 +416,10 @@ impl Element {
                 },
 
                 (..) => {
-                    return Err(format!(
+                    return Err(anyhow!(
                         "Insertion element and formula don't match (self: {:?}, insert: {:?})",
-                        self, insert
+                        self,
+                        insert
                     ));
                 },
             }
@@ -480,8 +483,8 @@ mod tests {
     macro_rules! check_add {
         ($store:expr,$string:expr, $expected:expr) => {
             assert_eq!(
-                $store.add_symbol_from_string($string, false).map(|s| s.name),
-                Ok($expected.to_owned())
+                $store.add_symbol_from_string($string, false).map(|s| s.name).ok(),
+                Some($expected.to_owned())
             );
         };
     }
@@ -591,19 +594,19 @@ mod tests {
         assert!(matches!(store.add_symbol_from_string("f3=f2()", false), Err(_)));
 
         let result = store.eval("f", &mut ctx);
-        assert_eq!(result, Ok(123.into()));
+        assert_eq!(result.ok(), Some(123.into()));
         assert!(matches!(store.eval("f()", &mut ctx), Err(_)));
         assert!(matches!(store.eval("g()", &mut ctx), Err(_)));
-        assert_eq!(store.eval("g(2)", &mut ctx), Ok(4.into()));
-        assert_eq!(store.eval("f2(2)", &mut ctx), Ok(6.into()));
+        assert_eq!(store.eval("g(2)", &mut ctx).ok(), Some(4.into()));
+        assert_eq!(store.eval("f2(2)", &mut ctx).ok(), Some(6.into()));
 
         check_add!(store, "add(a,b)=a+b", "add");
         check_add!(store, "mul(a,b)=a*b", "mul");
         check_add!(store, "div(a,b)=a/b", "div");
-        assert_eq!(store.eval("add(1,2)", &mut ctx), Ok(3.into()));
+        assert_eq!(store.eval("add(1,2)", &mut ctx).ok(), Some(3.into()));
         check_add!(store, "run(a, b, fun)=fun(a, b)", "run");
-        assert_eq!(store.eval("run(1, 2, add)", &mut ctx), Ok(3.into()));
-        assert_eq!(store.eval("run(1, 2, mul)", &mut ctx), Ok(2.into()));
-        assert_eq!(store.eval("run(1, 2, div)", &mut ctx), Ok(Number::from_string("0.5").unwrap()));
+        assert_eq!(store.eval("run(1, 2, add)", &mut ctx).ok(), Some(3.into()));
+        assert_eq!(store.eval("run(1, 2, mul)", &mut ctx).ok(), Some(2.into()));
+        assert_eq!(store.eval("run(1, 2, div)", &mut ctx).ok(), Some(Number::from_string("0.5").unwrap()));
     }
 }

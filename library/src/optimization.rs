@@ -483,15 +483,20 @@ mod tests {
         let mut fs = FormulaStore::new_empty();
         let ctx = &mut create_default_context();
         fs.define_default_symbols().unwrap();
-        assert_eq!(fs.eval("sin(2*pi)", ctx), Ok(Number::from(0)));
-        assert_eq!(fs.eval("sin(-2*pi)", ctx), Ok(Number::from(0)));
-        assert_eq!(fs.eval("sin(10*pi)", ctx), Ok(Number::from(0)));
-        assert_eq!(fs.eval("sin(pi)", ctx), Ok(Number::from(0)));
-        assert_eq!(fs.eval("sin(-pi)", ctx), Ok(Number::from(0)));
-        assert_eq!(fs.eval("sin(pi/2)", ctx), Ok(Number::from(1)));
-        assert_eq!(fs.eval("sin(-pi/2)", ctx), Ok(Number::from(-1)));
-        assert_eq!(fs.eval("sin(pi/6)", ctx), Ok(Number::from_string("0.5").unwrap()));
-        assert_eq!(fs.eval("sin(-pi/6)", ctx), Ok(Number::from_string("-0.5").unwrap()));
-        assert_eq!(fs.eval("sin(pi/3)", ctx), Ok(fs.eval("sqrt(3)/2", ctx).unwrap()));
+        macro_rules! quick_assert_eq {
+            ($input:expr, $exp:expr) => {
+                assert_eq!(fs.eval($input, ctx).ok(), Some($exp));
+            };
+        }
+        quick_assert_eq!("sin(2*pi)", Number::from(0));
+        quick_assert_eq!("sin(-2*pi)", Number::from(0));
+        quick_assert_eq!("sin(10*pi)", Number::from(0));
+        quick_assert_eq!("sin(pi)", Number::from(0));
+        quick_assert_eq!("sin(-pi)", Number::from(0));
+        quick_assert_eq!("sin(pi/2)", Number::from(1));
+        quick_assert_eq!("sin(-pi/2)", Number::from(-1));
+        quick_assert_eq!("sin(pi/6)", Number::from_string("0.5").unwrap());
+        quick_assert_eq!("sin(-pi/6)", Number::from_string("-0.5").unwrap());
+        quick_assert_eq!("sin(pi/3)", fs.eval("sqrt(3)/2", ctx).unwrap());
     }
 }

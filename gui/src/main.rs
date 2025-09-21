@@ -8,12 +8,12 @@ use std::sync::atomic::AtomicBool;
 
 pub fn main() {
     use eframe::NativeOptions;
-    let viewport = ViewportBuilder::default()
-        .with_always_on_top()
-        .with_decorations(false)
-        .with_transparent(true)
-        .with_window_level(WindowLevel::AlwaysOnTop)
-        .with_taskbar(cfg!(debug_assertions));
+    let mut viewport =
+        ViewportBuilder::default().with_decorations(false).with_transparent(true);
+    #[cfg(not(debug_assertions))]
+    let viewport = viewport.with_always_on_top();
+
+    viewport = viewport.with_taskbar(cfg!(debug_assertions));
     eframe::run_native(
         "Quick Mafs",
         NativeOptions { viewport, ..Default::default() },
@@ -32,12 +32,17 @@ struct WindowState {
     request_focus: Arc<AtomicBool>,
     last_frame_had_focus: bool,
     centered: bool,
-    pinned:bool,
+    pinned: bool,
 }
 
 impl WindowState {
     fn new() -> Self {
-        Self { request_focus: Arc::new(AtomicBool::new(false)), last_frame_had_focus: false, centered: false, pinned: false }
+        Self {
+            request_focus: Arc::new(AtomicBool::new(false)),
+            last_frame_had_focus: false,
+            centered: false,
+            pinned: false,
+        }
     }
 }
 

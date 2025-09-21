@@ -14,3 +14,5 @@ num-traits = "0.2.19"
 strum = "0.27.2"
 strum_macros = "0.27.2"
 macros = { path = "../macros" }
+anyhow = "1.0.100"
+thiserror = "2.0.16"

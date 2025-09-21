@@ -10,12 +10,12 @@ impl FormulaStore {
             }
             match self.add_symbol_from_string(&input, dry_run) {
                 Ok(symbol) => RunSuccess::AddedSymbol(symbol).into(),
-                Err(err) => RunError::FailedToAddSymbol(err).into(),
+                Err(err) => RunError::FailedToAddSymbol(err.to_string()).into(),
             }
         } else {
             match self.eval_dynamic_precision(&input, FormulaStore::DEFAULT_PRECISION_RANGE) {
                 Ok(result) => RunSuccess::CalculationResult(result).into(),
-                Err(err) => RunError::CalculationFailed(err).into(),
+                Err(err) => RunError::CalculationFailed(err.to_string()).into(),
             }
         }
     }

@@ -39,6 +39,7 @@ macro_rules! debug_print {
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         let mut pressed_shortcut = false;
+        #[cfg(not(debug_assertions))]
         self.handle_window_control(ctx, &mut pressed_shortcut);
 
         let frame = egui::containers::Frame::window(&Style::default());
@@ -118,14 +119,22 @@ impl Window {
             Self { formula_store: store, ui_state: UiState::new(), window_state: WindowState::new() };
         window.update_all_symbol_strings();
 
-        let context = _cc.egui_ctx.clone();
-        context.send_viewport_cmd(ViewportCommand::Minimized(true));
-        let req_focus = window.window_state.request_focus.clone();
-        register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
-            context.send_viewport_cmd(ViewportCommand::Minimized(false));
-            context.send_viewport_cmd(ViewportCommand::Focus);
-            req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
-        });
+        #[cfg(not(debug_assertions))]
+        {
+            let context = _cc.egui_ctx.clone();
+            context.send_viewport_cmd(ViewportCommand::Minimized(true));
+            let req_focus = window.window_state.request_focus.clone();
+            register_global_shortcut(
+                global_shortcuts::Modifiers::ALT,
+                global_shortcuts::Key::Space,
+                move || {
+                    context.send_viewport_cmd(ViewportCommand::Minimized(false));
+                    context.send_viewport_cmd(ViewportCommand::Focus);
+                    req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
+                },
+            );
+        }
+
         window
     }
 

@@ -2,12 +2,15 @@ use crate::calculation::create_context;
 use crate::expression_values::FunctionExpression;
 use crate::storing::FormulaStore;
 use crate::{Benchmark, Element, Number, RoundingMode, benchmark, create_default_context};
+use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
 use num_rational::BigRational;
 use std::collections::HashSet;
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::RangeInclusive;
-
+use thiserror::Error;
 pub enum DynamicResult {
     Exact(BigRational),
     Checked { num: BigFloat, precision: u32 },
@@ -87,39 +90,60 @@ impl Element {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum EvaluationError {
+    #[error("Could not parse formula: {0}")]
+    CouldNotParse(String),
+    #[error("Could not evaluate formula: {0}")]
+    CouldNotEvaluate(String),
+}
+
+#[derive(Debug, Error)]
+struct ExpansionError;
+impl Display for ExpansionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not expand formula")
+    }
+}
+
 impl FormulaStore {
-    pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number, String> {
+    pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number> {
         self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
     }
 
     fn eval_with_benchmark(
         &self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
-    ) -> Result<Number, String> {
+    ) -> Result<Number> {
         let mut inner_bench = benchmark.new_sub_bench();
-        let mut formula = Element::parse_benched(formula_str, &mut inner_bench)
-            .map_err(|err| format!("Could not parse formula: {err}"))?;
+        let mut formula =
+            Element::parse_benched(formula_str, &mut inner_bench).map_err(EvaluationError::CouldNotParse)?;
         benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        dbg!(formula.get_string(ctx));
-        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(ctx));
-        benchmark!(benchmark, self.expand_formula(&mut formula, &HashSet::new())?, "Expansion");
-        dbg!(formula.get_string(ctx));
-        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(ctx));
+        self.expand_and_optimize(&mut formula, benchmark, ctx)?;
 
         let result = benchmark!(
             benchmark,
-            formula.eval(ctx).ok_or(format!("Could not evaluate formula: {}", formula_str))?,
+            formula.eval(ctx).ok_or(EvaluationError::CouldNotEvaluate(formula_str.to_string()))?,
             "Evaluation"
         );
 
         Ok(result)
     }
 
-    pub(crate) fn expand_formula(
-        &self, formula: &mut Element, ignore_names: &HashSet<String>,
-    ) -> Result<(), String> {
+    fn expand_and_optimize(
+        &self, formula: &mut Element, benchmark: &mut Benchmark, ctx: &mut Context,
+    ) -> Result<()> {
+        dbg!(formula.get_string(ctx));
+        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
+        dbg!(formula.get_string(ctx));
+        benchmark!(benchmark, self.expand_formula(formula, &HashSet::new())?, "Expansion");
+        dbg!(formula.get_string(ctx));
+        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
+        dbg!(formula.get_string(ctx));
+        Ok(())
+    }
+
+    pub(crate) fn expand_formula(&self, formula: &mut Element, ignore_names: &HashSet<String>) -> Result<()> {
         // todo look into how to do this more efficiently
         let mut all_names = HashSet::new();
         loop {
@@ -127,12 +151,13 @@ impl FormulaStore {
             all_names.clear();
             formula.get_all_unexpanded_names(&mut all_names);
             all_names = all_names.difference(ignore_names).cloned().collect();
+            dbg!(&all_names);
 
             if all_names.is_empty() {
                 break;
             }
             if all_names == before {
-                return Err("Formula cannot be expanded".to_owned());
+                return Err(ExpansionError.into());
             }
             for name in all_names.iter() {
                 formula.insert_symbol(&self.get_insertion_element_expanded(name, ignore_names)?)?;
@@ -144,7 +169,7 @@ impl FormulaStore {
 
     pub fn eval_dynamic_precision(
         &mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
-    ) -> Result<DynamicResult, String> {
+    ) -> Result<DynamicResult> {
         println!();
         dbg!(&precision_range_bits.end());
 
@@ -317,7 +342,7 @@ mod tests {
 
         macro_rules! test_eval {
             ($input:literal, $output:expr) => {
-                assert_eq!(store.eval($input, &mut ctx), Ok($output))
+                assert_eq!(store.eval($input, &mut ctx).ok(), Some($output))
             };
         }
         test_eval!("rem(-2, 2)", Number::from(0));
