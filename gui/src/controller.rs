@@ -9,7 +9,7 @@ use egui::text_edit::TextEditOutput;
 use egui::{
     AtomExt, Button, CentralPanel, Color32, Context, DragValue, Event, Key, KeyboardShortcut, Label,
     Modifiers, PointerButton, RawInput, Response, RichText, Shadow, Stroke, StrokeKind, Style, TextBuffer,
-    TextEdit, Ui, ViewportCommand, Visuals, Widget, WidgetText,
+    TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -36,10 +36,21 @@ macro_rules! debug_print {
     };
 }
 
+fn switch_visibility(ctx: &Context, visible: bool) {
+    if visible {
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0; 2].into()));
+        ctx.send_viewport_cmd(ViewportCommand::Focus);
+        // try_center_window(ctx);
+    } else {
+        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
+        ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+    }
+}
+
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
         let mut pressed_shortcut = false;
-        #[cfg(not(debug_assertions))]
         self.handle_window_control(ctx, &mut pressed_shortcut);
 
         let frame = egui::containers::Frame::window(&Style::default());
@@ -77,7 +88,7 @@ impl App for Window {
             .iter()
             .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
         if is_focussed && pressed_escape {
-            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+            switch_visibility(ctx, false);
         }
 
         // match alt + space
@@ -110,8 +121,9 @@ pub fn try_center_window(ctx: &Context) -> bool {
 
 impl Window {
     pub(crate) fn new(_cc: &CreationContext) -> Self {
-        let ppp = _cc.egui_ctx.pixels_per_point();
-        _cc.egui_ctx.set_pixels_per_point(ppp * 1.2);
+        let ctx = _cc.egui_ctx.clone();
+        let ppp = ctx.pixels_per_point();
+        ctx.set_pixels_per_point(ppp * 1.2);
         let mut store = FormulaStore::new_empty();
         store.define_default_symbols().unwrap();
         store.add_symbol_from_string("speed_of_sound_mps = 343", false).unwrap();
@@ -125,21 +137,14 @@ impl Window {
             Self { formula_store: store, ui_state: UiState::new(), window_state: WindowState::new() };
         window.update_all_symbol_strings();
 
-        #[cfg(not(debug_assertions))]
-        {
-            let context = _cc.egui_ctx.clone();
-            context.send_viewport_cmd(ViewportCommand::Minimized(true));
-            let req_focus = window.window_state.request_focus.clone();
-            register_global_shortcut(
-                global_shortcuts::Modifiers::ALT,
-                global_shortcuts::Key::Space,
-                move || {
-                    context.send_viewport_cmd(ViewportCommand::Minimized(false));
-                    context.send_viewport_cmd(ViewportCommand::Focus);
-                    req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
-                },
-            );
-        }
+        let context = _cc.egui_ctx.clone();
+        switch_visibility(&ctx, false);
+        let req_focus = window.window_state.request_focus.clone();
+        register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
+            switch_visibility(&ctx, true);
+            context.send_viewport_cmd(ViewportCommand::Focus);
+            req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
+        });
 
         window
     }
@@ -252,7 +257,7 @@ impl Window {
         }
         let has_focus = ctx.input(|ip| ip.raw.focused);
         if !self.window_state.pinned && self.window_state.last_frame_had_focus && !has_focus {
-            ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+            switch_visibility(ctx, false);
         }
         self.window_state.last_frame_had_focus = has_focus;
 
@@ -504,7 +509,7 @@ impl Window {
         {
             self.window_state.pinned ^= true;
             if !self.window_state.pinned {
-                ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
+                switch_visibility(ctx, false);
             }
         }
 
