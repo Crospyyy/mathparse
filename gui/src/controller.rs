@@ -41,7 +41,7 @@ fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2
     if visible {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
         if last_window_size.is_some() {
-            let size = Vec2::new(528.3, 386.7);
+            let size = Window::DEFAULT_WINDOW_SIZE;
             try_center_window(ctx, Some(size));
             ctx.send_viewport_cmd(ViewportCommand::InnerSize(size))
         }
@@ -140,6 +140,8 @@ pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool 
 }
 
 impl Window {
+    const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(528.3, 386.7);
+
     pub(crate) fn new(_cc: &CreationContext) -> Self {
         let ctx = _cc.egui_ctx.clone();
         let ppp = ctx.pixels_per_point();
@@ -539,6 +541,8 @@ impl Window {
             ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
             if !new_pinned {
                 switch_visibility(ctx, false, self.get_last_window_size());
+            } else {
+                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Window::DEFAULT_WINDOW_SIZE));
             }
         }
 
