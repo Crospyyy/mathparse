@@ -44,7 +44,7 @@ fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2
         // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0; 2].into()));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
     } else {
-        ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
+        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
         ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
     }
 }
