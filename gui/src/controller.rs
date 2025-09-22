@@ -17,8 +17,9 @@ use library::{
     Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
 };
 use regex::Regex;
+use std::cmp::Ordering;
 use std::process::exit;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
@@ -36,20 +37,27 @@ macro_rules! debug_print {
     };
 }
 
-fn switch_visibility(ctx: &Context, visible: bool) {
+fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
     if visible {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
+        try_center_window(ctx, last_window_size);
         // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0; 2].into()));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
-        // try_center_window(ctx);
     } else {
-        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
+        ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
         ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
     }
 }
 
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        let mut guard = self.window_state.last_window_size.lock().unwrap();
+        let option = ctx.input(|i| i.viewport().outer_rect.map(|r| r.size()));
+        if let Some(size) = option {
+            *guard = Some(size);
+        };
+        drop(guard);
+
         let mut pressed_shortcut = false;
         self.handle_window_control(ctx, &mut pressed_shortcut);
 
@@ -88,7 +96,7 @@ impl App for Window {
             .iter()
             .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
         if is_focussed && pressed_escape {
-            switch_visibility(ctx, false);
+            switch_visibility(ctx, false, self.get_last_window_size());
         }
 
         // match alt + space
@@ -106,9 +114,11 @@ impl App for Window {
     }
 }
 
-pub fn try_center_window(ctx: &Context) -> bool {
-    let (monitor_opt, win_size_opt) =
-        ctx.input(|i| (i.viewport().monitor_size, i.viewport().outer_rect.map(|r| r.size())));
+pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool {
+    let (monitor_opt, win_size_opt) = ctx.input(|i| (i.viewport().monitor_size, last_window_size));
+
+    dbg!(monitor_opt);
+    dbg!(win_size_opt);
 
     if let (Some(monitor), Some(win_size)) = (monitor_opt, win_size_opt) {
         let pos = (monitor - win_size) / 2.0;
@@ -138,15 +148,25 @@ impl Window {
         window.update_all_symbol_strings();
 
         let context = _cc.egui_ctx.clone();
-        switch_visibility(&ctx, false);
+        switch_visibility(&ctx, false, window.get_last_window_size());
         let req_focus = window.window_state.request_focus.clone();
+        let last_window_size = window.window_state.last_window_size.clone();
+        let pinned = window.window_state.pinned.clone();
         register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
-            switch_visibility(&ctx, true);
+            let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
+            if pinned.load(std::sync::atomic::Ordering::Relaxed) {
+                window_size = None;
+            }
+            switch_visibility(&ctx, true, window_size);
             context.send_viewport_cmd(ViewportCommand::Focus);
             req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
         });
 
         window
+    }
+
+    fn get_last_window_size(&self) -> Option<Vec2> {
+        self.window_state.last_window_size.lock().unwrap().clone()
     }
 
     pub fn handle_ui_input(&mut self, input: &mut Vec<UiStateInfo>) {
@@ -256,14 +276,10 @@ impl Window {
             *pressed_shortcut = true;
         }
         let has_focus = ctx.input(|ip| ip.raw.focused);
-        if !self.window_state.pinned && self.window_state.last_frame_had_focus && !has_focus {
-            switch_visibility(ctx, false);
+        if !self.window_state.is_pinned() && self.window_state.last_frame_had_focus && !has_focus {
+            switch_visibility(ctx, false, self.get_last_window_size());
         }
         self.window_state.last_frame_had_focus = has_focus;
-
-        if !self.window_state.centered {
-            self.window_state.centered = try_center_window(ctx);
-        }
     }
 
     fn request_top_input_focus(&mut self, ctx: &Context) {
@@ -473,8 +489,8 @@ impl Window {
     }
 
     pub fn get_autocompletion_result(
-        &self, input_string: &str, cursor_pos: usize,
-    ) -> Option<AutocompletionResult> {
+        &'_ self, input_string: &str, cursor_pos: usize,
+    ) -> Option<AutocompletionResult<'_>> {
         let input_symbol_name = get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos), false);
         if input_symbol_name.is_empty() {
             return None;
@@ -500,16 +516,17 @@ impl Window {
     fn show_background_context_menu(&mut self, ctx: &Context, ui: &mut Ui) {
         let mut extended_button = |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
 
-        if extended_button(if self.window_state.pinned {
+        if extended_button(if self.window_state.is_pinned() {
             "⏷ Unpin the window"
         } else {
             "📌 Pin the window"
         })
         .clicked()
         {
-            self.window_state.pinned ^= true;
-            if !self.window_state.pinned {
-                switch_visibility(ctx, false);
+            let new_pinned = !self.window_state.is_pinned();
+            self.window_state.set_pinned(new_pinned);
+            if !new_pinned {
+                switch_visibility(ctx, false, self.get_last_window_size());
             }
         }
 
