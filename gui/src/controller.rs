@@ -40,7 +40,11 @@ macro_rules! debug_print {
 fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
     if visible {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
-        try_center_window(ctx, last_window_size);
+        if last_window_size.is_some() {
+            let size = Vec2::new(528.3, 386.7);
+            try_center_window(ctx, Some(size));
+            ctx.send_viewport_cmd(ViewportCommand::InnerSize(size))
+        }
         // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0; 2].into()));
         ctx.send_viewport_cmd(ViewportCommand::Focus);
     } else {
@@ -61,7 +65,11 @@ impl App for Window {
         let mut pressed_shortcut = false;
         self.handle_window_control(ctx, &mut pressed_shortcut);
 
-        let frame = egui::containers::Frame::window(&Style::default());
+        let frame = if self.window_state.is_pinned() {
+            egui::containers::Frame::central_panel(&Style::default())
+        } else {
+            egui::containers::Frame::window(&Style::default())
+        };
 
         CentralPanel::default().frame(frame).show(ctx, |ui| {
             let resp =
@@ -90,13 +98,15 @@ impl App for Window {
     }
 
     fn raw_input_hook(&mut self, ctx: &Context, raw_input: &mut RawInput) {
-        let is_focussed = ctx.memory(|m| m.focused().is_none());
-        let pressed_escape = raw_input
-            .events
-            .iter()
-            .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
-        if is_focussed && pressed_escape {
-            switch_visibility(ctx, false, self.get_last_window_size());
+        if !self.window_state.is_pinned() {
+            let is_focussed = ctx.memory(|m| m.focused().is_none());
+            let pressed_escape = raw_input
+                .events
+                .iter()
+                .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
+            if is_focussed && pressed_escape {
+                switch_visibility(ctx, false, self.get_last_window_size());
+            }
         }
 
         // match alt + space
@@ -524,7 +534,9 @@ impl Window {
         .clicked()
         {
             let new_pinned = !self.window_state.is_pinned();
+            ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
             self.window_state.set_pinned(new_pinned);
+            ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
             if !new_pinned {
                 switch_visibility(ctx, false, self.get_last_window_size());
             }
