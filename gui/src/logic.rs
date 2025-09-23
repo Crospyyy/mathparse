@@ -36,30 +36,40 @@ pub fn determine_longest_common_start(names: &[(&String, &Symbol)]) -> String {
 
 pub mod latex_conversion {
     use crate::debug_print;
-    use anyhow::{Result, anyhow};
+    use anyhow::Result;
     use egui::TextBuffer;
 
+    #[derive(Debug)]
+    pub enum LatexConversionError {
+        ContainsUnexpectedCharacterInsideFormula(char),
+        FailedToTokenize,
+        ExpectedArgumentsAfterFunctionName(String),
+        MissingClosingBrackets,
+    }
+
     /// Expects latex in format `$formula$` or `formula`
-    pub fn convert_from_latex_if_needed(s: &str) -> Result<Option<String>> {
-        let mut s = s.trim().to_string();
-        // input: $formula$ or formula
-        let is_surrounded = s.starts_with("$") && s.ends_with("$");
-        if !is_surrounded && !contains_latex_like_syntax(&mut s) {
-            return Ok(None);
+    pub fn convert_from_latex_if_needed(s: &str) -> Option<Result<String, LatexConversionError>> {
+        let trimmed = s.trim();
+        let is_surrounded = trimmed.starts_with("$") && trimmed.ends_with("$");
+        let looks_like_latex = is_surrounded || contains_latex_like_syntax(&trimmed);
+        if !looks_like_latex {
+            return None;
         };
-        if is_surrounded {
+        Some(convert_to_latex(trimmed))
+    }
+
+    pub fn convert_to_latex(s: &str) -> Result<String, LatexConversionError> {
+        let mut s = s.trim().to_string();
+        if s.starts_with("$") && s.ends_with("$") {
             s = s.trim_start_matches(|c| c == '$').trim_end_matches(|c| c == '$').to_string();
         }
         if s.contains('$') {
-            return Err(anyhow!("Formula contains '$' inside"));
+            return Err(LatexConversionError::ContainsUnexpectedCharacterInsideFormula('$'));
         }
         preprocess_latex_symbols(&mut s);
-        let t = Token::tokenize_outer(&mut s).ok_or(anyhow!("Failed to tokenize"))?;
-        dbg!(&t);
-        let new_string = t.convert_latex_to_regular_math(false).ok_or(anyhow!("Regex is invalid"))?;
-        debug_print!("Converted to regular: {new_string}");
-
-        Ok(Some(new_string))
+        let mut t = Token::tokenize_outer(&mut s.as_str())?;
+        t.parse_functions()?;
+        Ok(t.convert_latex_to_regular_math(false).into())
     }
 
     fn contains_latex_like_syntax(s: &str) -> bool {
@@ -74,110 +84,130 @@ pub mod latex_conversion {
         }
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Clone)]
     enum Token {
         Group(Vec<Token>),
         Word(String),
+        Function(String, Vec<Token>),
     }
 
     impl Token {
-        fn tokenize_outer(s: &mut String) -> Option<Self> {
+        fn tokenize_outer(s: &mut &str) -> Result<Self, LatexConversionError> {
             let mut elements = vec![];
             if s.is_empty() {
-                return None;
+                return Err(LatexConversionError::FailedToTokenize);
             }
             while !s.is_empty() {
                 elements.push(Self::tokenize(s)?);
             }
-            Self::Group(elements).into()
+            Ok(Self::Group(elements))
         }
-        fn tokenize(s: &mut String) -> Option<Self> {
-            dbg!(&s);
-            *s = s.trim_start().to_string();
-            let opening_brackets = ['{', '('];
-            let closing_brackets = ['}', ')'];
-            let brackets: Vec<_> = opening_brackets.into_iter().chain(closing_brackets.into_iter()).collect();
-            let operations = ['*', '/', '+', '^', '-'];
+
+        fn tokenize(s: &mut &str) -> Result<Self, LatexConversionError> {
+            *s = s.trim_start();
+            let opening_brackets = "{(";
+            let closing_brackets = "})";
+            let brackets = opening_brackets.to_string() + closing_brackets;
+            let operations = "*/+^-".to_string();
             if let Some(c) = s.chars().nth(0) {
-                if operations.contains(&c) {
+                if operations.contains(c) {
                     let string = s[..1].to_string();
-                    s.remove(0);
-                    return Self::Word(string).into();
+                    *s = &s[1..];
+                    return Ok(Self::Word(string));
                 }
             }
-            if s.chars().nth(0).is_some_and(|c| opening_brackets.contains(&c)) {
-                s.remove(0);
-                *s = s.trim_start().to_string();
+            if s.chars().nth(0).is_some_and(|c| opening_brackets.contains(c)) {
+                *s = &s[1..];
+                *s = s.trim_start();
 
                 let mut inner = vec![];
-                while !s.chars().nth(0).is_some_and(|c| closing_brackets.contains(&c)) {
-                    if s.is_empty() {
-                        return None;
-                    }
+                while s.chars().nth(0).is_some_and(|c| !closing_brackets.contains(c)) {
                     inner.push(Self::tokenize(s)?);
-                    *s = s.trim_start().to_string();
+                    *s = s.trim_start();
                 }
-                if !s.chars().nth(0).is_some_and(|c| closing_brackets.contains(&c)) {
-                    return None;
+                if !s.chars().nth(0).is_some_and(|c| closing_brackets.contains(c)) {
+                    return Err(LatexConversionError::MissingClosingBrackets);
                 }
-                s.remove(0);
-                return Self::Group(inner).into();
+                *s = &s[1..];
+                return Ok(Self::Group(inner));
             }
             let string = s
                 .chars()
-                .take_while(|c| !brackets.contains(c) && *c != ' ' && !operations.contains(c))
+                .take_while(|&c| !brackets.contains(c) && c != ' ' && !operations.contains(c))
                 .collect::<String>();
-            *s = s[string.len()..].to_owned();
-            Self::Word(string).into()
+            *s = &s[string.len()..];
+            Ok(Self::Word(string))
         }
 
-        fn convert_latex_to_regular_math(self, outer_brackets: bool) -> Option<String> {
+        fn parse_functions(&mut self) -> Result<(), LatexConversionError> {
             match self {
-                Token::Group(mut inner) => {
-                    if inner.len() == 1 {
-                        return inner.pop().unwrap().convert_latex_to_regular_math(outer_brackets);
+                Token::Group(inner_tokens) => {
+                    inner_tokens.iter_mut().try_for_each(Self::parse_functions)?;
+                    let mut new_tokens = vec![];
+                    let mut inner_iter = inner_tokens.drain(..);
+                    while let Some(token) = inner_iter.next() {
+                        new_tokens.push(if let Token::Word(string) = &token {
+                            match string.as_str() {
+                                r"\sqrt" => {
+                                    let arg = inner_iter.next().ok_or(
+                                        LatexConversionError::ExpectedArgumentsAfterFunctionName(
+                                            string.clone(),
+                                        ),
+                                    )?;
+                                    Token::Function("sqrt".into(), vec![arg])
+                                },
+                                r"\frac" => {
+                                    let num = inner_iter.next().ok_or(
+                                        LatexConversionError::ExpectedArgumentsAfterFunctionName(
+                                            string.clone(),
+                                        ),
+                                    )?;
+                                    let denom = inner_iter.next().ok_or(
+                                        LatexConversionError::ExpectedArgumentsAfterFunctionName(
+                                            string.clone(),
+                                        ),
+                                    )?;
+                                    Token::Group(vec![num, Token::Word("/".into()), denom])
+                                },
+                                _ => token,
+                            }
+                        } else {
+                            token
+                        })
                     }
-                    let string = Self::create_group_string(inner, outer_brackets)?;
-                    string.into()
+                    drop(inner_iter);
+                    *inner_tokens = new_tokens;
+                    if inner_tokens.len() == 1 {
+                        *self = inner_tokens.pop().unwrap();
+                        return Ok(());
+                    }
                 },
-                Token::Word(s) => s.into(),
+                Token::Word(_) => {},
+                _ => {},
             }
+            Ok(())
         }
 
-        fn create_group_string(inner: Vec<Token>, outer_brackets: bool) -> Option<String> {
-            let mut inner_str_arr = vec![];
-            let mut inner_iter = inner.into_iter().peekable();
-            let mut is_function = false;
-            while let Some(next) = inner_iter.next() {
-                match next {
-                    Token::Word(s) => match s.as_str() {
-                        r"\frac" => {
-                            let num = inner_iter.next()?.convert_latex_to_regular_math(true)?;
-                            let denom = inner_iter.next()?.convert_latex_to_regular_math(true)?;
-                            if !outer_brackets || (inner_str_arr.is_empty() && inner_iter.peek().is_none()) {
-                                inner_str_arr.push(format!("{} / {}", num, denom));
-                            } else {
-                                inner_str_arr.push(format!("({} / {})", num, denom));
-                            }
-                        },
-                        r"\sqrt" => {
-                            is_function = true;
-                            let inner = inner_iter.next()?.convert_latex_to_regular_math(false)?;
-                            inner_str_arr.push(format!("sqrt({inner})"));
-                        },
-                        _ => inner_str_arr.push(s),
-                    },
-                    Token::Group(_) => {
-                        inner_str_arr.push(next.convert_latex_to_regular_math(true)?);
-                    },
-                }
+        fn convert_latex_to_regular_math(&self, outer_brackets: bool) -> String {
+            match self {
+                Token::Group(inner) => {
+                    let inner_str = inner
+                        .iter()
+                        .map(|a| a.convert_latex_to_regular_math(true))
+                        .reduce(|a, b| a + " " + &b)
+                        .unwrap_or_default();
+                    if outer_brackets { format!("({inner_str})") } else { inner_str }
+                },
+                Token::Word(s) => s.to_string(),
+                Token::Function(name, args) => {
+                    let args_str = args
+                        .iter()
+                        .map(|a| a.convert_latex_to_regular_math(false))
+                        .reduce(|a, b| a + ", " + &b)
+                        .unwrap_or_default();
+                    format!("{name}({args_str})")
+                },
             }
-            let string = inner_str_arr.join(" ");
-            Some(if !outer_brackets || (inner_str_arr.len() <= 1 && is_function) {
-                string
-            } else {
-                format!("({string})")
-            })
         }
     }
 }

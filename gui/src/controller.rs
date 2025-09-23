@@ -565,10 +565,10 @@ impl Window {
             for s in i.events.iter_mut().flat_map(|e| quick_match!(e, Event::Paste(s) => s)) {
                 debug_print!("Pasted text {s}");
                 match convert_from_latex_if_needed(s) {
-                    Ok(Some(new_s)) => {
+                    Some(Ok(new_s)) => {
                         *s = new_s;
                     },
-                    Err(err) => {
+                    Some(Err(err)) => {
                         dbg!(err);
                         // todo print error as notification
                     },
