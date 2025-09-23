@@ -147,6 +147,7 @@ pub mod latex_conversion {
         fn create_group_string(inner: Vec<Token>, outer_brackets: bool) -> Option<String> {
             let mut inner_str_arr = vec![];
             let mut inner_iter = inner.into_iter().peekable();
+            let mut is_function = false;
             while let Some(next) = inner_iter.next() {
                 match next {
                     Token::Word(s) => match s.as_str() {
@@ -160,6 +161,7 @@ pub mod latex_conversion {
                             }
                         },
                         r"\sqrt" => {
+                            is_function = true;
                             let inner = inner_iter.next()?.convert_latex_to_regular_math(false)?;
                             inner_str_arr.push(format!("sqrt({inner})"));
                         },
@@ -171,7 +173,11 @@ pub mod latex_conversion {
                 }
             }
             let string = inner_str_arr.join(" ");
-            Some(if outer_brackets && inner_str_arr.len() > 1 { format!("({string})") } else { string })
+            Some(if !outer_brackets || (inner_str_arr.len() <= 1 && is_function) {
+                string
+            } else {
+                format!("({string})")
+            })
         }
     }
 }
