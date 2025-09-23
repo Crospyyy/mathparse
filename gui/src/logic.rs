@@ -138,7 +138,7 @@ pub mod latex_conversion {
                         return inner.pop().unwrap().convert_latex_to_regular_math(outer_brackets);
                     }
                     let string = Self::create_group_string(inner, outer_brackets)?;
-                    if outer_brackets { format!("({string})") } else { string }.into()
+                    string.into()
                 },
                 Token::Word(s) => s.into(),
             }
@@ -171,7 +171,7 @@ pub mod latex_conversion {
                 }
             }
             let string = inner_str_arr.join(" ");
-            Some(string)
+            Some(if outer_brackets && inner_str_arr.len() > 1 { format!("({string})") } else { string })
         }
     }
 }
