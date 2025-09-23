@@ -563,7 +563,11 @@ impl Window {
     fn preprocess_paste(&mut self, ui: &mut Ui) {
         ui.input_mut(|i| {
             for s in i.events.iter_mut().flat_map(|e| quick_match!(e, Event::Paste(s) => s)) {
+                *s = s.trim().to_string();
                 debug_print!("Pasted text {s}");
+                if s.is_empty() {
+                    continue;
+                }
                 match convert_from_latex_if_needed(s) {
                     Some(Ok(new_s)) => {
                         *s = new_s;
