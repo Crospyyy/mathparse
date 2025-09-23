@@ -40,26 +40,26 @@ pub mod latex_conversion {
     use egui::TextBuffer;
 
     /// Expects latex in format `$formula$` or `formula`
-    pub fn convert_from_latex_if_needed(s: &mut String) -> Result<bool> {
+    pub fn convert_from_latex_if_needed(s: &str) -> Result<Option<String>> {
+        let mut s = s.trim().to_string();
         // input: $formula$ or formula
         let is_surrounded = s.starts_with("$") && s.ends_with("$");
-        if !is_surrounded && !contains_latex_like_syntax(s) {
-            return Ok(false);
+        if !is_surrounded && !contains_latex_like_syntax(&mut s) {
+            return Ok(None);
         };
         if is_surrounded {
-            *s = s.trim_start_matches(|c| c == '$').trim_end_matches(|c| c == '$').to_string();
+            s = s.trim_start_matches(|c| c == '$').trim_end_matches(|c| c == '$').to_string();
         }
         if s.contains('$') {
             return Err(anyhow!("Formula contains '$' inside"));
         }
-        preprocess_latex_symbols(s);
-        let t = Token::tokenize_outer(s).ok_or(anyhow!("Failed to tokenize"))?;
+        preprocess_latex_symbols(&mut s);
+        let t = Token::tokenize_outer(&mut s).ok_or(anyhow!("Failed to tokenize"))?;
         dbg!(&t);
         let new_string = t.convert_latex_to_regular_math(false).ok_or(anyhow!("Regex is invalid"))?;
         debug_print!("Converted to regular: {new_string}");
-        *s = new_string;
 
-        Ok(true)
+        Ok(Some(new_string))
     }
 
     fn contains_latex_like_syntax(s: &str) -> bool {

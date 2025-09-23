@@ -1,5 +1,5 @@
-use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::logic::UiStateInfo;
+use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState, logic};
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
@@ -564,9 +564,15 @@ impl Window {
         ui.input_mut(|i| {
             for s in i.events.iter_mut().flat_map(|e| quick_match!(e, Event::Paste(s) => s)) {
                 debug_print!("Pasted text {s}");
-                if let Err(_err) = convert_from_latex_if_needed(s) {
-                    dbg!(_err);
-                    // todo print error as notification
+                match convert_from_latex_if_needed(s) {
+                    Ok(Some(new_s)) => {
+                        *s = new_s;
+                    },
+                    Err(err) => {
+                        dbg!(err);
+                        // todo print error as notification
+                    },
+                    _ => {},
                 }
             }
         });
