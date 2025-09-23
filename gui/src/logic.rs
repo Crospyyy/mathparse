@@ -68,7 +68,7 @@ pub mod latex_conversion {
     }
 
     fn preprocess_latex_symbols(s: &mut String) {
-        let conversions = [(r"\cdot", "*"), (r"\div", "/"), (r"\pi", "pi")];
+        let conversions = [(r"\cdot", "*"), (r"\div", "/"), (r"\pi", "pi"), (r"\left", ""), (r"\right", "")];
         for (from, to) in conversions {
             *s = s.replace(from, to);
         }
@@ -94,28 +94,30 @@ pub mod latex_conversion {
         fn tokenize(s: &mut String) -> Option<Self> {
             dbg!(&s);
             *s = s.trim_start().to_string();
-            let opening_br = '{';
-            let closing_br = '}';
+            let opening_brackets = ['{', '('];
+            let closing_brackets = ['}', ')'];
+            let brackets: Vec<_> = opening_brackets.into_iter().chain(closing_brackets.into_iter()).collect();
+            let operations = ['*', '/', '+', '^', '-'];
             if let Some(c) = s.chars().nth(0) {
-                if ['*', '/', '+', '^'].contains(&c) {
+                if operations.contains(&c) {
                     let string = s[..1].to_string();
                     s.remove(0);
                     return Self::Word(string).into();
                 }
             }
-            if s.starts_with(opening_br) {
+            if s.chars().nth(0).is_some_and(|c| opening_brackets.contains(&c)) {
                 s.remove(0);
                 *s = s.trim_start().to_string();
 
                 let mut inner = vec![];
-                while !s.starts_with(closing_br) {
+                while !s.chars().nth(0).is_some_and(|c| closing_brackets.contains(&c)) {
                     if s.is_empty() {
                         return None;
                     }
                     inner.push(Self::tokenize(s)?);
                     *s = s.trim_start().to_string();
                 }
-                if !s.starts_with(closing_br) {
+                if !s.chars().nth(0).is_some_and(|c| closing_brackets.contains(&c)) {
                     return None;
                 }
                 s.remove(0);
@@ -123,7 +125,7 @@ pub mod latex_conversion {
             }
             let string = s
                 .chars()
-                .take_while(|c| ![opening_br, closing_br, ' ', '*', '/', '+', '^'].contains(c))
+                .take_while(|c| !brackets.contains(c) && *c != ' ' && !operations.contains(c))
                 .collect::<String>();
             *s = s[string.len()..].to_owned();
             Self::Word(string).into()
@@ -151,7 +153,7 @@ pub mod latex_conversion {
                         r"\frac" => {
                             let num = inner_iter.next()?.convert_latex_to_regular_math(true)?;
                             let denom = inner_iter.next()?.convert_latex_to_regular_math(true)?;
-                            if inner_str_arr.is_empty() && inner_iter.peek().is_none() {
+                            if !outer_brackets || (inner_str_arr.is_empty() && inner_iter.peek().is_none()) {
                                 inner_str_arr.push(format!("{} / {}", num, denom));
                             } else {
                                 inner_str_arr.push(format!("({} / {})", num, denom));
