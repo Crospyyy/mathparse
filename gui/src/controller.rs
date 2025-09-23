@@ -16,6 +16,7 @@ use library::{
     FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, Signature,
     Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
 };
+use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 use regex::Regex;
 use std::cmp::Ordering;
 use std::process::exit;
@@ -55,6 +56,7 @@ fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2
 
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+        Self::set_no_minimize_animation_for_frame(_frame);
         let mut guard = self.window_state.last_window_size.lock().unwrap();
         let option = ctx.input(|i| i.viewport().outer_rect.map(|r| r.size()));
         if let Some(size) = option {
@@ -175,6 +177,50 @@ impl Window {
         });
 
         window
+    }
+
+    fn set_no_minimize_animation_for_frame(frame: &mut Frame) {
+        // nur für Windows ausführen
+        #[cfg(target_os = "windows")]
+        {
+            use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+            // raw_window_handle verwenden um das native HWND zu bekommen
+            // DWM-API und konstante lokal importieren (manuell binden, um windows_sys feature issues zu vermeiden)
+            const DWMWA_TRANSITIONS_FORCEDISABLED: u32 = 3;
+            #[link(name = "dwmapi")]
+            unsafe extern "system" {
+                fn DwmSetWindowAttribute(
+                    hwnd: isize, dwAttribute: u32, pvAttribute: *const std::ffi::c_void, cbAttribute: u32,
+                ) -> i32;
+            }
+
+            // bestmögliches Extrahieren des HWND aus dem Frame
+            let hwnd = match frame.window_handle() {
+                Ok(window_handle) => match window_handle.as_raw() {
+                    RawWindowHandle::Win32(handle) => handle.hwnd.get(),
+                    _ => 0isize,
+                },
+                _ => 0isize,
+            };
+
+            // kein gültiges Handle -> nichts tun
+            if hwnd == 0 {
+                return;
+            }
+
+            // 1 = deaktivieren, 0 = aktivieren
+            let attribute: i32 = 1;
+            unsafe {
+                // dwAttribute ist ein DWORD (u32)
+                DwmSetWindowAttribute(
+                    hwnd,
+                    DWMWA_TRANSITIONS_FORCEDISABLED as u32,
+                    &attribute as *const _ as _,
+                    std::mem::size_of::<i32>() as u32,
+                );
+            }
+        }
     }
 
     fn get_last_window_size(&self) -> Option<Vec2> {
