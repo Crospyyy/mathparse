@@ -10,3 +10,4 @@ eframe = "0.32.3"
 regex = "1.11.2"
 global_shortcuts = { path = "../basically_a_keylogger" }
 chrono = "0.4.42"
+anyhow = "1.0.100"

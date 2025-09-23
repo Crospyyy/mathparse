@@ -1,6 +1,7 @@
+use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::logic::UiStateInfo;
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
-use crate::{Window, WindowState};
+use crate::{Window, WindowState, logic};
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
 use eframe::epaint::{FontFamily, FontId};
 use eframe::{App, CreationContext, Frame};
@@ -248,6 +249,7 @@ impl Window {
         if pressed_shortcut {
             self.select_all_in_textedit(&response);
         }
+
         self.input_post_process(ui);
 
         if response.has_focus() {
@@ -299,58 +301,8 @@ impl Window {
     }
 
     pub(super) fn preprocess_user_input(&mut self, ui: &mut Ui) {
-        let Some(mut typed_brackets) = ui.input_mut(|ip| {
-            ip.events.retain(|e| match e {
-                Event::Text(text) => text.chars().all(|c| c.is_ascii()),
-                _ => true,
-            });
-            let text_bracket_check = |t: &&String| t.ends_with("(");
-            if let Some(bracket_string) = ip
-                .events
-                .iter()
-                .flat_map(|e| quick_match!(e, Event::Text(t)=>t))
-                .find(text_bracket_check)
-                .cloned()
-            {
-                ip.consume_key(Modifiers::NONE, Key::OpenBracket);
-                ip.consume_key(Modifiers::SHIFT, Key::Num8);
-                ip.events.retain(|e| match e {
-                    Event::Text(t) => !text_bracket_check(&t),
-                    _ => true,
-                });
-                Some(bracket_string)
-            } else {
-                None
-            }
-        }) else {
-            return;
-        };
-
-        let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
-            return;
-        };
-        let Some(cursors) = state.cursor.char_range() else {
-            return;
-        };
-        if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
-            let move_cursor = typed_brackets.len();
-            if cursor_pos == self.ui_state.top_user_input.len() {
-                typed_brackets += ")";
-            }
-            self.ui_state.top_user_input.insert_str(cursor_pos, &typed_brackets);
-            state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + move_cursor))));
-        } else {
-            let [min, max] = cursors.sorted_cursors().map(|c| c.index);
-            let string_before = &self.ui_state.top_user_input[..min];
-            let string_middle = &self.ui_state.top_user_input[min..max];
-            let string_after = &self.ui_state.top_user_input[max..];
-            self.ui_state.top_user_input = format!("{}({}){}", string_before, string_middle, string_after);
-            state.cursor.set_char_range(Some(CCursorRange::two(
-                CCursor::new(cursors.primary.index + 1),
-                CCursor::new(cursors.secondary.index + 1),
-            )));
-        }
-        state.store(ui.ctx(), self.ui_state.top_user_input_id);
+        self.preprocess_brackets(ui);
+        self.preprocess_paste(ui);
     }
 
     pub(super) fn input_post_process(&mut self, ui: &mut Ui) {
@@ -517,7 +469,7 @@ impl Window {
         if compatible_symbols.is_empty() {
             return None;
         }
-        let longest_common_start = determine_longest_common_start(&compatible_symbols);
+        let longest_common_start = logic::determine_longest_common_start(&compatible_symbols);
         Some(AutocompletionResult {
             input_term: input_symbol_name,
             possible_symbols: compatible_symbols,
@@ -552,6 +504,75 @@ impl Window {
     }
 }
 
+impl Window {
+    fn preprocess_brackets(&mut self, ui: &mut Ui) {
+        let Some(mut typed_brackets) = ui.input_mut(|ip| {
+            ip.events.retain(|e| match e {
+                Event::Text(text) => text.chars().all(|c| c.is_ascii()),
+                _ => true,
+            });
+            let text_bracket_check = |t: &&String| t.ends_with("(");
+            if let Some(bracket_string) = ip
+                .events
+                .iter()
+                .flat_map(|e| quick_match!(e, Event::Text(t)=>t))
+                .find(text_bracket_check)
+                .cloned()
+            {
+                ip.consume_key(Modifiers::NONE, Key::OpenBracket);
+                ip.consume_key(Modifiers::SHIFT, Key::Num8);
+                ip.events.retain(|e| match e {
+                    Event::Text(t) => !text_bracket_check(&t),
+                    _ => true,
+                });
+                Some(bracket_string)
+            } else {
+                None
+            }
+        }) else {
+            return;
+        };
+
+        let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
+            return;
+        };
+        let Some(cursors) = state.cursor.char_range() else {
+            return;
+        };
+        if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
+            let move_cursor = typed_brackets.len();
+            if cursor_pos == self.ui_state.top_user_input.len() {
+                typed_brackets += ")";
+            }
+            self.ui_state.top_user_input.insert_str(cursor_pos, &typed_brackets);
+            state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + move_cursor))));
+        } else {
+            let [min, max] = cursors.sorted_cursors().map(|c| c.index);
+            let string_before = &self.ui_state.top_user_input[..min];
+            let string_middle = &self.ui_state.top_user_input[min..max];
+            let string_after = &self.ui_state.top_user_input[max..];
+            self.ui_state.top_user_input = format!("{}({}){}", string_before, string_middle, string_after);
+            state.cursor.set_char_range(Some(CCursorRange::two(
+                CCursor::new(cursors.primary.index + 1),
+                CCursor::new(cursors.secondary.index + 1),
+            )));
+        }
+        state.store(ui.ctx(), self.ui_state.top_user_input_id);
+    }
+
+    fn preprocess_paste(&mut self, ui: &mut Ui) {
+        ui.input_mut(|i| {
+            for s in i.events.iter_mut().flat_map(|e| quick_match!(e, Event::Paste(s) => s)) {
+                debug_print!("Pasted text {s}");
+                if let Err(_err) = convert_from_latex_if_needed(s) {
+                    dbg!(_err);
+                    // todo print error as notification
+                }
+            }
+        });
+    }
+}
+
 pub struct AutocompletionResult<'a> {
     pub input_term: String,
     pub possible_symbols: Vec<(&'a String, &'a Symbol)>,
@@ -571,26 +592,4 @@ pub fn get_cursor_pos(response: &Response) -> Option<usize> {
     } else {
         None
     }
-}
-
-pub fn determine_longest_common_start(names: &[(&String, &Symbol)]) -> String {
-    if names.is_empty() {
-        return String::new();
-    }
-    let common_start = names[0].0.to_string();
-    let mut longest_common = common_start.len();
-    for name in names.iter().map(|(n, _)| n).skip(1) {
-        if longest_common == 0 {
-            return String::new();
-        }
-        let max = longest_common.min(name.len());
-        longest_common = max;
-        for i in 0..max {
-            if common_start.chars().nth(i) != name.chars().nth(i) {
-                longest_common = i;
-                break;
-            }
-        }
-    }
-    common_start[..longest_common].to_string()
 }

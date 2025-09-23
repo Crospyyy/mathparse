@@ -11,7 +11,7 @@ pub fn main() {
     let viewport = ViewportBuilder::default()
         .with_decorations(false)
         .with_transparent(true)
-        .with_taskbar(false)
+        .with_taskbar(cfg!(debug_assertions))
         .with_always_on_top();
 
     eframe::run_native(
@@ -46,11 +46,11 @@ impl WindowState {
             last_window_size: Arc::new(Mutex::new(None)),
         }
     }
-    
+
     fn is_pinned(&self) -> bool {
         self.pinned.load(std::sync::atomic::Ordering::Relaxed)
     }
-    
+
     fn set_pinned(&self, pinned: bool) {
         self.pinned.store(pinned, std::sync::atomic::Ordering::Relaxed);
     }
