@@ -69,7 +69,7 @@ impl App for Window {
         let frame = if self.window_state.is_pinned() {
             egui::containers::Frame::central_panel(&Style::default())
         } else {
-            egui::containers::Frame::window(&Style::default())
+            egui::containers::Frame::window(&Style::default()).corner_radius(10.0).inner_margin(10.0)
         };
 
         CentralPanel::default().frame(frame).show(ctx, |ui| {
@@ -85,6 +85,7 @@ impl App for Window {
 
             let input = &mut vec![];
             self.show_top_input(ui, input, pressed_shortcut);
+            ui.add_space(10.0);
             self.show_tab_selector(ui, input);
             match self.ui_state.selected_page {
                 Page::History => self.show_history(ui),

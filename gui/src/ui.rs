@@ -9,8 +9,9 @@ use egui::containers::menu::{MenuButton, MenuConfig};
 use egui::text::CCursorRange;
 use egui::text_edit::TextEditOutput;
 use egui::{
-    Align, Align2, DragValue, FontSelection, Id, Key, Label, LayerId, Layout, Popup, PopupAnchor,
-    PopupCloseBehavior, Pos2, Response, RichText, ScrollArea, Sides, TextEdit, Tooltip, Ui, Widget,
+    Align, Align2, DragValue, FontSelection, Frame, Id, Key, Label, LayerId, Layout, Margin, Popup,
+    PopupAnchor, PopupCloseBehavior, Pos2, Response, RichText, Rounding, ScrollArea, Sides, TextEdit,
+    Tooltip, Ui, Vec2, Widget,
 };
 use library::FormattingOptions;
 use std::cmp::PartialEq;
@@ -97,16 +98,18 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 
 impl Window {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
-        let font_id = FontId::new(20.0, FontFamily::Proportional);
+        let font_id = FontId::new(22.0, FontFamily::Proportional);
         self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
         let response = TextEdit::singleline(&mut self.ui_state.top_user_input)
             .id(self.ui_state.top_user_input_id)
             .font(FontSelection::FontId(font_id.clone()))
             .lock_focus(true)
             .desired_width(ui.available_width())
+            .frame(false)
             .show(ui);
         self.ui_state.top_user_input = self.ui_state.top_user_input.replace("×", "*");
 
+        ui.separator();
         response
     }
 
@@ -118,7 +121,7 @@ impl Window {
                 pos,
                 Align2::LEFT_TOP,
                 " ".to_owned() + &result,
-                FontId::new(20.0, FontFamily::Proportional),
+                FontId::new(22.0, FontFamily::Proportional),
                 ui.visuals().text_color(),
             );
         }
@@ -235,7 +238,7 @@ impl Window {
         if x.1.0 {
             input.push(UiStateInfo::ClearCustomSymbols)
         }
-        if x.1.1 { 
+        if x.1.1 {
             input.push(UiStateInfo::ClearHistory)
         }
     }
