@@ -102,6 +102,7 @@ impl Window {
         self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
         let response = TextEdit::singleline(&mut self.ui_state.top_user_input)
             .id(self.ui_state.top_user_input_id)
+            .hint_text("Enter formula here ...")
             .font(FontSelection::FontId(font_id.clone()))
             .lock_focus(true)
             .desired_width(ui.available_width())
@@ -149,7 +150,7 @@ impl Window {
                 }
             },
             Some(Err(_)) => job.append("=  !", 0.0, format),
-            None => job.append("", 0.0, format),
+            None => job.append("=", 0.0, format),
         };
 
         job.wrap = TextWrapping {
