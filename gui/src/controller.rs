@@ -69,7 +69,15 @@ impl App for Window {
         let frame = if self.window_state.is_pinned() {
             egui::containers::Frame::central_panel(&Style::default())
         } else {
-            egui::containers::Frame::window(&Style::default()).corner_radius(10.0).inner_margin(10.0)
+            let mut shadow = Shadow::default();
+            shadow.color = Color32::BLACK.gamma_multiply(0.1);
+            shadow.blur = 14;
+            shadow.spread = 7;
+            egui::containers::Frame::window(&Style::default())
+                .corner_radius(10.0)
+                .inner_margin(10.0)
+                .outer_margin(15.0)
+                .shadow(shadow)
         };
 
         CentralPanel::default().frame(frame).show(ctx, |ui| {
