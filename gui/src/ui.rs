@@ -1,21 +1,19 @@
 use crate::Window;
-use crate::controller::get_cursor_pos;
-use crate::logic::UiStateInfo;
+use crate::controller::{TaskReceiver, TaskSender, get_cursor_pos, new_task_channel};
+use crate::logic::UiInteraction;
 use crate::ui::HistoryEntryContent::{Calculation, SymbolDefinition};
-use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
-use eframe::epaint::{Color32, FontFamily, FontId};
+use eframe::epaint::{Color32, FontFamily, FontId, Vec2};
 use egui::containers::menu::{MenuButton, MenuConfig};
-use egui::text::CCursorRange;
 use egui::text_edit::TextEditOutput;
 use egui::{
-    Align, Align2, DragValue, FontSelection, Frame, Id, Key, Label, LayerId, Layout, Margin, Popup,
-    PopupAnchor, PopupCloseBehavior, Pos2, Response, RichText, Rounding, ScrollArea, Sides, TextEdit,
-    Tooltip, Ui, Vec2, Widget,
+    Align2, DragValue, FontSelection, Id, Key, Label, PopupCloseBehavior, Pos2, Response, RichText,
+    ScrollArea, Sides, TextEdit, Ui, Widget,
 };
-use library::FormattingOptions;
+use library::{FormattingOptions, FormulaStore};
 use std::cmp::PartialEq;
 use std::fmt::Display;
+use std::sync::mpsc::{Sender, channel};
 
 pub(super) struct UiState {
     pub(super) top_user_input: String,
@@ -25,6 +23,8 @@ pub(super) struct UiState {
     pub all_symbol_strings: Vec<String>,
     pub history: Vec<HistoryEntry>,
     pub selected_page: Page,
+    pub interaction_sender: TaskSender,
+    pub interaction: TaskReceiver,
 }
 
 pub struct HistoryEntry {
@@ -73,6 +73,7 @@ impl Display for Page {
 
 impl UiState {
     pub(super) fn new() -> Self {
+        let (t, r) = new_task_channel();
         Self {
             top_user_input: "".to_owned(),
             top_user_input_id: "Formula Input".into(),
@@ -81,6 +82,8 @@ impl UiState {
             all_symbol_strings: vec![],
             history: vec![],
             selected_page: Page::History,
+            interaction_sender: t,
+            interaction: r,
         }
     }
 }
@@ -96,19 +99,19 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
     output.galley.rect.right_top() + output.galley_pos.to_vec2()
 }
 
-impl Window {
+impl UiState {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
         let font_id = FontId::new(22.0, FontFamily::Proportional);
-        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("*", "×");
-        let response = TextEdit::singleline(&mut self.ui_state.top_user_input)
-            .id(self.ui_state.top_user_input_id)
+        self.top_user_input = self.top_user_input.replace("*", "×");
+        let response = TextEdit::singleline(&mut self.top_user_input)
+            .id(self.top_user_input_id)
             .hint_text("Enter formula here ...")
             .font(FontSelection::FontId(font_id.clone()))
             .lock_focus(true)
             .desired_width(ui.available_width())
             .frame(false)
             .show(ui);
-        self.ui_state.top_user_input = self.ui_state.top_user_input.replace("×", "*");
+        self.top_user_input = self.top_user_input.replace("×", "*");
 
         ui.separator();
         response
@@ -116,7 +119,7 @@ impl Window {
 
     pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) {
         let pos = last_caret_pos_from_output(&output);
-        if let Some(Ok(result)) = &self.ui_state.calculation_result {
+        if let Some(Ok(result)) = &self.calculation_result {
             let result = result.split_once('(').map(|b| b.0.trim()).unwrap_or(result);
             ui.painter().text(
                 pos,
@@ -128,29 +131,29 @@ impl Window {
         }
     }
 
-    pub fn show_result_label(&mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
+    pub fn show_result_label(&mut self, ui: &mut Ui) {
         // todo only show an error icon and display the error message in a tooltip
 
         let mut format = TextFormat { font_id: FontId::proportional(20.0), ..Default::default() };
-        if self.ui_state.calculation_result.as_ref().is_some_and(|r| r.is_err()) {
+        if self.calculation_result.as_ref().is_some_and(|r| r.is_err()) {
             format.color = Color32::ORANGE.gamma_multiply(0.7);
         }
         let mut small_format = TextFormat { font_id: FontId::proportional(15.0), ..Default::default() };
         small_format.color = small_format.color.gamma_multiply(0.7);
 
         let mut job = LayoutJob::default();
-        match &self.ui_state.calculation_result {
+        match &self.calculation_result {
             Some(Ok(result)) => {
                 if let Some((first, second)) = result.split_once('(') {
-                    job.append(first, 0.0, format);
+                    job.append(first, 0.0, format.clone());
                     job.append("(", 0.0, small_format.clone());
                     job.append(second, 0.0, small_format);
                 } else {
-                    job.append(result, 0.0, format);
+                    job.append(result, 0.0, format.clone());
                 }
             },
-            Some(Err(_)) => job.append("=  !", 0.0, format),
-            None => job.append("=", 0.0, format),
+            Some(Err(_)) => job.append("=  !", 0.0, format.clone()),
+            None => job.append("=", 0.0, format.clone()),
         };
 
         job.wrap = TextWrapping {
@@ -159,7 +162,8 @@ impl Window {
             break_anywhere: true,
             overflow_character: None,
         };
-        let error_string = self.ui_state.calculation_result.as_ref().and_then(|r| r.as_ref().err());
+        let error_string = self.calculation_result.as_ref().and_then(|r| r.as_ref().err());
+
         Sides::new().show(
             ui,
             |ui| {
@@ -169,27 +173,30 @@ impl Window {
                 }
             },
             |ui| {
-                let button = MenuButton::new("⛭")
-                    .config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside));
-                button.ui(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Round Digits:");
-                        let drag_val_resp =
-                            DragValue::new(&mut self.ui_state.rounding_digits).range(1..=100).ui(ui);
-                        if drag_val_resp.changed() {
-                            input.push(UiStateInfo::RoundingAccuracyChanged);
-                        }
+                let mut button = MenuButton::new(RichText::new("⛭").size(15.0));
+                button.button = button.button.frame(false).min_size(Vec2::new(25.0, 25.0));
+                button
+                    .config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside))
+                    .ui(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("Round Digits:");
+                            let drag_val_resp =
+                                DragValue::new(&mut self.rounding_digits).range(1..=100).ui(ui);
+                            if drag_val_resp.changed() {
+                                self.interaction_sender.send(UiInteraction::RoundingAccuracyChanged);
+                            }
+                        });
                     });
-                });
             },
         );
     }
 
     pub(crate) fn show_autocompletion(
-        &mut self, ui: &mut Ui, response: &Response, input: &mut Vec<UiStateInfo>,
+        &mut self, ui: &mut Ui, response: &Response, formula_store: &FormulaStore,
     ) -> bool {
         let Some(cursor_pos) = get_cursor_pos(&response) else { return false };
-        let Some(autocompletion) = self.get_autocompletion_result(&self.ui_state.top_user_input, cursor_pos)
+        let Some(autocompletion) =
+            Window::get_autocompletion_result(&self.top_user_input, cursor_pos, formula_store)
         else {
             return false;
         };
@@ -213,7 +220,7 @@ impl Window {
             }
         });
         if ui.input(|i| i.key_pressed(Key::Tab)) {
-            input.push(UiStateInfo::RequestAutocompletion {
+            self.interaction_sender.send(UiInteraction::RequestAutocompletion {
                 cursor_pos,
                 input_term: autocompletion.input_term,
                 complete_to: autocompletion.longest_common_start,
@@ -223,33 +230,33 @@ impl Window {
         true
     }
 
-    pub fn show_tab_selector(&self, ui: &mut Ui, input: &mut Vec<UiStateInfo>) {
+    pub fn show_tab_selector(&mut self, ui: &mut Ui) {
         let x = Sides::default().show(
             ui,
             |ui| {
-                self.add_selectable_label(ui, input, Page::History, "Show calculation history");
-                self.add_selectable_label(ui, input, Page::DefinedSymbols, "Show defined symbols");
+                self.add_selectable_label(ui, Page::History, "Show calculation history");
+                self.add_selectable_label(ui, Page::DefinedSymbols, "Show defined symbols");
             },
-            |ui| match self.ui_state.selected_page {
+            |ui| match self.selected_page {
                 Page::History => (ui.button("Clear Symbols").clicked(), ui.button("Clear History").clicked()),
                 Page::DefinedSymbols => (false, false),
             },
         );
         // todo change input to channels or something similar
         if x.1.0 {
-            input.push(UiStateInfo::ClearCustomSymbols)
+            self.interaction_sender.send(UiInteraction::ClearCustomSymbols)
         }
         if x.1.1 {
-            input.push(UiStateInfo::ClearHistory)
+            self.interaction_sender.send(UiInteraction::ClearHistory)
         }
     }
 
-    fn add_selectable_label(&self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, page: Page, description: &str) {
-        ui.selectable_label(self.ui_state.selected_page == page, page.to_string())
+    fn add_selectable_label(&self, ui: &mut Ui, page: Page, description: &str) {
+        ui.selectable_label(self.selected_page == page, page.to_string())
             .on_hover_text(description)
             .clicked()
             .then(|| {
-                input.push(UiStateInfo::SelectPage(page));
+                self.interaction_sender.send(UiInteraction::SelectPage(page));
             });
     }
 
@@ -257,7 +264,7 @@ impl Window {
         // todo align all symbols to the `=` sign
         let area = ScrollArea::vertical().id_salt("defined symbols").auto_shrink(false);
         area.show(ui, |ui| {
-            for text in &self.ui_state.all_symbol_strings {
+            for text in &self.all_symbol_strings {
                 ui.label(RichText::new(text).size(17.0));
             }
         });
@@ -266,7 +273,7 @@ impl Window {
     pub fn show_history(&mut self, ui: &mut Ui) {
         let area = ScrollArea::vertical().id_salt("history").auto_shrink(false);
         area.show(ui, |ui| {
-            for text in self.ui_state.history.iter().rev() {
+            for text in self.history.iter().rev() {
                 ui.group(|ui| {
                     Sides::new().show(
                         ui,

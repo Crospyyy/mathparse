@@ -2,7 +2,7 @@ use crate::ui::Page;
 use egui::Response;
 use library::Symbol;
 
-pub enum UiStateInfo {
+pub enum UiInteraction {
     TopInputChanged,
     TopInputSubmit,
     RoundingAccuracyChanged,

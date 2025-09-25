@@ -1,4 +1,4 @@
-use crate::logic::UiStateInfo;
+use crate::logic::UiInteraction;
 use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState, logic};
@@ -20,6 +20,7 @@ use library::{
 use regex::Regex;
 use std::cmp::Ordering;
 use std::process::exit;
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::thread;
 
@@ -91,15 +92,16 @@ impl App for Window {
                 });
             }
 
-            let input = &mut vec![];
-            self.show_top_input(ui, input, pressed_shortcut);
-            ui.add_space(10.0);
-            self.show_tab_selector(ui, input);
+            self.show_top_input(ui, pressed_shortcut);
+
+            ui.add_space(7.5);
+            self.ui_state.show_tab_selector(ui);
             match self.ui_state.selected_page {
-                Page::History => self.show_history(ui),
-                Page::DefinedSymbols => self.show_all_defined_symbols(ui),
+                Page::History => self.ui_state.show_history(ui),
+                Page::DefinedSymbols => self.ui_state.show_all_defined_symbols(ui),
             }
-            self.handle_ui_input(input);
+            dbg!(ui.available_rect_before_wrap());
+            self.handle_ui_input();
         });
     }
 
@@ -191,14 +193,14 @@ impl Window {
         self.window_state.last_window_size.lock().unwrap().clone()
     }
 
-    pub fn handle_ui_input(&mut self, input: &mut Vec<UiStateInfo>) {
-        for info in input.drain(..) {
+    pub fn handle_ui_input(&mut self) {
+        while let Ok(info) = self.ui_state.interaction.0.try_recv() {
             match info {
-                UiStateInfo::TopInputChanged | UiStateInfo::RoundingAccuracyChanged => {
+                UiInteraction::TopInputChanged | UiInteraction::RoundingAccuracyChanged => {
                     self.update_calculation_result()
                 },
-                UiStateInfo::TopInputSubmit => self.try_apply_calculation(),
-                UiStateInfo::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
+                UiInteraction::TopInputSubmit => self.try_apply_calculation(),
+                UiInteraction::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
                     let insert_brackets = self.formula_store.get_symbol(&complete_to).is_some_and(|s| {
                         matches!(
                             s.signature(),
@@ -220,10 +222,10 @@ impl Window {
                     set_cursor_pos(&response, new_cursor_pos);
                     self.update_calculation_result();
                 },
-                UiStateInfo::SelectPage(page) => {
+                UiInteraction::SelectPage(page) => {
                     self.ui_state.selected_page = page;
                 },
-                UiStateInfo::ClearCustomSymbols => {
+                UiInteraction::ClearCustomSymbols => {
                     // todo keep track of custom symbols
                     let mut return_now = false;
                     for e in self.ui_state.history.iter().rev() {
@@ -240,20 +242,18 @@ impl Window {
                     self.formula_store.define_default_symbols().unwrap();
                     self.ui_state.history.push(HistoryEntry::cleared_symbols());
                 },
-                UiStateInfo::ClearHistory => {
+                UiInteraction::ClearHistory => {
                     self.ui_state.history.clear();
                 },
             }
         }
     }
 
-    pub(crate) fn show_top_input(
-        &mut self, ui: &mut Ui, input: &mut Vec<UiStateInfo>, pressed_shortcut: bool,
-    ) {
+    pub(crate) fn show_top_input(&mut self, ui: &mut Ui, pressed_shortcut: bool) {
         let text_before = self.ui_state.top_user_input.clone();
         self.preprocess_user_input(ui);
 
-        let output = self.show_top_input_textedit(ui);
+        let output = self.ui_state.show_top_input_textedit(ui);
         let response = output.response.clone();
         if pressed_shortcut {
             self.select_all_in_textedit(&response);
@@ -262,23 +262,24 @@ impl Window {
         self.input_post_process(ui);
 
         if response.has_focus() {
-            let autocompletion_visible = self.show_autocompletion(ui, &response, input);
+            let autocompletion_visible =
+                self.ui_state.show_autocompletion(ui, &response, &self.formula_store);
             if autocompletion_visible {
-                self.show_inline_result(ui, &output);
+                self.ui_state.show_inline_result(ui, &output);
             }
         }
 
         if text_before != self.ui_state.top_user_input {
-            input.push(UiStateInfo::TopInputChanged);
+            self.ui_state.interaction_sender.send(UiInteraction::TopInputChanged);
         }
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
             response.request_focus();
-            input.push(UiStateInfo::TopInputSubmit);
+            self.ui_state.interaction_sender.send(UiInteraction::TopInputSubmit);
         }
 
-        self.handle_ui_input(input);
+        self.handle_ui_input();
 
-        self.show_result_label(ui, input);
+        self.ui_state.show_result_label(ui);
     }
 
     fn select_all_in_textedit(&mut self, response: &Response) {
@@ -461,15 +462,14 @@ impl Window {
             elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx)).collect();
     }
 
-    pub fn get_autocompletion_result(
-        &'_ self, input_string: &str, cursor_pos: usize,
-    ) -> Option<AutocompletionResult<'_>> {
+    pub fn get_autocompletion_result<'a>(
+        input_string: &str, cursor_pos: usize, formula_store: &'a FormulaStore,
+    ) -> Option<AutocompletionResult<'a>> {
         let input_symbol_name = get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos), false);
         if input_symbol_name.is_empty() {
             return None;
         }
-        let compatible_symbols = self
-            .formula_store
+        let compatible_symbols = formula_store
             .get_symbols_sorted()
             .into_iter()
             .filter(|(name, _)| name.starts_with(&input_symbol_name))
@@ -610,5 +610,31 @@ pub fn get_cursor_pos(response: &Response) -> Option<usize> {
         state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
     } else {
         None
+    }
+}
+
+pub struct TaskSender(Sender<UiInteraction>);
+pub struct TaskReceiver(Receiver<UiInteraction>);
+
+pub fn new_task_channel() -> (TaskSender, TaskReceiver) {
+    let (t, r) = channel();
+    (TaskSender(t), TaskReceiver(r))
+}
+
+impl TaskSender {
+    pub fn send(&self, task: UiInteraction) {
+        self.0.send(task).unwrap();
+    }
+}
+
+impl AsRef<Receiver<UiInteraction>> for TaskReceiver {
+    fn as_ref(&self) -> &Receiver<UiInteraction> {
+        &self.0
+    }
+}
+
+impl AsMut<Receiver<UiInteraction>> for TaskReceiver {
+    fn as_mut(&mut self) -> &mut Receiver<UiInteraction> {
+        &mut self.0
     }
 }
