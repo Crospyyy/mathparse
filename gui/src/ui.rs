@@ -370,18 +370,15 @@ impl UiState {
                 self.add_selectable_label(ui, Page::History, "Show calculation history");
                 self.add_selectable_label(ui, Page::DefinedSymbols, "Show defined symbols");
             },
-            |ui| match self.selected_page {
-                Page::History => (ui.button("Clear Symbols").clicked(), ui.button("Clear History").clicked()),
-                Page::DefinedSymbols => (false, false),
+            |ui| {
+                if ui.button("Clear Symbols").on_hover_text("Remove all self defined symbols").clicked() {
+                    self.interaction_sender.send(UiInteraction::ClearCustomSymbols);
+                };
+                if ui.button("Clear History").clicked() {
+                    self.interaction_sender.send(UiInteraction::ClearHistory);
+                };
             },
         );
-        // todo change input to channels or something similar
-        if x.1.0 {
-            self.interaction_sender.send(UiInteraction::ClearCustomSymbols)
-        }
-        if x.1.1 {
-            self.interaction_sender.send(UiInteraction::ClearHistory)
-        }
     }
 
     fn add_selectable_label(&self, ui: &mut Ui, page: Page, description: &str) {
