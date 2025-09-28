@@ -141,6 +141,12 @@ impl FormulaStore {
         FormulaStore { symbols: HashMap::new() }
     }
 
+    pub fn new_with_default_symbols() -> Self {
+        let mut store = Self::new_empty();
+        store.define_default_symbols().expect("Failed to define default symbols");
+        store
+    }
+
     pub fn add_symbol_from_string(&mut self, string: &str, dry_run: bool) -> Result<NamedSymbol> {
         let (sig, def) = string.split_once("=").ok_or(anyhow!("String doesn't contain '='"))?;
         let sig = Element::parse(sig).map_err(|err| anyhow!("First formula could not be parsed: {err}"))?;

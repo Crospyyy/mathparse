@@ -1,7 +1,7 @@
 use crate::calculation::create_context;
 use crate::expression_values::FunctionExpression;
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, Number, RoundingMode, benchmark, create_default_context};
+use crate::{Benchmark, Element, Number, RoundingMode, benchmark, only_in_debug};
 use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
@@ -133,13 +133,13 @@ impl FormulaStore {
     fn expand_and_optimize(
         &self, formula: &mut Element, benchmark: &mut Benchmark, ctx: &mut Context,
     ) -> Result<()> {
-        dbg!(formula.get_string(ctx));
+        only_in_debug!(dbg!(formula.get_string(ctx)));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(ctx));
+        only_in_debug!(dbg!(formula.get_string(ctx)));
         benchmark!(benchmark, self.expand_formula(formula, &HashSet::new())?, "Expansion");
-        dbg!(formula.get_string(ctx));
+        only_in_debug!(dbg!(formula.get_string(ctx)));
         benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        dbg!(formula.get_string(ctx));
+        only_in_debug!(dbg!(formula.get_string(ctx)));
         Ok(())
     }
 
@@ -151,7 +151,7 @@ impl FormulaStore {
             all_names.clear();
             formula.get_all_unexpanded_names(&mut all_names);
             all_names = all_names.difference(ignore_names).cloned().collect();
-            dbg!(&all_names);
+            only_in_debug!(dbg!(&all_names));
 
             if all_names.is_empty() {
                 break;
@@ -186,10 +186,10 @@ impl FormulaStore {
         if last_rounded.is_nan() {
             return Ok(DynamicResult::Checked { num: last_rounded, precision });
         }
-        println!("{}", last_rounded);
+        only_in_debug!(dbg!(&last_rounded));
         precision *= 2;
         while precision <= *precision_range_bits.end() {
-            dbg!(precision);
+            only_in_debug!(dbg!(precision));
             ctx = create_context(precision as usize);
             let result = self.eval(formula_str, &mut ctx)?;
 

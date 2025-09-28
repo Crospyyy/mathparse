@@ -1,5 +1,5 @@
-use crate::logic::UiInteraction;
 use crate::logic::latex_conversion::convert_from_latex_if_needed;
+use crate::logic::{Backend, UiInteraction};
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState, logic};
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
@@ -14,11 +14,13 @@ use egui::{
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
-    FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, Signature,
-    Symbol, create_default_context, get_fun_name_end_of_string, quick_match,
+    DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult,
+    RunSuccess, Signature, Symbol, create_default_context, debug_print, get_fun_name_end_of_string,
+    only_in_debug, quick_match,
 };
 use regex::Regex;
 use std::cmp::Ordering;
+use std::collections::HashSet;
 use std::process::exit;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -27,19 +29,7 @@ use std::thread;
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
 
-#[macro_export]
-macro_rules! debug_print {
-    ($($arg:tt)*) => {
-        println!("[{}:{}:{}] {}",
-            file!(),
-            line!(),
-            column!(),
-            format_args!($($arg)*)
-        )
-    };
-}
-
-fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
+pub fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
     if visible {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
         if last_window_size.is_some() {
@@ -96,11 +86,12 @@ impl App for Window {
 
             ui.add_space(7.5);
             self.ui_state.show_tab_selector(ui);
+            ui.separator();
             match self.ui_state.selected_page {
                 Page::History => self.ui_state.show_history(ui),
                 Page::DefinedSymbols => self.ui_state.show_all_defined_symbols(ui),
             }
-            dbg!(ui.available_rect_before_wrap());
+            only_in_debug!(dbg!(ui.available_rect_before_wrap()));
             self.handle_ui_input();
         });
     }
@@ -139,8 +130,10 @@ impl App for Window {
 pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool {
     let (monitor_opt, win_size_opt) = ctx.input(|i| (i.viewport().monitor_size, last_window_size));
 
-    dbg!(monitor_opt);
-    dbg!(win_size_opt);
+    only_in_debug! {
+        dbg!(monitor_opt);
+        dbg!(win_size_opt);
+    }
 
     if let (Some(monitor), Some(win_size)) = (monitor_opt, win_size_opt) {
         let pos = (monitor - win_size) / 2.0;
@@ -154,38 +147,22 @@ pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool 
 impl Window {
     const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(528.3, 386.7);
 
-    pub(crate) fn new(_cc: &CreationContext) -> Self {
-        let ctx = _cc.egui_ctx.clone();
-        let ppp = ctx.pixels_per_point();
-        ctx.set_pixels_per_point(ppp * 1.2);
-        let mut store = FormulaStore::new_empty();
-        store.define_default_symbols().unwrap();
-        store.add_symbol_from_string("speed_of_sound_mps = 343", false).unwrap();
-        store.add_symbol_from_string("speed_of_light_mps = 299_792_458", false).unwrap();
-        store.add_symbol_from_string("kw_to_ps = 1.35962", false).unwrap();
-        store.add_symbol_from_string("km_to_miles = 0.6214", false).unwrap();
-        store.add_symbol_from_string("liter_to_gallons = 0.264172", false).unwrap();
-        store.add_symbol_from_string("joule_to_wh = 1/3600", false).unwrap();
-        store.add_symbol_from_string("water_heat_capacity_j_per_g = 4.184", false).unwrap();
-        let mut window =
-            Self { formula_store: store, ui_state: UiState::new(), window_state: WindowState::new() };
-        window.update_all_symbol_strings();
+    pub(crate) fn new(cc: &CreationContext) -> Self {
+        let ctx = cc.egui_ctx.clone();
 
-        let context = _cc.egui_ctx.clone();
+        ctx.set_pixels_per_point(ctx.pixels_per_point() * 1.2);
+
+        let backend = Backend::new();
+
+        let mut ui_state = UiState::empty();
+        ui_state.update_all_symbol_strings(backend.formula_store());
+
+        let window_state = WindowState::new();
+        window_state.start_shortcut_listener(&cc.egui_ctx);
+
+        let window = Self { backend, ui_state, window_state };
+
         switch_visibility(&ctx, false, window.get_last_window_size());
-        let req_focus = window.window_state.request_focus.clone();
-        let last_window_size = window.window_state.last_window_size.clone();
-        let pinned = window.window_state.pinned.clone();
-        register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
-            let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
-            if pinned.load(std::sync::atomic::Ordering::Relaxed) {
-                window_size = None;
-            }
-            switch_visibility(&ctx, true, window_size);
-            context.send_viewport_cmd(ViewportCommand::Focus);
-            req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
-        });
-
         window
     }
 
@@ -201,7 +178,7 @@ impl Window {
                 },
                 UiInteraction::TopInputSubmit => self.try_apply_calculation(),
                 UiInteraction::RequestAutocompletion { cursor_pos, input_term, complete_to, response } => {
-                    let insert_brackets = self.formula_store.get_symbol(&complete_to).is_some_and(|s| {
+                    let insert_brackets = self.backend.get_symbol(&complete_to).is_some_and(|s| {
                         matches!(
                             s.signature(),
                             Signature::Function(..) | Signature::FunctionNOrMoreParams(..)
@@ -226,21 +203,13 @@ impl Window {
                     self.ui_state.selected_page = page;
                 },
                 UiInteraction::ClearCustomSymbols => {
-                    // todo keep track of custom symbols
-                    let mut return_now = false;
-                    for e in self.ui_state.history.iter().rev() {
-                        match e.content {
-                            HistoryEntryContent::SymbolDefinition(_) => break,
-                            HistoryEntryContent::ClearedSymbols => return_now = true,
-                            _ => {},
-                        }
+                    if !self.backend.has_custom_symbols() {
+                        return;
                     }
-                    if return_now {
-                        continue;
-                    }
-                    self.formula_store = FormulaStore::new_empty();
-                    self.formula_store.define_default_symbols().unwrap();
+                    self.backend.clear_custom_symbols();
                     self.ui_state.history.push(HistoryEntry::cleared_symbols());
+                    self.ui_state.update_all_symbol_strings(self.backend.formula_store());
+                    self.update_calculation_result();
                 },
                 UiInteraction::ClearHistory => {
                     self.ui_state.history.clear();
@@ -263,7 +232,7 @@ impl Window {
 
         if response.has_focus() {
             let autocompletion_visible =
-                self.ui_state.show_autocompletion(ui, &response, &self.formula_store);
+                self.ui_state.show_autocompletion(ui, &response, self.backend.formula_store());
             if autocompletion_visible {
                 self.ui_state.show_inline_result(ui, &output);
             }
@@ -368,6 +337,7 @@ impl Window {
 
     fn get_processed_input(&self) -> String {
         let mut string = self.ui_state.top_user_input.trim().to_string();
+        string.retain(|c| c != ' ');
 
         while matches!(string.chars().last(), Some('=' | '-' | '+' | '*' | '/' | '^')) {
             string.pop();
@@ -383,39 +353,7 @@ impl Window {
         self.ui_state.calculation_result = if input.is_empty() {
             None
         } else {
-            let result = self.formula_store.run(input, true);
-            Some(Self::generate_output_string(result, self.ui_state.rounding_digits))
-        }
-    }
-
-    fn generate_output_string(result: RunResult, rounding_digits: usize) -> Result<String, String> {
-        match result {
-            RunResult::Err(RunError::ParseFailed(s)) => Err(format!("Parse Error: {}", s)),
-            RunResult::Err(RunError::CalculationFailed(s)) => Err(format!("Calculation Error: {}", s)),
-            RunResult::Err(RunError::FailedToAddSymbol(s)) => Err(format!("Error adding symbol: {}", s)),
-            RunResult::Ok(RunSuccess::CalculationResult(r)) => {
-                let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
-                let output = r.to_string_detailed(formatting_options);
-                Ok(match output {
-                    FormattedCalculationOutput::Exact { result, has_rounded } => {
-                        if has_rounded {
-                            format!("= {} (rounded)", result)
-                        } else {
-                            format!("= {}", result)
-                        }
-                    },
-                    FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
-                        format!("≈ {} ({} bit precision)", result, precision_bits)
-                    },
-                    FormattedCalculationOutput::ApproximationReachedLimit { result } => {
-                        format!("≈ {} (reached precision limit)", result)
-                    },
-                })
-            },
-            RunResult::Ok(RunSuccess::AddedSymbol(s)) => Ok(format!(
-                "Create new symbol: {}",
-                s.symbol().get_full_string(s.name(), &mut create_default_context())
-            )),
+            Some(self.ui_state.generate_output_string(self.backend.dry_run(&input)))
         }
     }
 
@@ -424,42 +362,25 @@ impl Window {
         if input.is_empty() {
             return;
         }
-        if !input.contains("=") {
-            if let Some(Ok(result)) = &self.ui_state.calculation_result {
-                if self
-                    .ui_state
-                    .history
-                    .last()
-                    .is_some_and(|entry| matches!(
-                        &entry.content,
-                        HistoryEntryContent::Calculation(e_input, e_result) if e_input == &input && e_result == result)
-                    )
-                {
+
+        let RunResult::Ok(action) = self.backend.run(&input) else {
+            return;
+        };
+
+        match action {
+            RunSuccess::AddedSymbol(symbol) => {
+                self.ui_state.update_all_symbol_strings(self.backend.formula_store());
+                self.ui_state.add_symbol_definition_to_history(symbol);
+                self.ui_state.top_user_input.clear();
+                self.update_calculation_result();
+            },
+            RunSuccess::CalculationResult(result) => {
+                if self.ui_state.last_history_entry_matches(&input) {
                     return;
                 }
-                self.ui_state
-                    .history
-                    .push(HistoryEntry::new_calculation(self.ui_state.top_user_input.clone(), result.clone()))
-            }
-            return;
+                self.ui_state.add_calculation_to_history(input, self.ui_state.format_number_result(result));
+            },
         }
-        let result = self.formula_store.add_symbol_from_string(&input, false);
-        if let Ok(r) = result {
-            self.ui_state.history.push(HistoryEntry::new_symbol_definition(format!(
-                "⛃ {}",
-                r.symbol().get_full_string(r.name(), &mut create_default_context())
-            )));
-            self.ui_state.top_user_input.clear();
-            self.update_calculation_result();
-            self.update_all_symbol_strings();
-        }
-    }
-
-    fn update_all_symbol_strings(&mut self) {
-        let elements = self.formula_store.get_symbols_sorted();
-        let ctx = &mut create_default_context();
-        self.ui_state.all_symbol_strings =
-            elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx)).collect();
     }
 
     pub fn get_autocompletion_result<'a>(
@@ -582,7 +503,7 @@ impl Window {
                         *s = new_s;
                     },
                     Some(Err(err)) => {
-                        dbg!(err);
+                        only_in_debug!(dbg!(err));
                         // todo print error as notification
                     },
                     _ => {},

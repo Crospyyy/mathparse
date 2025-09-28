@@ -10,15 +10,27 @@ use egui::{
     Align2, DragValue, FontSelection, Id, Key, Label, PopupCloseBehavior, Pos2, Response, RichText,
     ScrollArea, Sides, TextEdit, Ui, Widget,
 };
-use library::{FormattingOptions, FormulaStore};
+use library::{
+    DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, NamedSymbol, RunError,
+    RunResult, RunSuccess, create_default_context,
+};
 use std::cmp::PartialEq;
 use std::fmt::Display;
-use std::sync::mpsc::{Sender, channel};
+
+pub enum OutputString {
+    SymbolDefinition(String),
+    Result(StringWithInfo),
+}
+
+pub struct StringWithInfo {
+    pub main: String,
+    pub info: Option<String>,
+}
 
 pub(super) struct UiState {
     pub(super) top_user_input: String,
     pub(super) top_user_input_id: Id,
-    pub(super) calculation_result: Option<Result<String, String>>,
+    pub(super) calculation_result: Option<Result<OutputString, String>>,
     pub(super) rounding_digits: usize,
     pub all_symbol_strings: Vec<String>,
     pub history: Vec<HistoryEntry>,
@@ -33,13 +45,23 @@ pub struct HistoryEntry {
 }
 
 pub enum HistoryEntryContent {
-    Calculation(String, String),
+    Calculation(String, StringWithInfo),
     SymbolDefinition(String),
     ClearedSymbols,
 }
 
+impl HistoryEntryContent {
+    fn get_symbol(&self) -> char {
+        match self {
+            Calculation(..) => '🖩',
+            SymbolDefinition(_) => '⛃',
+            HistoryEntryContent::ClearedSymbols => '🗑',
+        }
+    }
+}
+
 impl HistoryEntry {
-    pub fn new_calculation(input: String, result: String) -> Self {
+    pub fn new_calculation(input: String, result: StringWithInfo) -> Self {
         Self { content: Calculation(input, result), time: Self::get_current_time() }
     }
 
@@ -53,6 +75,51 @@ impl HistoryEntry {
 
     fn get_current_time() -> String {
         chrono::Local::now().format("%H:%M").to_string()
+    }
+
+    fn show(&self, ui: &mut Ui) {
+        fn regular_format(text: impl Into<String>) -> RichText {
+            RichText::new(text).size(17.0)
+        }
+        fn smaller_format(text: impl Into<String>) -> RichText {
+            RichText::new(text).size(15.0)
+        }
+        fn smallest_format(text: impl Into<String>) -> RichText {
+            RichText::new(text).size(12.0)
+        }
+
+        Sides::new().show(
+            ui,
+            |ui| {
+                ui.horizontal(|ui| {
+                    let symbol = self.content.get_symbol();
+                    ui.label(regular_format(symbol));
+                    ui.add_space(5.0);
+                    match &self.content {
+                        Calculation(input, result) => {
+                            ui.vertical(|ui| {
+                                ui.label(regular_format(input).weak());
+                                ui.horizontal(|ui| {
+                                    ui.label(regular_format(&result.main));
+                                    if let Some(info) = &result.info {
+                                        ui.label(smaller_format(info).weak());
+                                    }
+                                });
+                            });
+                        },
+                        SymbolDefinition(text) => {
+                            ui.label(regular_format(text));
+                        },
+                        HistoryEntryContent::ClearedSymbols => {
+                            ui.label(regular_format("Cleared Symbols"));
+                        },
+                    }
+                })
+            },
+            |ui| {
+                ui.label(smallest_format(&self.time).weak());
+            },
+        );
     }
 }
 
@@ -72,7 +139,7 @@ impl Display for Page {
 }
 
 impl UiState {
-    pub(super) fn new() -> Self {
+    pub(super) fn empty() -> Self {
         let (t, r) = new_task_channel();
         Self {
             top_user_input: "".to_owned(),
@@ -85,6 +152,70 @@ impl UiState {
             interaction_sender: t,
             interaction: r,
         }
+    }
+
+    pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol) {
+        self.history.push(HistoryEntry::new_symbol_definition(
+            symbol.symbol().get_full_string(symbol.name(), &mut create_default_context()),
+        ));
+    }
+
+    pub fn add_calculation_to_history(&mut self, input: String, result: StringWithInfo) {
+        self.history.push(HistoryEntry::new_calculation(input.clone(), result))
+    }
+
+    pub fn last_history_entry_matches(&self, input: &str) -> bool {
+        self.history.last().is_some_and(|entry| {
+            matches!(
+                &entry.content,
+                Calculation(e_input, _) if e_input == input
+            )
+        })
+    }
+
+    pub fn generate_output_string(&self, result: RunResult) -> Result<OutputString, String> {
+        match result {
+            RunResult::Err(RunError::ParseFailed(s)) => Err(format!("Parse Error: {}", s)),
+            RunResult::Err(RunError::CalculationFailed(s)) => Err(format!("Calculation Error: {}", s)),
+            RunResult::Err(RunError::FailedToAddSymbol(s)) => Err(format!("Error adding symbol: {}", s)),
+            RunResult::Ok(RunSuccess::CalculationResult(r)) => {
+                Ok(OutputString::Result(self.format_number_result(r)))
+            },
+            RunResult::Ok(RunSuccess::AddedSymbol(s)) => Ok(OutputString::SymbolDefinition(format!(
+                "Create new symbol: {}",
+                s.symbol().get_full_string(s.name(), &mut create_default_context())
+            ))),
+        }
+    }
+
+    pub fn format_number_result(&self, r: DynamicResult) -> StringWithInfo {
+        format_number_result(r, self.rounding_digits)
+    }
+
+    pub fn update_all_symbol_strings(&mut self, formula_store: &FormulaStore) {
+        let elements = formula_store.get_symbols_sorted();
+        let ctx = &mut create_default_context();
+        self.all_symbol_strings =
+            elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx)).collect();
+    }
+}
+
+fn format_number_result(r: DynamicResult, rounding_digits: usize) -> StringWithInfo {
+    let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
+    let output = r.to_string_detailed(formatting_options);
+    match output {
+        FormattedCalculationOutput::Exact { result, has_rounded } => StringWithInfo {
+            main: format!("= {}", result),
+            info: has_rounded.then_some(" (rounded)".to_owned()),
+        },
+        FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => StringWithInfo {
+            main: format!("≈ {}", result),
+            info: Some(format!(" ({} bit precision)", precision_bits)),
+        },
+        FormattedCalculationOutput::ApproximationReachedLimit { result } => StringWithInfo {
+            main: format!("≈ {}", result),
+            info: Some(" (reached precision limit)".to_owned()),
+        },
     }
 }
 
@@ -120,14 +251,15 @@ impl UiState {
     pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) {
         let pos = last_caret_pos_from_output(&output);
         if let Some(Ok(result)) = &self.calculation_result {
-            let result = result.split_once('(').map(|b| b.0.trim()).unwrap_or(result);
-            ui.painter().text(
-                pos,
-                Align2::LEFT_TOP,
-                " ".to_owned() + &result,
-                FontId::new(22.0, FontFamily::Proportional),
-                ui.visuals().text_color(),
-            );
+            if let OutputString::Result(StringWithInfo { main, .. }) = result {
+                ui.painter().text(
+                    pos,
+                    Align2::LEFT_TOP,
+                    " ".to_owned() + &main,
+                    FontId::new(22.0, FontFamily::Proportional),
+                    ui.visuals().text_color(),
+                );
+            }
         }
     }
 
@@ -144,12 +276,13 @@ impl UiState {
         let mut job = LayoutJob::default();
         match &self.calculation_result {
             Some(Ok(result)) => {
-                if let Some((first, second)) = result.split_once('(') {
-                    job.append(first, 0.0, format.clone());
-                    job.append("(", 0.0, small_format.clone());
-                    job.append(second, 0.0, small_format);
-                } else {
-                    job.append(result, 0.0, format.clone());
+                let (main, info) = match result {
+                    OutputString::SymbolDefinition(main) => (main, None),
+                    OutputString::Result(StringWithInfo { main, info }) => (main, info.as_ref()),
+                };
+                job.append(main, 0.0, format.clone());
+                if let Some(info) = info {
+                    job.append(info, 0.0, small_format.clone());
                 }
             },
             Some(Err(_)) => job.append("=  !", 0.0, format.clone()),
@@ -273,32 +406,14 @@ impl UiState {
     pub fn show_history(&mut self, ui: &mut Ui) {
         let area = ScrollArea::vertical().id_salt("history").auto_shrink(false);
         area.show(ui, |ui| {
-            for text in self.history.iter().rev() {
-                ui.group(|ui| {
-                    Sides::new().show(
-                        ui,
-                        |ui| match &text.content {
-                            Calculation(input, result) => {
-                                ui.horizontal(|ui| {
-                                    ui.label(RichText::new("🖩").size(17.0));
-                                    ui.vertical(|ui| {
-                                        ui.label(RichText::new(input).weak().size(17.0));
-                                        ui.label(RichText::new(result).size(17.0));
-                                    });
-                                });
-                            },
-                            SymbolDefinition(text) => {
-                                ui.label(RichText::new(text).size(17.0));
-                            },
-                            HistoryEntryContent::ClearedSymbols => {
-                                ui.label(RichText::new("🗑 Cleared Symbols").size(17.0));
-                            },
-                        },
-                        |ui| {
-                            ui.label(RichText::new(&text.time).weak().size(12.0));
-                        },
-                    );
-                });
+            if self.history.is_empty() {
+                ui.label(
+                    RichText::new("Press [ENTER] to add calculation to the history or to store a symbol")
+                        .weak(),
+                );
+            }
+            for entry in self.history.iter().rev() {
+                ui.group(|ui| entry.show(ui));
             }
         });
     }

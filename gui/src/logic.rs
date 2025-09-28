@@ -1,6 +1,66 @@
 use crate::ui::Page;
+use anyhow::Result;
 use egui::Response;
-use library::Symbol;
+use library::{FormulaStore, RunResult, RunSuccess, Symbol};
+use std::collections::HashSet;
+
+pub struct Backend {
+    custom_symbols: HashSet<String>,
+    formula_store: FormulaStore,
+}
+
+impl Backend {
+    pub fn new() -> Self {
+        let mut store = FormulaStore::new_with_default_symbols();
+        define_define_preset_symbols(&mut store).unwrap();
+        Self { custom_symbols: HashSet::new(), formula_store: store }
+    }
+
+    pub fn get_symbol(&self, name: &str) -> Option<&Symbol> {
+        self.formula_store.get_symbol(name)
+    }
+
+    pub fn has_custom_symbols(&self) -> bool {
+        !self.custom_symbols.is_empty()
+    }
+
+    pub fn clear_custom_symbols(&mut self) {
+        self.custom_symbols.clear();
+        self.formula_store = FormulaStore::new_with_default_symbols(); // todo add logic to remove only custom symbols
+    }
+
+    pub(crate) fn formula_store(&self) -> &FormulaStore {
+        &self.formula_store
+    }
+
+    pub fn dry_run(&mut self, input: &str) -> RunResult {
+        self.formula_store.run(input, true)
+    }
+
+    pub fn run(&mut self, input: &str) -> RunResult {
+        let result = self.formula_store.run(input, false);
+        if let RunResult::Ok(RunSuccess::AddedSymbol(s)) = &result {
+            self.custom_symbols.insert(s.name().clone());
+        }
+        result
+    }
+}
+
+fn define_define_preset_symbols(store: &mut FormulaStore) -> Result<()> {
+    let preset_symbols = [
+        "speed_of_sound_mps = 343",
+        "speed_of_light_mps = 299_792_458",
+        "kw_to_ps = 1.35962",
+        "km_to_miles = 0.6214",
+        "liter_to_gallons = 0.264172",
+        "joule_to_wh = 1/3600",
+        "water_heat_capacity_j_per_g = 4.184",
+    ];
+    for symbol in preset_symbols {
+        store.add_symbol_from_string(symbol, false)?;
+    }
+    Ok(())
+}
 
 pub enum UiInteraction {
     TopInputChanged,
@@ -35,7 +95,6 @@ pub fn determine_longest_common_start(names: &[(&String, &Symbol)]) -> String {
 }
 
 pub mod latex_conversion {
-    use crate::debug_print;
     use anyhow::Result;
     use egui::TextBuffer;
 

@@ -124,3 +124,27 @@ impl From<Number> for Element {
         Element::Number(value)
     }
 }
+
+#[macro_export]
+macro_rules! only_in_debug {
+    {$($arg:tt)+} => {
+        #[cfg(debug_assertions)]
+        {
+            $($arg)+
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! debug_print {
+    ($($arg:tt)*) => {
+        only_in_debug! {
+            println!("[{}:{}:{}] {}",
+                file!(),
+                line!(),
+                column!(),
+                format_args!($($arg)*)
+            )
+        }
+    };
+}
