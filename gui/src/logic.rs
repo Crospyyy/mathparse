@@ -309,6 +309,7 @@ mod tests {
                 "((x^2+1)/(y-3))^3+sqrt((z^4)/(x+y))",
             ),
             (r"\frac{\sqrt{(m+n)^2 + (p-q)^2}}{r+s}", "sqrt((m+n)^2+(p-q)^2)/(r+s)"),
+            (r"\frac{\left(\frac{a}{b} + \frac{c}{d}\right)^2}{\sqrt{e+f}}", "(((a/b)+(c/d))^2)/sqrt(e+f)"),
         ];
         for (input, expected) in data {
             let result = convert_latex_to_math(input).unwrap();
