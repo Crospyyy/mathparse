@@ -10,8 +10,8 @@ use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
     AtomExt, Button, CentralPanel, Color32, Context, CursorIcon, DragValue, Event, Key, KeyboardShortcut,
-    Label, Layout, Modifiers, OpenUrl, PointerButton, RawInput, Response, RichText, Shadow, Stroke,
-    StrokeKind, Style, TextBuffer, TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
+    Label, Layout, Modifiers, OpenUrl, PointerButton, RawInput, Response, RichText, Separator, Shadow,
+    Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -92,7 +92,6 @@ impl App for Window {
                 Page::History => self.ui_state.show_history(ui),
                 Page::DefinedSymbols => self.ui_state.show_all_defined_symbols(ui),
             }
-            only_in_debug!(dbg!(ui.available_size()));
             if ui.available_height() > 20.0 {
                 ui.with_layout(Layout::bottom_up(Align::Max), |ui| {
                     if Button::new(RichText::new(" Crospy  ").weak().size(10.0))

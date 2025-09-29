@@ -1,7 +1,7 @@
-use crate::Number;
 use crate::calculation::helper_functions::sin_radians;
 use crate::expression_values::{ExpressionFunType, ExpressionNumType, FunctionExpression};
 use crate::parsing::signature::ParamCount;
+use crate::{Number, only_in_debug};
 use astro_float::ctx::Context;
 use astro_float::expr;
 use std::rc::Rc;
@@ -25,10 +25,10 @@ impl ExpressionNumType {
 
 fn sin_with_radians(num: &Number, ctx: &mut Context) -> Number {
     if let Some(r) = num.get_exact_rational() {
-        dbg!("calculate sin with rational");
+        only_in_debug!(dbg!("calculate sin with rational"));
         sin_radians(&r, ctx)
     } else {
-        dbg!("calculate sin with float");
+        only_in_debug!(dbg!("calculate sin with float"));
         let float = num.get_float(ctx);
         let mut result = expr!(sin(float * pi / 2), &mut *ctx);
         if float.inexact() {

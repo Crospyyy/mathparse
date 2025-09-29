@@ -5,10 +5,12 @@ use crate::ui::HistoryEntryContent::{Calculation, SymbolDefinition};
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId, Vec2};
 use egui::containers::menu::{MenuButton, MenuConfig};
+use egui::scroll_area::ScrollBarVisibility;
+use egui::style::ScrollStyle;
 use egui::text_edit::TextEditOutput;
 use egui::{
-    Align2, DragValue, FontSelection, Id, Key, Label, PopupCloseBehavior, Pos2, Response, RichText,
-    ScrollArea, Sides, TextEdit, Ui, Widget,
+    Align2, DragValue, FontSelection, Frame, Id, Key, Label, PopupCloseBehavior, Pos2, Response, RichText,
+    ScrollArea, Separator, Shadow, Sides, TextEdit, Ui, Widget,
 };
 use library::{
     DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, NamedSymbol, RunError,
@@ -392,6 +394,9 @@ impl UiState {
 
     pub(crate) fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
         // todo align all symbols to the `=` sign
+        let mut x = ui.style().as_ref().clone();
+        x.spacing.scroll = ScrollStyle::solid();
+        ui.set_style(x);
         let area = ScrollArea::vertical().id_salt("defined symbols").auto_shrink([false, true]);
         area.show(ui, |ui| {
             for text in &self.all_symbol_strings {
@@ -401,6 +406,10 @@ impl UiState {
     }
 
     pub fn show_history(&mut self, ui: &mut Ui) {
+        let mut x = ui.style().as_ref().clone();
+        x.spacing.scroll = ScrollStyle::solid();
+        ui.set_style(x);
+
         let area = ScrollArea::vertical().id_salt("history").auto_shrink([false, true]);
         area.show(ui, |ui| {
             if self.history.is_empty() {
@@ -408,8 +417,11 @@ impl UiState {
                     RichText::new("Press [ENTER] to add calculation to history or to store a symbol").weak(),
                 );
             }
-            for entry in self.history.iter().rev() {
-                ui.group(|ui| entry.show(ui));
+
+            for (i, entry) in self.history.iter().rev().enumerate() {
+                Frame::window(ui.style()).shadow(Shadow::NONE).inner_margin(7.0).show(ui, |ui| {
+                    entry.show(ui);
+                });
             }
         });
     }
