@@ -405,8 +405,7 @@ impl UiState {
         area.show(ui, |ui| {
             if self.history.is_empty() {
                 ui.label(
-                    RichText::new("Press [ENTER] to add calculation to the history or to store a symbol")
-                        .weak(),
+                    RichText::new("Press [ENTER] to add calculation to history or to store a symbol").weak(),
                 );
             }
             for entry in self.history.iter().rev() {
