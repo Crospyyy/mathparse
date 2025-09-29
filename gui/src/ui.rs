@@ -270,7 +270,7 @@ impl UiState {
         let pos = last_caret_pos_from_output(&output);
         if let Some(Ok(result)) = &self.calculation_result {
             if let OutputString::Result(StringWithInfo { main, .. }) = result {
-                ui.painter().text(
+                ui.painter_at(output.response.rect).text(
                     pos,
                     Align2::LEFT_TOP,
                     " ".to_owned() + &main,
