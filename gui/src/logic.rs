@@ -302,6 +302,13 @@ mod tests {
             (r"$f(x) = x^2$", "f(x)=x^2"),
             (r"$f(x,y) = x^2+y$", "f(x,y)=x^2+y"),
             (r"3 \cdot 4 + 5 \div 2", "3*4+5/2"),
+            (r"\pi * r^2", "pi*r^2"),
+            (r"\frac{(a+b)^2}{c-d} = \sqrt{e^2 + f^2}", "(((a+b)^2)/(c-d))=sqrt(e^2+f^2)"),
+            (
+                r"\left(\frac{x^2 + 1}{y - 3}\right)^3 + \sqrt{\frac{z^4}{x+y}}",
+                "((x^2+1)/(y-3))^3+sqrt((z^4)/(x+y))",
+            ),
+            (r"\frac{\sqrt{(m+n)^2 + (p-q)^2}}{r+s}", "sqrt((m+n)^2+(p-q)^2)/(r+s)"),
         ];
         for (input, expected) in data {
             let result = convert_latex_to_math(input).unwrap();
