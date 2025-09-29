@@ -8,7 +8,7 @@ library = { path = "../library" }
 egui = { version = "0.32.3", optional = true }
 eframe = { version = "0.32.3", optional = true }
 regex = "1.11.2"
-global_shortcuts = { path = "../basically_a_keylogger" }
+global_shortcuts = { path = "../basically_a_keylogger", optional = true }
 chrono = "0.4.42"
 anyhow = "1.0.100"
 
