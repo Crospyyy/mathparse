@@ -315,10 +315,10 @@ impl UiState {
         };
         let error_string = self.calculation_result.as_ref().and_then(|r| r.as_ref().err());
 
-        Sides::new().show(
+        Sides::new().shrink_left().show(
             ui,
             |ui| {
-                let result_resp = Label::new(job).selectable(error_string.is_none()).ui(ui);
+                let result_resp = Label::new(job).selectable(error_string.is_none()).wrap().ui(ui);
                 if let Some(err) = error_string {
                     result_resp.on_hover_text(err);
                 }
