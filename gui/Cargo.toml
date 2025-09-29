@@ -14,4 +14,4 @@ anyhow = "1.0.100"
 
 [features]
 default = ["ui"]
-ui = ["egui", "eframe"]
+ui = ["egui", "eframe", "global_shortcuts"]
