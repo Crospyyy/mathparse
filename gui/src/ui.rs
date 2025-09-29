@@ -392,7 +392,7 @@ impl UiState {
 
     pub(crate) fn show_all_defined_symbols(&mut self, ui: &mut Ui) {
         // todo align all symbols to the `=` sign
-        let area = ScrollArea::vertical().id_salt("defined symbols").auto_shrink(false);
+        let area = ScrollArea::vertical().id_salt("defined symbols").auto_shrink([false, true]);
         area.show(ui, |ui| {
             for text in &self.all_symbol_strings {
                 ui.label(RichText::new(text).size(17.0));
@@ -401,7 +401,7 @@ impl UiState {
     }
 
     pub fn show_history(&mut self, ui: &mut Ui) {
-        let area = ScrollArea::vertical().id_salt("history").auto_shrink(false);
+        let area = ScrollArea::vertical().id_salt("history").auto_shrink([false, true]);
         area.show(ui, |ui| {
             if self.history.is_empty() {
                 ui.label(

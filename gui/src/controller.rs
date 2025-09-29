@@ -2,15 +2,16 @@ use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::logic::{Backend, UiInteraction};
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState, logic};
+use eframe::emath::Align;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
 use eframe::epaint::{FontFamily, FontId};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    AtomExt, Button, CentralPanel, Color32, Context, DragValue, Event, Key, KeyboardShortcut, Label,
-    Modifiers, PointerButton, RawInput, Response, RichText, Shadow, Stroke, StrokeKind, Style, TextBuffer,
-    TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
+    AtomExt, Button, CentralPanel, Color32, Context, CursorIcon, DragValue, Event, Key, KeyboardShortcut,
+    Label, Layout, Modifiers, OpenUrl, PointerButton, RawInput, Response, RichText, Shadow, Stroke,
+    StrokeKind, Style, TextBuffer, TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
 };
 use global_shortcuts::register_global_shortcut;
 use library::{
@@ -91,7 +92,19 @@ impl App for Window {
                 Page::History => self.ui_state.show_history(ui),
                 Page::DefinedSymbols => self.ui_state.show_all_defined_symbols(ui),
             }
-            only_in_debug!(dbg!(ui.available_rect_before_wrap()));
+            only_in_debug!(dbg!(ui.available_size()));
+            if ui.available_height() > 20.0 {
+                ui.with_layout(Layout::bottom_up(Align::Max), |ui| {
+                    if Button::new(RichText::new(" Crospy  ").weak().size(10.0))
+                        .frame(false)
+                        .ui(ui)
+                        .on_hover_cursor(CursorIcon::PointingHand)
+                        .clicked()
+                    {
+                        ctx.open_url(OpenUrl::new_tab("https://github.com/Crospyyy"));
+                    }
+                });
+            }
             self.handle_ui_input();
         });
     }
