@@ -9,8 +9,8 @@ use egui::scroll_area::ScrollBarVisibility;
 use egui::style::ScrollStyle;
 use egui::text_edit::TextEditOutput;
 use egui::{
-    Align2, DragValue, FontSelection, Frame, Id, Key, Label, PopupCloseBehavior, Pos2, Response, RichText,
-    ScrollArea, Separator, Shadow, Sides, TextEdit, Ui, Widget,
+    Align2, DragValue, FontSelection, Frame, Id, Key, Label, Margin, PopupCloseBehavior, Pos2, Response,
+    RichText, ScrollArea, Separator, Shadow, Sides, TextEdit, Ui, Widget,
 };
 use library::{
     DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, NamedSymbol, RunError,
@@ -158,12 +158,12 @@ impl UiState {
 
     pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol) {
         self.history.push(HistoryEntry::new_symbol_definition(
-            symbol.symbol().get_full_string(symbol.name(), &mut create_default_context()),
+            symbol.symbol().get_full_string(symbol.name(), &mut create_default_context()).replace_mul(),
         ));
     }
 
     pub fn add_calculation_to_history(&mut self, input: String, result: StringWithInfo) {
-        self.history.push(HistoryEntry::new_calculation(input.clone(), result))
+        self.history.push(HistoryEntry::new_calculation(input.clone().replace_mul(), result))
     }
 
     pub fn last_history_entry_matches(&self, input: &str) -> bool {
@@ -183,10 +183,11 @@ impl UiState {
             RunResult::Ok(RunSuccess::CalculationResult(r)) => {
                 Ok(OutputString::Result(self.format_number_result(r)))
             },
-            RunResult::Ok(RunSuccess::AddedSymbol(s)) => Ok(OutputString::SymbolDefinition(format!(
-                "Create new symbol: {}",
-                s.symbol().get_full_string(s.name(), &mut create_default_context())
-            ))),
+            RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
+                let string =
+                    s.symbol().get_full_string(s.name(), &mut create_default_context()).replace_mul();
+                Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string)))
+            },
         }
     }
 
@@ -198,7 +199,7 @@ impl UiState {
         let elements = formula_store.get_symbols_sorted();
         let ctx = &mut create_default_context();
         self.all_symbol_strings =
-            elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx)).collect();
+            elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx).replace_mul()).collect();
     }
 }
 
@@ -228,6 +229,21 @@ pub fn caret_pos_from_output(output: &TextEditOutput) -> Option<Pos2> {
     Some(output.galley_pos + caret_rect_in_galley.left_top().to_vec2())
 }
 
+trait MulReplacement {
+    fn replace_mul(&self) -> String;
+    fn unreplace_mul(&self) -> String;
+}
+
+impl MulReplacement for String {
+    fn replace_mul(&self) -> String {
+        self.replace("*", "×")
+    }
+
+    fn unreplace_mul(&self) -> String {
+        self.replace("×", "*")
+    }
+}
+
 pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
     output.galley.rect.right_top() + output.galley_pos.to_vec2()
 }
@@ -235,7 +251,7 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 impl UiState {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
         let font_id = FontId::new(22.0, FontFamily::Proportional);
-        self.top_user_input = self.top_user_input.replace("*", "×");
+        self.top_user_input = self.top_user_input.replace_mul();
         let response = TextEdit::singleline(&mut self.top_user_input)
             .id(self.top_user_input_id)
             .hint_text("Enter formula here ...")
@@ -244,7 +260,7 @@ impl UiState {
             .desired_width(ui.available_width())
             .frame(false)
             .show(ui);
-        self.top_user_input = self.top_user_input.replace("×", "*");
+        self.top_user_input = self.top_user_input.unreplace_mul();
 
         ui.separator();
         response
@@ -419,7 +435,9 @@ impl UiState {
             }
 
             for (i, entry) in self.history.iter().rev().enumerate() {
-                Frame::window(ui.style()).shadow(Shadow::NONE).inner_margin(7.0).show(ui, |ui| {
+                let mut margin = Margin::symmetric(10, 7);
+                margin.right += 2;
+                Frame::window(ui.style()).shadow(Shadow::NONE).inner_margin(margin).show(ui, |ui| {
                     entry.show(ui);
                 });
             }
