@@ -97,8 +97,10 @@ pub fn determine_longest_common_start(names: &[(&String, &Symbol)]) -> String {
 pub mod latex_conversion {
     use anyhow::Result;
     use egui::TextBuffer;
+    use library::only_in_debug;
+    use library::{debug_print, get_fun_name_end_of_string};
 
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq)]
     pub enum LatexConversionError {
         ContainsUnexpectedCharacterInsideFormula(char),
         FailedToTokenize,
@@ -114,10 +116,10 @@ pub mod latex_conversion {
         if !looks_like_latex {
             return None;
         };
-        Some(convert_to_latex(trimmed))
+        Some(convert_latex_to_math(trimmed))
     }
 
-    pub fn convert_to_latex(s: &str) -> Result<String, LatexConversionError> {
+    pub fn convert_latex_to_math(s: &str) -> Result<String, LatexConversionError> {
         let mut s = s.trim().to_string();
         if s.starts_with("$") && s.ends_with("$") {
             s = s.trim_start_matches(|c| c == '$').trim_end_matches(|c| c == '$').to_string();
@@ -126,9 +128,12 @@ pub mod latex_conversion {
             return Err(LatexConversionError::ContainsUnexpectedCharacterInsideFormula('$'));
         }
         preprocess_latex_symbols(&mut s);
-        let mut t = Token::tokenize_outer(&mut s.as_str())?;
+        debug_print!("processed string: {}", s);
+        let mut t = LatexToken::tokenize_outer(&mut s.as_str())?;
+        debug_print!("tokenized: {:?}", t);
         t.parse_functions()?;
-        Ok(t.convert_latex_to_regular_math(false).into())
+        debug_print!("parsed functions: {:?}", t);
+        Ok(t.to_string(false).into())
     }
 
     fn contains_latex_like_syntax(s: &str) -> bool {
@@ -144,13 +149,13 @@ pub mod latex_conversion {
     }
 
     #[derive(Debug, Clone)]
-    enum Token {
-        Group(Vec<Token>),
+    enum LatexToken {
+        Group(Vec<LatexToken>),
         Word(String),
-        Function(String, Vec<Token>),
+        Function(String, Vec<LatexToken>),
     }
 
-    impl Token {
+    impl LatexToken {
         fn tokenize_outer(s: &mut &str) -> Result<Self, LatexConversionError> {
             let mut elements = vec![];
             if s.is_empty() {
@@ -167,7 +172,7 @@ pub mod latex_conversion {
             let opening_brackets = "{(";
             let closing_brackets = "})";
             let brackets = opening_brackets.to_string() + closing_brackets;
-            let operations = "*/+^-".to_string();
+            let operations = "*/+^-=".to_string();
             if let Some(c) = s.chars().nth(0) {
                 if operations.contains(c) {
                     let string = s[..1].to_string();
@@ -200,12 +205,11 @@ pub mod latex_conversion {
 
         fn parse_functions(&mut self) -> Result<(), LatexConversionError> {
             match self {
-                Token::Group(inner_tokens) => {
-                    inner_tokens.iter_mut().try_for_each(Self::parse_functions)?;
+                LatexToken::Group(inner_tokens) => {
                     let mut new_tokens = vec![];
-                    let mut inner_iter = inner_tokens.drain(..);
-                    while let Some(token) = inner_iter.next() {
-                        new_tokens.push(if let Token::Word(string) = &token {
+                    let mut inner_iter = inner_tokens.drain(..).peekable();
+                    while let Some(mut token) = inner_iter.next() {
+                        if let LatexToken::Word(string) = &token {
                             match string.as_str() {
                                 r"\sqrt" => {
                                     let arg = inner_iter.next().ok_or(
@@ -213,7 +217,10 @@ pub mod latex_conversion {
                                             string.clone(),
                                         ),
                                     )?;
-                                    Token::Function("sqrt".into(), vec![arg])
+                                    token = LatexToken::Function(
+                                        "sqrt".into(),
+                                        vec![LatexToken::Group(vec![arg])],
+                                    );
                                 },
                                 r"\frac" => {
                                     let num = inner_iter.next().ok_or(
@@ -226,47 +233,79 @@ pub mod latex_conversion {
                                             string.clone(),
                                         ),
                                     )?;
-                                    Token::Group(vec![num, Token::Word("/".into()), denom])
+                                    token = LatexToken::Group(vec![num, LatexToken::Word("/".into()), denom]);
                                 },
-                                _ => token,
+                                _ => {
+                                    if !get_fun_name_end_of_string(string, false).is_empty() {
+                                        if matches!(
+                                            inner_iter.peek(),
+                                            Some(LatexToken::Function(..) | LatexToken::Group(_))
+                                        ) {
+                                            let arg = inner_iter.next().unwrap();
+                                            token = LatexToken::Function(string.clone(), vec![arg]);
+                                        }
+                                    }
+                                },
                             }
-                        } else {
-                            token
-                        })
+                        }
+                        new_tokens.push(token)
                     }
                     drop(inner_iter);
                     *inner_tokens = new_tokens;
+
+                    inner_tokens.iter_mut().try_for_each(Self::parse_functions)?;
+
                     if inner_tokens.len() == 1 {
                         *self = inner_tokens.pop().unwrap();
                         return Ok(());
                     }
                 },
-                Token::Word(_) => {},
-                _ => {},
+                LatexToken::Word(_) => {},
+                LatexToken::Function(_, args) => {
+                    args.iter_mut().try_for_each(Self::parse_functions)?;
+                },
             }
             Ok(())
         }
 
-        fn convert_latex_to_regular_math(&self, outer_brackets: bool) -> String {
+        fn to_string(&self, outer_brackets: bool) -> String {
             match self {
-                Token::Group(inner) => {
-                    let inner_str = inner
-                        .iter()
-                        .map(|a| a.convert_latex_to_regular_math(true))
-                        .reduce(|a, b| a + " " + &b)
-                        .unwrap_or_default();
+                LatexToken::Group(inner) => {
+                    let inner_str =
+                        inner.iter().map(|a| a.to_string(true)).reduce(|a, b| a + &b).unwrap_or_default();
                     if outer_brackets { format!("({inner_str})") } else { inner_str }
                 },
-                Token::Word(s) => s.to_string(),
-                Token::Function(name, args) => {
+                LatexToken::Word(s) => s.to_string(),
+                LatexToken::Function(name, args) => {
                     let args_str = args
                         .iter()
-                        .map(|a| a.convert_latex_to_regular_math(false))
+                        .map(|a| a.to_string(false))
                         .reduce(|a, b| a + ", " + &b)
                         .unwrap_or_default();
                     format!("{name}({args_str})")
                 },
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::logic::latex_conversion::convert_latex_to_math;
+
+    #[test]
+    fn test_convert_latex_to_math() {
+        let data = [
+            (r"\frac{1}{2}", "1/2"),
+            (r"\sqrt{4}", "sqrt(4)"),
+            (r"\sqrt{\frac{1}{4}}", "sqrt(1/4)"),
+            (r"$f(x) = x^2$", "f(x)=x^2"),
+            (r"$f(x,y) = x^2+y$", "f(x,y)=x^2+y"),
+            (r"3 \cdot 4 + 5 \div 2", "3*4+5/2"),
+        ];
+        for (input, expected) in data {
+            let result = convert_latex_to_math(input).unwrap();
+            assert_eq!(result, expected);
         }
     }
 }
