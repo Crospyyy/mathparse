@@ -5,9 +5,13 @@ edition = "2024"
 
 [dependencies]
 library = { path = "../library" }
-egui = "0.32.3"
-eframe = "0.32.3"
+egui = { version = "0.32.3", optional = true }
+eframe = { version = "0.32.3", optional = true }
 regex = "1.11.2"
 global_shortcuts = { path = "../basically_a_keylogger" }
 chrono = "0.4.42"
 anyhow = "1.0.100"
+
+[features]
+default = ["ui"]
+ui = ["egui", "eframe"]
