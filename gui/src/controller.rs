@@ -1,4 +1,3 @@
-use crate::logic::latex_conversion::convert_from_latex_if_needed;
 use crate::logic::{Backend, UiInteraction};
 use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
 use crate::{Window, WindowState, logic};
@@ -16,8 +15,8 @@ use egui::{
 use global_shortcuts::register_global_shortcut;
 use library::{
     DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult,
-    RunSuccess, Signature, Symbol, create_default_context, debug_print, get_fun_name_end_of_string,
-    only_in_debug, quick_match,
+    RunSuccess, Signature, Symbol, convert_from_latex_if_needed, create_default_context, debug_print,
+    get_fun_name_end_of_string, only_in_debug, quick_match,
 };
 use regex::Regex;
 use std::cmp::Ordering;

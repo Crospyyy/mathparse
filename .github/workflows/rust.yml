@@ -27,6 +27,3 @@ jobs:
       - name: Run library tests
         working-directory: ./library
         run: cargo test --verbose --package library
-      - name: Run gui tests
-        working-directory: ./gui
-        run: cargo test --verbose --package gui --no-default-features

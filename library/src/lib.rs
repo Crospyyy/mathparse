@@ -12,6 +12,7 @@ mod parsing;
 mod printing;
 mod storing;
 mod testing;
+mod latex_conversion;
 
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
@@ -23,6 +24,7 @@ pub use outer_store_interation::{RunError, RunResult, RunSuccess};
 pub use parsing::{Signature, get_fun_name_end_of_string};
 pub use printing::{FormattedCalculationOutput, FormattingOptions};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
+pub use latex_conversion::convert_from_latex_if_needed;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
