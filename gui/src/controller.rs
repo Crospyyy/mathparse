@@ -242,6 +242,7 @@ impl Window {
         self.input_post_process(ui);
 
         if response.has_focus() {
+            self.ui_state.show_brackets_highlighting(ui, &output);
             let autocompletion_visible =
                 self.ui_state.show_autocompletion(ui, &response, self.backend.formula_store());
             if autocompletion_visible {
@@ -538,11 +539,13 @@ pub fn set_cursor_pos(response: &Response, cursor_pos: usize) {
 }
 
 pub fn get_cursor_pos(response: &Response) -> Option<usize> {
-    if let Some(state) = TextEdit::load_state(&response.ctx, response.id) {
-        state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
-    } else {
-        None
-    }
+    let state = TextEdit::load_state(&response.ctx, response.id)?;
+    state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
+}
+
+pub fn get_cursor_range(response: &Response) -> Option<CCursorRange> {
+    let state = TextEdit::load_state(&response.ctx, response.id)?;
+    state.cursor.char_range()
 }
 
 pub struct TaskSender(Sender<UiInteraction>);

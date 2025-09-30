@@ -1,16 +1,17 @@
 use crate::Window;
-use crate::controller::{TaskReceiver, TaskSender, get_cursor_pos, new_task_channel};
+use crate::controller::{TaskReceiver, TaskSender, get_cursor_pos, get_cursor_range, new_task_channel};
 use crate::logic::UiInteraction;
 use crate::ui::HistoryEntryContent::{Calculation, SymbolDefinition};
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontFamily, FontId, Vec2};
 use egui::containers::menu::{MenuButton, MenuConfig};
-use egui::scroll_area::ScrollBarVisibility;
 use egui::style::ScrollStyle;
+use egui::text::CCursor;
 use egui::text_edit::TextEditOutput;
+use egui::text_selection::CCursorRange;
 use egui::{
-    Align2, DragValue, FontSelection, Frame, Id, Key, Label, Margin, PopupCloseBehavior, Pos2, Response,
-    RichText, ScrollArea, Separator, Shadow, Sides, TextEdit, Ui, Widget,
+    Align2, DragValue, FontSelection, Frame, Id, Key, Label, Margin, PopupCloseBehavior, Pos2, Rect,
+    Response, RichText, ScrollArea, Shadow, Sides, Stroke, StrokeKind, TextEdit, Ui, Widget,
 };
 use library::{
     DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, NamedSymbol, RunError,
@@ -248,14 +249,15 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
     output.galley.rect.right_top() + output.galley_pos.to_vec2()
 }
 
+const TEXTEDIT_FONT_ID: FontId = FontId::proportional(22.0);
+
 impl UiState {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
-        let font_id = FontId::new(22.0, FontFamily::Proportional);
         self.top_user_input = self.top_user_input.replace_mul();
         let response = TextEdit::singleline(&mut self.top_user_input)
             .id(self.top_user_input_id)
             .hint_text("Enter formula here ...")
-            .font(FontSelection::FontId(font_id.clone()))
+            .font(FontSelection::FontId(TEXTEDIT_FONT_ID))
             .lock_focus(true)
             .desired_width(ui.available_width())
             .frame(false)
@@ -274,11 +276,35 @@ impl UiState {
                     pos,
                     Align2::LEFT_TOP,
                     " ".to_owned() + &main,
-                    FontId::new(22.0, FontFamily::Proportional),
+                    TEXTEDIT_FONT_ID,
                     ui.visuals().text_color(),
                 );
             }
         }
+    }
+
+    pub fn show_brackets_highlighting(&self, ui: &mut Ui, output: &TextEditOutput) -> Option<()> {
+        let cursor_range = get_cursor_range(&output.response)?;
+        let (min, max) = find_bracket_area(&self.top_user_input, cursor_range)?;
+        let left = output.galley.pos_from_cursor(CCursor::new(min));
+        let right = output.galley.pos_from_cursor(CCursor::new(max));
+        let offset = output.galley_pos.to_vec2();
+        let r = Rect::from_min_max(left.max, right.max).translate(offset + Vec2::DOWN * 2.0);
+        // ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, ui.visuals().text_color()));
+        ui.painter().rect_filled(r.expand2(Vec2::new(0.0, 1.0)), 2.0, ui.visuals().weak_text_color());
+        Self::draw_bracket(ui, left, offset, true, min != 0);
+        Self::draw_bracket(ui, right, offset, false, max != self.top_user_input.len());
+        Some(())
+    }
+
+    fn draw_bracket(ui: &mut Ui, left: Rect, offset: Vec2, is_left: bool, valid: bool) {
+        ui.painter().text(
+            left.left_top() + offset,
+            if is_left { Align2::RIGHT_TOP } else { Align2::LEFT_TOP },
+            if is_left { '(' } else { ')' },
+            TEXTEDIT_FONT_ID,
+            if valid { Color32::GREEN.gamma_multiply(0.5) } else { Color32::ORANGE.gamma_multiply(0.5) },
+        );
     }
 
     pub fn show_result_label(&mut self, ui: &mut Ui) {
@@ -443,4 +469,61 @@ impl UiState {
             }
         });
     }
+}
+
+/// Determine all the parts that are in the same brackets as the cursor
+fn find_bracket_area(str: &str, cursor_range: CCursorRange) -> Option<(usize, usize)> {
+    let [min, max] = cursor_range.sorted_cursors().map(|c| c.index);
+    let outest_idx = if min == max { min } else { determine_outest_cursor_pos(str, min, max) };
+    find_bracket_range(str, outest_idx)
+}
+
+/// Determine the position between the two cursor indices where the scope is the broadest
+fn determine_outest_cursor_pos(str: &str, min: usize, max: usize) -> usize {
+    let mut outest_idx = min;
+    let mut outest_layer = 0;
+    let mut layer = 0;
+    for i in min..max {
+        layer += match str.chars().nth(i).unwrap() {
+            ')' => -1,
+            '(' => 1,
+            _ => continue,
+        };
+        if layer < outest_layer {
+            outest_layer = layer;
+            outest_idx = i + 1;
+        }
+    }
+    outest_idx
+}
+
+fn find_bracket_range(str: &str, idx: usize) -> Option<(usize, usize)> {
+    let chars: Vec<_> = str.chars().collect();
+    let mut min = 0;
+    let mut indenting = 0;
+    for i in (0..idx).rev() {
+        indenting += match chars[i] {
+            ')' => 1,
+            '(' => -1,
+            _ => continue,
+        };
+        if indenting < 0 {
+            min = i + 1;
+            break;
+        }
+    }
+    indenting = 0;
+    let mut max = chars.len();
+    for i in idx..chars.len() {
+        indenting += match chars[i] {
+            ')' => -1,
+            '(' => 1,
+            _ => continue,
+        };
+        if indenting < 0 {
+            max = i;
+            break;
+        }
+    }
+    if min == 0 && max == chars.len() { None } else { Some((min, max)) }
 }
