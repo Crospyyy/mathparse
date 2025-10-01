@@ -251,6 +251,11 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 
 const TEXTEDIT_FONT_ID: FontId = FontId::proportional(22.0);
 
+#[inline]
+fn bracket_highlight_color() -> Color32 {
+    Color32::GREEN
+}
+
 impl UiState {
     pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
         self.top_user_input = self.top_user_input.replace_mul();
@@ -291,7 +296,7 @@ impl UiState {
         let offset = output.galley_pos.to_vec2();
         let r = Rect::from_min_max(left.max, right.max).translate(offset + Vec2::DOWN * 2.0);
         // ui.painter().line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.0, ui.visuals().text_color()));
-        ui.painter().rect_filled(r.expand2(Vec2::new(0.0, 1.0)), 2.0, ui.visuals().weak_text_color());
+        ui.painter().rect_filled(r.expand2(Vec2::new(0.0, 1.0)), 2.0, bracket_highlight_color());
         Self::draw_bracket(ui, left, offset, true, min != 0);
         Self::draw_bracket(ui, right, offset, false, max != self.top_user_input.len());
         Some(())
@@ -303,7 +308,7 @@ impl UiState {
             if is_left { Align2::RIGHT_TOP } else { Align2::LEFT_TOP },
             if is_left { '(' } else { ')' },
             TEXTEDIT_FONT_ID,
-            if valid { Color32::GREEN.gamma_multiply(0.5) } else { Color32::ORANGE.gamma_multiply(0.5) },
+            if valid { bracket_highlight_color() } else { Color32::ORANGE.gamma_multiply(0.5) },
         );
     }
 
