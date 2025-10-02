@@ -1,8 +1,8 @@
-use crate::ui::Page;
 use anyhow::Result;
 use egui::Response;
 use library::{FormulaStore, RunResult, RunSuccess, Symbol};
 use std::collections::HashSet;
+use crate::ui::bottom_panel::Page;
 
 pub struct Backend {
     custom_symbols: HashSet<String>,

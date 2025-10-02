@@ -1,5 +1,6 @@
 use crate::logic::{Backend, UiInteraction};
-use crate::ui::{HistoryEntry, HistoryEntryContent, Page, UiState};
+use crate::ui::UiState;
+use crate::ui::bottom_panel::{HistoryEntry, Page};
 use crate::{Window, WindowState, logic};
 use eframe::emath::Align;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
@@ -8,7 +9,7 @@ use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    AtomExt, Button, CentralPanel, Color32, Context, CursorIcon, DragValue, Event, Key, KeyboardShortcut,
+    AtomExt, Button, CentralPanel, Color32, Context, CursorIcon, DragValue, Event, Id, Key, KeyboardShortcut,
     Label, Layout, Modifiers, OpenUrl, PointerButton, RawInput, Response, RichText, Separator, Shadow,
     Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
 };
@@ -87,7 +88,7 @@ impl App for Window {
             ui.add_space(7.5);
             self.ui_state.show_tab_selector(ui);
             ui.separator();
-            match self.ui_state.selected_page {
+            match self.ui_state.bottom_panel.selected_page {
                 Page::History => self.ui_state.show_history(ui),
                 Page::DefinedSymbols => self.ui_state.show_all_defined_symbols(ui),
             }
@@ -200,37 +201,49 @@ impl Window {
                     let mut new_cursor_pos = cursor_pos - input_term.len() + complete_to.len();
 
                     if insert_brackets {
-                        if self.ui_state.top_user_input.chars().nth(cursor_pos) != Some('(') {
+                        if self
+                            .ui_state
+                            .calculation_panel
+                            .calculation_input
+                            .top_user_input
+                            .chars()
+                            .nth(cursor_pos)
+                            != Some('(')
+                        {
                             insert.push_str("()");
                         }
                         new_cursor_pos += 1;
                     }
 
-                    self.ui_state.top_user_input.insert_str(cursor_pos, &insert);
+                    self.ui_state
+                        .calculation_panel
+                        .calculation_input
+                        .top_user_input
+                        .insert_str(cursor_pos, &insert);
                     set_cursor_pos(&response, new_cursor_pos);
                     self.update_calculation_result();
                 },
                 UiInteraction::SelectPage(page) => {
-                    self.ui_state.selected_page = page;
+                    self.ui_state.bottom_panel.selected_page = page;
                 },
                 UiInteraction::ClearCustomSymbols => {
                     if !self.backend.has_custom_symbols() {
                         return;
                     }
                     self.backend.clear_custom_symbols();
-                    self.ui_state.history.push(HistoryEntry::cleared_symbols());
+                    self.ui_state.bottom_panel.history.push(HistoryEntry::cleared_symbols());
                     self.ui_state.update_all_symbol_strings(self.backend.formula_store());
                     self.update_calculation_result();
                 },
                 UiInteraction::ClearHistory => {
-                    self.ui_state.history.clear();
+                    self.ui_state.bottom_panel.history.clear();
                 },
             }
         }
     }
 
     pub(crate) fn show_top_input(&mut self, ui: &mut Ui, pressed_shortcut: bool) {
-        let text_before = self.ui_state.top_user_input.clone();
+        let text_before = self.ui_state.calculation_panel.calculation_input.top_user_input.clone();
         self.preprocess_user_input(ui);
 
         let output = self.ui_state.show_top_input_textedit(ui);
@@ -250,7 +263,7 @@ impl Window {
             }
         }
 
-        if text_before != self.ui_state.top_user_input {
+        if text_before != self.ui_state.calculation_panel.calculation_input.top_user_input {
             self.ui_state.interaction_sender.send(UiInteraction::TopInputChanged);
         }
         if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
@@ -267,7 +280,7 @@ impl Window {
         if let Some(mut state) = TextEdit::load_state(&response.ctx, response.id) {
             state.cursor.set_char_range(Some(CCursorRange::two(
                 CCursor::new(0),
-                CCursor::new(self.ui_state.top_user_input.len()),
+                CCursor::new(self.ui_state.calculation_panel.calculation_input.top_user_input.len()),
             )));
             state.store(&response.ctx, response.id);
         }
@@ -288,7 +301,9 @@ impl Window {
     }
 
     fn request_top_input_focus(&mut self, ctx: &Context) {
-        ctx.memory_mut(|mem| mem.request_focus(self.ui_state.top_user_input_id));
+        ctx.memory_mut(|mem| {
+            mem.request_focus(self.ui_state.calculation_panel.calculation_input.top_user_input_id)
+        });
     }
 
     pub(super) fn preprocess_user_input(&mut self, ui: &mut Ui) {
@@ -297,18 +312,23 @@ impl Window {
     }
 
     pub(super) fn input_post_process(&mut self, ui: &mut Ui) {
-        self.ui_state.top_user_input.retain(|c| c.is_ascii());
+        self.ui_state.calculation_panel.calculation_input.top_user_input.retain(|c| c.is_ascii());
         if !ui.input(|ip| ip.events.iter().any(|e| matches!(e, Event::Text(_)))) {
             return;
         };
-        let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
+        let Some(mut state) = TextEdit::load_state(
+            ui.ctx(),
+            self.ui_state.calculation_panel.calculation_input.top_user_input_id,
+        ) else {
             return;
         };
         let Some(cursor_pos) = state.cursor.char_range().map(|c| c.sorted_cursors()[1].index) else {
             return;
         };
-        let string =
-            get_fun_name_end_of_string(&self.ui_state.top_user_input.char_range(0..cursor_pos), true);
+        let string = get_fun_name_end_of_string(
+            &self.ui_state.calculation_panel.calculation_input.top_user_input.char_range(0..cursor_pos),
+            true,
+        );
         if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_digit(10)) {
             return;
         }
@@ -317,7 +337,7 @@ impl Window {
         };
         let pos_before = cursor_pos - string.len();
         let insert_pos = pos_before + first_char_pos;
-        self.ui_state.top_user_input.insert_str(insert_pos, "*");
+        self.ui_state.calculation_panel.calculation_input.top_user_input.insert_str(insert_pos, "*");
         let mut add_move_cursor_right = 1;
 
         if pos_before > 0 {
@@ -327,28 +347,39 @@ impl Window {
                     break;
                 }
                 let new_first = first_num_char - 1;
-                if matches!(self.ui_state.top_user_input.chars().nth(new_first), Some('0'..='9' | '.')) {
+                if matches!(
+                    self.ui_state.calculation_panel.calculation_input.top_user_input.chars().nth(new_first),
+                    Some('0'..='9' | '.')
+                ) {
                     first_num_char = new_first;
                 } else {
                     break;
                 }
             }
             if first_num_char != 0
-                && matches!(self.ui_state.top_user_input.chars().nth(first_num_char - 1), Some('^' | '/'))
+                && matches!(
+                    self.ui_state
+                        .calculation_panel
+                        .calculation_input
+                        .top_user_input
+                        .chars()
+                        .nth(first_num_char - 1),
+                    Some('^' | '/')
+                )
             {
-                self.ui_state.top_user_input.insert(cursor_pos + 1, ')');
-                self.ui_state.top_user_input.insert(first_num_char, '(');
+                self.ui_state.calculation_panel.calculation_input.top_user_input.insert(cursor_pos + 1, ')');
+                self.ui_state.calculation_panel.calculation_input.top_user_input.insert(first_num_char, '(');
                 add_move_cursor_right += 1;
             }
         }
         state
             .cursor
             .set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + add_move_cursor_right))));
-        state.store(ui.ctx(), self.ui_state.top_user_input_id);
+        state.store(ui.ctx(), self.ui_state.calculation_panel.calculation_input.top_user_input_id);
     }
 
     fn get_processed_input(&self) -> String {
-        let mut string = self.ui_state.top_user_input.trim().to_string();
+        let mut string = self.ui_state.calculation_panel.calculation_input.top_user_input.trim().to_string();
         string.retain(|c| c != ' ');
 
         while matches!(string.chars().last(), Some('=' | '-' | '+' | '*' | '/' | '^')) {
@@ -362,7 +393,7 @@ impl Window {
     fn update_calculation_result(&mut self) {
         let input = self.get_processed_input();
 
-        self.ui_state.calculation_result = if input.is_empty() {
+        self.ui_state.calculation_panel.calculation_result = if input.is_empty() {
             None
         } else {
             Some(self.ui_state.generate_output_string(self.backend.dry_run(&input)))
@@ -383,7 +414,7 @@ impl Window {
             RunSuccess::AddedSymbol(symbol) => {
                 self.ui_state.update_all_symbol_strings(self.backend.formula_store());
                 self.ui_state.add_symbol_definition_to_history(symbol);
-                self.ui_state.top_user_input.clear();
+                self.ui_state.calculation_panel.calculation_input.top_user_input.clear();
                 self.update_calculation_result();
             },
             RunSuccess::CalculationResult(result) => {
@@ -475,7 +506,10 @@ impl Window {
             return;
         };
 
-        let Some(mut state) = TextEdit::load_state(ui.ctx(), self.ui_state.top_user_input_id) else {
+        let Some(mut state) = TextEdit::load_state(
+            ui.ctx(),
+            self.ui_state.calculation_panel.calculation_input.top_user_input_id,
+        ) else {
             return;
         };
         let Some(cursors) = state.cursor.char_range() else {
@@ -483,23 +517,28 @@ impl Window {
         };
         if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
             let move_cursor = typed_brackets.len();
-            if cursor_pos == self.ui_state.top_user_input.len() {
+            if cursor_pos == self.ui_state.calculation_panel.calculation_input.top_user_input.len() {
                 typed_brackets += ")";
             }
-            self.ui_state.top_user_input.insert_str(cursor_pos, &typed_brackets);
+            self.ui_state
+                .calculation_panel
+                .calculation_input
+                .top_user_input
+                .insert_str(cursor_pos, &typed_brackets);
             state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + move_cursor))));
         } else {
             let [min, max] = cursors.sorted_cursors().map(|c| c.index);
-            let string_before = &self.ui_state.top_user_input[..min];
-            let string_middle = &self.ui_state.top_user_input[min..max];
-            let string_after = &self.ui_state.top_user_input[max..];
-            self.ui_state.top_user_input = format!("{}({}){}", string_before, string_middle, string_after);
+            let string_before = &self.ui_state.calculation_panel.calculation_input.top_user_input[..min];
+            let string_middle = &self.ui_state.calculation_panel.calculation_input.top_user_input[min..max];
+            let string_after = &self.ui_state.calculation_panel.calculation_input.top_user_input[max..];
+            self.ui_state.calculation_panel.calculation_input.top_user_input =
+                format!("{}({}){}", string_before, string_middle, string_after);
             state.cursor.set_char_range(Some(CCursorRange::two(
                 CCursor::new(cursors.primary.index + 1),
                 CCursor::new(cursors.secondary.index + 1),
             )));
         }
-        state.store(ui.ctx(), self.ui_state.top_user_input_id);
+        state.store(ui.ctx(), self.ui_state.calculation_panel.calculation_input.top_user_input_id);
     }
 
     fn preprocess_paste(&mut self, ui: &mut Ui) {
@@ -538,13 +577,49 @@ pub fn set_cursor_pos(response: &Response, cursor_pos: usize) {
     }
 }
 
-pub fn get_cursor_pos(response: &Response) -> Option<usize> {
-    let state = TextEdit::load_state(&response.ctx, response.id)?;
+pub fn get_cursor_pos<'a>(response: impl Into<CursorPosSource<'a>>) -> Option<usize> {
+    let source = response.into();
+    let state = TextEdit::load_state(&source.ctx(), source.id())?;
     state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
 }
 
-pub fn get_cursor_range(response: &Response) -> Option<CCursorRange> {
-    let state = TextEdit::load_state(&response.ctx, response.id)?;
+pub struct CursorPosSource<'a>(&'a Context, Id);
+
+impl<'a> CursorPosSource<'a> {
+    fn new(ctx: &'a Context, text_edit_id: Id) -> Self {
+        Self(ctx, text_edit_id)
+    }
+
+    fn ctx(&self) -> &Context {
+        self.0
+    }
+
+    fn id(&self) -> Id {
+        self.1
+    }
+}
+
+impl<'a> From<&'a Response> for CursorPosSource<'a> {
+    fn from(value: &'a Response) -> Self {
+        Self(&value.ctx, value.id)
+    }
+}
+
+impl<'a> From<&'a TextEditOutput> for CursorPosSource<'a> {
+    fn from(value: &'a TextEditOutput) -> Self {
+        Self::from(&value.response)
+    }
+}
+
+impl<'a> From<(&'a Context, Id)> for CursorPosSource<'a> {
+    fn from(value: (&'a Context, Id)) -> Self {
+        Self(value.0, value.1)
+    }
+}
+
+pub fn get_cursor_range<'a>(response: impl Into<CursorPosSource<'a>>) -> Option<CCursorRange> {
+    let source = response.into();
+    let state = TextEdit::load_state(source.ctx(), source.id())?;
     state.cursor.char_range()
 }
 
