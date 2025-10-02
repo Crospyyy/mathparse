@@ -189,12 +189,12 @@ impl UiState {
 			RunResult::Err(RunError::FailedToAddSymbol(s)) => Err(format!("Error adding symbol: {}", s)),
 			RunResult::Ok(RunSuccess::CalculationResult(r)) => {
 				Ok(OutputString::Result(self.format_number_result(r)))
-			}
+			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
 				let string =
 					s.symbol().get_full_string(s.name(), &mut create_default_context()).replace_mul();
 				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string)))
-			}
+			},
 		}
 	}
 
@@ -289,7 +289,7 @@ impl UiState {
 				if let Some(info) = info {
 					job.append(info, 0.0, small_format.clone());
 				}
-			}
+			},
 			Some(Err(_)) => job.append("=  !", 0.0, format.clone()),
 			None => job.append("=", 0.0, format.clone()),
 		};

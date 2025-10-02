@@ -1,12 +1,12 @@
 use crate::logic::UiInteraction;
 use crate::ui::UiState;
+use crate::ui::bottom_panel::HistoryEntryContent::{Calculation, SymbolDefinition};
 use crate::ui::calculation_panel::{MulReplacement, StringWithInfo};
 use eframe::epaint::{Margin, Shadow};
 use egui::style::ScrollStyle;
 use egui::{Frame, RichText, ScrollArea, Sides, Ui};
 use library::{FormulaStore, NamedSymbol, create_default_context};
 use std::fmt::Display;
-use crate::ui::bottom_panel::HistoryEntryContent::{Calculation, SymbolDefinition};
 
 pub struct BottomPanel {
 	pub selected_page: Page,
@@ -87,13 +87,13 @@ impl HistoryEntry {
 									}
 								});
 							});
-						}
+						},
 						SymbolDefinition(text) => {
 							ui.label(regular_format(text));
-						}
+						},
 						HistoryEntryContent::ClearedSymbols => {
 							ui.label(regular_format("Cleared Symbols"));
-						}
+						},
 					}
 				})
 			},

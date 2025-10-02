@@ -1,50 +1,27 @@
 use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
 use crate::ui::bottom_panel::{HistoryEntry, Page};
-use crate::{Window, WindowState, logic};
-use eframe::emath::Align;
-use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapMode, TextWrapping};
-use eframe::epaint::{FontFamily, FontId};
+use crate::window_control::{WindowState, switch_visibility};
+use crate::{Window, logic};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
-    AtomExt, Button, CentralPanel, Color32, Context, CursorIcon, DragValue, Event, Id, Key, KeyboardShortcut,
-    Label, Layout, Modifiers, OpenUrl, PointerButton, RawInput, Response, RichText, Separator, Shadow,
-    Stroke, StrokeKind, Style, TextBuffer, TextEdit, Ui, Vec2, ViewportCommand, Visuals, Widget, WidgetText,
+    Align, Button, CentralPanel, Color32, Context, CursorIcon, Event, Id, Key, Layout, Modifiers, OpenUrl,
+    PointerButton, RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui,
+    ViewportCommand, Visuals, Widget,
 };
-use global_shortcuts::register_global_shortcut;
 use library::{
-    DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult,
-    RunSuccess, Signature, Symbol, convert_from_latex_if_needed, create_default_context, debug_print,
+    FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
     get_fun_name_end_of_string, only_in_debug, quick_match,
 };
 use regex::Regex;
-use std::cmp::Ordering;
-use std::collections::HashSet;
 use std::process::exit;
+use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::sync::{Arc, LazyLock, Mutex};
-use std::thread;
 
 static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
-
-pub fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
-    if visible {
-        ctx.send_viewport_cmd(ViewportCommand::Minimized(false));
-        if last_window_size.is_some() {
-            let size = Window::DEFAULT_WINDOW_SIZE;
-            try_center_window(ctx, Some(size));
-            ctx.send_viewport_cmd(ViewportCommand::InnerSize(size))
-        }
-        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0; 2].into()));
-        ctx.send_viewport_cmd(ViewportCommand::Focus);
-    } else {
-        // ctx.send_viewport_cmd(ViewportCommand::OuterPosition([0.0, 10000.0].into()));
-        ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
-    }
-}
 
 impl App for Window {
     fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
@@ -113,52 +90,11 @@ impl App for Window {
     }
 
     fn raw_input_hook(&mut self, ctx: &Context, raw_input: &mut RawInput) {
-        if !self.window_state.is_pinned() {
-            let is_focussed = ctx.memory(|m| m.focused().is_none());
-            let pressed_escape = raw_input
-                .events
-                .iter()
-                .any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
-            if is_focussed && pressed_escape {
-                switch_visibility(ctx, false, self.get_last_window_size());
-            }
-        }
-
-        // match alt + space
-        if raw_input.modifiers.alt // todo find a way to prevent the windows window menu from opening
-            && raw_input
-            .events
-            .iter()
-            .any(|x| matches!(x, Event::Key { key: Key::Space, pressed: true, repeat: false, .. }))
-        {
-            raw_input.events.retain(|e| {
-                !matches!(e, Event::Key { key: Key::Space, .. }) && !matches!(e, Event::Text(t) if t == " ")
-            });
-            self.request_top_input_focus(ctx);
-        }
+        self.raw_input_hook_inner(ctx, raw_input)
     }
-}
-
-pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool {
-    let (monitor_opt, win_size_opt) = ctx.input(|i| (i.viewport().monitor_size, last_window_size));
-
-    only_in_debug! {
-        dbg!(monitor_opt);
-        dbg!(win_size_opt);
-    }
-
-    if let (Some(monitor), Some(win_size)) = (monitor_opt, win_size_opt) {
-        let pos = (monitor - win_size) / 2.0;
-        ctx.send_viewport_cmd(ViewportCommand::OuterPosition(pos.to_pos2()));
-        debug_print!("Center window at: {:?}", pos);
-        return true;
-    }
-    false
 }
 
 impl Window {
-    const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(528.3, 386.7);
-
     pub(crate) fn new(cc: &CreationContext) -> Self {
         let ctx = cc.egui_ctx.clone();
 
@@ -176,10 +112,6 @@ impl Window {
 
         switch_visibility(&ctx, false, window.get_last_window_size());
         window
-    }
-
-    fn get_last_window_size(&self) -> Option<Vec2> {
-        self.window_state.last_window_size.lock().unwrap().clone()
     }
 
     pub fn handle_ui_input(&mut self) {
@@ -286,21 +218,7 @@ impl Window {
         }
     }
 
-    pub(super) fn handle_window_control(&mut self, ctx: &Context, pressed_shortcut: &mut bool) {
-        let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
-        if requested_focus {
-            self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
-            self.request_top_input_focus(ctx);
-            *pressed_shortcut = true;
-        }
-        let has_focus = ctx.input(|ip| ip.raw.focused);
-        if !self.window_state.is_pinned() && self.window_state.last_frame_had_focus && !has_focus {
-            switch_visibility(ctx, false, self.get_last_window_size());
-        }
-        self.window_state.last_frame_had_focus = has_focus;
-    }
-
-    fn request_top_input_focus(&mut self, ctx: &Context) {
+    pub(crate) fn request_top_input_focus(&mut self, ctx: &Context) {
         ctx.memory_mut(|mem| {
             mem.request_focus(self.ui_state.calculation_panel.calculation_input.top_user_input_id)
         });
@@ -386,7 +304,6 @@ impl Window {
             string.pop();
         }
         string = REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS.replace_all(&string, "$2").to_string();
-
         string
     }
 
@@ -460,15 +377,7 @@ impl Window {
         })
         .clicked()
         {
-            let new_pinned = !self.window_state.is_pinned();
-            ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
-            self.window_state.set_pinned(new_pinned);
-            ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
-            if !new_pinned {
-                switch_visibility(ctx, false, self.get_last_window_size());
-            } else {
-                ctx.send_viewport_cmd(ViewportCommand::InnerSize(Window::DEFAULT_WINDOW_SIZE));
-            }
+            self.switch_window_pinning(ctx);
         }
 
         if extended_button("❌ Quit").clicked() {
