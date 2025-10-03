@@ -1,5 +1,7 @@
+use crate::benchmarking::TaskAdder;
 use crate::calculation::create_context;
 use crate::expression_values::FunctionExpression;
+use crate::outer_store_interation::RunPrecision;
 use crate::storing::FormulaStore;
 use crate::{Benchmark, Element, Number, RoundingMode, benchmark, only_in_debug};
 use anyhow::Result;
@@ -11,57 +13,103 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::RangeInclusive;
 use thiserror::Error;
+
+#[derive(Debug)]
 pub enum DynamicResult {
 	Exact(BigRational),
-	Checked { num: BigFloat, precision: u32 },
+	Checked { num: BigFloat, precision: usize },
 	ReachedLimit(BigFloat),
 }
 
+#[derive(Error, Debug)]
+pub enum FormulaEvaluationError {
+	#[error("Contains unparsed elements")]
+	UnparsedElements,
+	#[error("Contains unexpanded variables or functions")]
+	UnexpandedElements,
+	#[error("Contains function call with invalid argument count")]
+	FunctionCallWithInvalidArgumentCount,
+}
+
 impl Element {
-	fn eval(&self, ctx: &mut Context) -> Option<Number> {
+	fn eval(&self, ctx: &mut Context) -> Result<Number, FormulaEvaluationError> {
 		match self {
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Variable(_)
-			| Element::Function { .. }
-			| Element::VariableOrFunction(_) => None,
+			Element::Brackets(_) | Element::String(_) => Err(FormulaEvaluationError::UnparsedElements),
+			Element::Variable(_) | Element::Function { .. } | Element::VariableOrFunction(_) => {
+				Err(FormulaEvaluationError::UnexpandedElements)
+			},
 			Element::Plus(elements) => {
-				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+				let values: Vec<Number> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
-					return Some(nan.clone());
+					return Ok(nan.clone());
 				}
 				let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
-				Some(product)
+				Ok(product)
 			},
 			Element::Multiply(elements) => {
-				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
-					return Some(nan.clone());
+					return Ok(nan.clone());
 				}
 				if values.iter().any(|v| v == 0) {
-					return Some(Number::from(0));
+					return Ok(Number::from(0));
 				}
 				let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
-				Some(product)
+				Ok(product)
 			},
 			Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
-			Element::Number(n) => Some(n.clone()),
-			Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-			Element::NumberWithExpression { expr_value } => Some(expr_value.get_function()(ctx)),
+			Element::Number(n) => Ok(n.clone()),
+			Element::Pow(b, e) => Ok(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
+			Element::NumberWithExpression { expr_value } => Ok(expr_value.get_function()(ctx)),
 			Element::FunctionWithExpression { arguments, expr_value } => {
 				let count = expr_value.get_param_count();
 				if !count.number_would_be_valid(arguments.len()) {
-					return None;
+					return Err(FormulaEvaluationError::FunctionCallWithInvalidArgumentCount);
 				}
 				match expr_value.get_function() {
-					FunctionExpression::SingleArgument(fun) => Some(fun(&arguments[0].eval(ctx)?, ctx)),
+					FunctionExpression::SingleArgument(fun) => Ok(fun(&arguments[0].eval(ctx)?, ctx)),
 					FunctionExpression::MultipleArguments(fun) => {
-						let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
-						Some(fun(args, ctx))
+						let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Result<Vec<_>, _>>()?;
+						Ok(fun(args, ctx))
 					},
 				}
 			},
 		}
+	}
+
+	pub fn eval_dynamic_precision(
+		&self, min_precision: usize, max_precision: usize,
+	) -> Result<DynamicResult> {
+		let mut precision = min_precision;
+		let mut ctx;
+		let mut last_rounded = None;
+
+		while last_rounded.is_none() || precision <= max_precision {
+			ctx = create_context(precision);
+			let result = self.eval(&mut ctx)?;
+
+			let mut rounded = match result {
+				Number::Float(f) => f,
+				Number::Rational(r) => {
+					return Ok(DynamicResult::Exact(r));
+				},
+			};
+			if rounded.is_nan() {
+				return Ok(DynamicResult::Checked { num: rounded, precision });
+			}
+			rounded = rounded.round(min_precision, RoundingMode::ToEven);
+			rounded.set_inexact(true);
+
+			if let Some(last_rounded) = &mut last_rounded
+				&& *last_rounded == rounded
+			{
+				return Ok(DynamicResult::Checked { num: rounded, precision });
+			}
+
+			last_rounded = Some(rounded);
+			precision *= 2;
+		}
+		Ok(DynamicResult::ReachedLimit(last_rounded.unwrap()))
 	}
 
 	fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
@@ -107,39 +155,10 @@ impl Display for ExpansionError {
 }
 
 impl FormulaStore {
-	pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number> {
-		self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
-	}
-
-	fn eval_with_benchmark(
-		&self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
-	) -> Result<Number> {
-		let mut inner_bench = benchmark.new_sub_bench();
-		let mut formula =
-			Element::parse_benched(formula_str, &mut inner_bench).map_err(EvaluationError::CouldNotParse)?;
-		benchmark.add_task_with_benchmark("Parsing", inner_bench);
-
-		self.expand_and_optimize(&mut formula, benchmark, ctx)?;
-
-		let result = benchmark!(
-			benchmark,
-			formula.eval(ctx).ok_or(EvaluationError::CouldNotEvaluate(formula_str.to_string()))?,
-			"Evaluation"
-		);
-
-		Ok(result)
-	}
-
-	fn expand_and_optimize(
-		&self, formula: &mut Element, benchmark: &mut Benchmark, ctx: &mut Context,
-	) -> Result<()> {
-		only_in_debug!(dbg!(formula.get_string(ctx)));
-		benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-		only_in_debug!(dbg!(formula.get_string(ctx)));
-		benchmark!(benchmark, self.expand_formula(formula, &HashSet::new())?, "Expansion");
-		only_in_debug!(dbg!(formula.get_string(ctx)));
-		benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-		only_in_debug!(dbg!(formula.get_string(ctx)));
+	fn expand_and_optimize(&self, formula: &mut Element, benchmark: &mut TaskAdder) -> Result<()> {
+		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
+		benchmark.benchmark("Expansion", || self.expand_formula(formula, &HashSet::new()))?;
+		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
 		Ok(())
 	}
 
@@ -167,41 +186,29 @@ impl FormulaStore {
 		Ok(())
 	}
 
-	pub fn eval_dynamic_precision(
-		&mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
+	pub fn eval_new(
+		&self, formula_str: &str, precision: RunPrecision, benchmark: &mut TaskAdder,
 	) -> Result<DynamicResult> {
-		let (min_precision, max_precision) = (*precision_range_bits.start(), *precision_range_bits.end());
+		let mut formula = benchmark
+			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
 
-		let mut precision = min_precision;
-		let mut ctx;
-		let mut last_rounded = None;
+		benchmark
+			.bench_with_inner("Expansion and Optimization", |b| self.expand_and_optimize(&mut formula, b))?;
 
-		while last_rounded.is_none() || precision <= max_precision {
-			ctx = create_context(precision as usize);
-			let result = self.eval(formula_str, &mut ctx)?;
+		// todo add result caching
 
-			let mut rounded = match result {
-				Number::Float(f) => f,
-				Number::Rational(r) => {
-					return Ok(DynamicResult::Exact(r));
-				},
-			};
-			if rounded.is_nan() {
-				return Ok(DynamicResult::Checked { num: rounded, precision });
-			}
-			rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
-			rounded.set_inexact(true);
-
-			if let Some(last_rounded) = &mut last_rounded
-				&& *last_rounded == rounded
-			{
-				return Ok(DynamicResult::Checked { num: rounded, precision });
-			}
-
-			last_rounded = Some(rounded);
-			precision *= 2;
-		}
-		Ok(DynamicResult::ReachedLimit(last_rounded.unwrap()))
+		let result = match precision {
+			RunPrecision::Fixed(p) => {
+				let mut ctx = create_context(p);
+				match benchmark.benchmark("Evaluation", || formula.eval(&mut ctx))? {
+					Number::Rational(r) => Ok(DynamicResult::Exact(r)),
+					Number::Float(f) => Ok(DynamicResult::Checked { num: f, precision: p }),
+				}
+			},
+			RunPrecision::Dynamic(min, max) => benchmark
+				.benchmark("Dynamic Precision Evaluation", || formula.eval_dynamic_precision(min, max)),
+		};
+		result
 	}
 
 	pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
@@ -209,9 +216,11 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
+	use crate::benchmarking::TaskAdder;
 	use crate::calculation::create_default_context;
 	use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 	use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
+	use crate::outer_store_interation::RunPrecision;
 	use crate::storing::FormulaStore;
 	use crate::{Element, FormattingOptions, Number};
 	use astro_float::ctx::Context;
@@ -292,11 +301,17 @@ mod tests {
 	#[test]
 	fn test_eval_formula_store() {
 		let mut store = FormulaStore::new_empty();
-		let mut ctx = create_default_context();
 		store.add_symbol_from_string("f(x)=x^2", false).unwrap();
 		store.add_symbol_from_string("a=4", false).unwrap();
-		assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16);
-		assert!(store.eval("f", &mut ctx).is_err());
+		assert_eq!(
+			store
+				.eval_new("f(a)", RunPrecision::default(), &mut TaskAdder::new("eval"))
+				.unwrap()
+				.to_string_detailed(FormattingOptions::default())
+				.get_string(),
+			"16"
+		);
+		assert!(store.eval_new("f", RunPrecision::default(), &mut TaskAdder::new("eval")).is_err());
 	}
 
 	#[test]
