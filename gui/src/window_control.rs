@@ -1,6 +1,6 @@
 use crate::Window;
 use eframe::emath::Vec2;
-use egui::{Context, Event, Key, RawInput, ViewportCommand};
+use egui::{Context, Event, Id, Key, PointerButton, RawInput, Ui, ViewportCommand};
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -81,6 +81,7 @@ impl Window {
 		};
 		drop(guard);
 
+		// handle focus request
 		if self.window_state.request_focus.load(Ordering::Relaxed) {
 			self.window_state.request_focus.store(false, Ordering::Relaxed);
 			self.request_top_input_focus(ctx);
@@ -102,6 +103,17 @@ impl Window {
 			switch_visibility(ctx, false, self.get_last_window_size());
 		} else {
 			ctx.send_viewport_cmd(ViewportCommand::InnerSize(Window::DEFAULT_WINDOW_SIZE));
+		}
+	}
+
+	pub fn window_background_logic(&mut self, ctx: &Context, ui: &mut Ui) {
+		let resp = ui.interact(ui.max_rect(), Id::new("window-drag-bg"), egui::Sense::click_and_drag());
+		if resp.dragged_by(PointerButton::Primary) {
+			ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
+		} else {
+			resp.context_menu(|ui| {
+				self.show_background_context_menu(ctx, ui);
+			});
 		}
 	}
 }

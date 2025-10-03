@@ -8,8 +8,7 @@ use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
 	Align, Button, CentralPanel, Color32, Context, CursorIcon, Event, Id, Key, Layout, Modifiers, OpenUrl,
-	PointerButton, RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui,
-	ViewportCommand, Visuals, Widget,
+	RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui, Visuals, Widget,
 };
 use library::{
 	FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
@@ -31,10 +30,12 @@ impl App for Window {
 		let frame = if self.window_state.is_pinned() {
 			egui::containers::Frame::central_panel(&Style::default())
 		} else {
-			let mut shadow = Shadow::default();
-			shadow.color = Color32::BLACK.gamma_multiply(0.1);
-			shadow.blur = 14;
-			shadow.spread = 7;
+			let shadow = Shadow {
+				color: Color32::BLACK.gamma_multiply(0.1),
+				blur: 14,
+				spread: 7,
+				..Default::default()
+			};
 			egui::containers::Frame::window(&Style::default())
 				.corner_radius(10.0)
 				.inner_margin(10.0)
@@ -43,18 +44,8 @@ impl App for Window {
 		};
 
 		CentralPanel::default().frame(frame).show(ctx, |ui| {
-			let resp =
-				ui.interact(ui.max_rect(), egui::Id::new("window-drag-bg"), egui::Sense::click_and_drag());
-			if resp.dragged_by(PointerButton::Primary) {
-				ctx.send_viewport_cmd(ViewportCommand::StartDrag);
-			} else {
-				resp.context_menu(|ui| {
-					self.show_background_context_menu(ctx, ui);
-				});
-			}
-
+			self.window_background_logic(ctx, ui);
 			self.show_top_input(ui, pressed_shortcut);
-
 			ui.add_space(7.5);
 			self.ui_state.show_tab_selector(ui);
 			ui.separator();
@@ -358,7 +349,7 @@ impl Window {
 		})
 	}
 
-	fn show_background_context_menu(&mut self, ctx: &Context, ui: &mut Ui) {
+	pub fn show_background_context_menu(&mut self, ctx: &Context, ui: &mut Ui) {
 		let mut extended_button = |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
 
 		if extended_button(if self.window_state.is_pinned() {

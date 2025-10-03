@@ -4,9 +4,6 @@ mod calculation_panel;
 use crate::controller::{TaskReceiver, TaskSender, new_task_channel};
 use crate::ui::bottom_panel::BottomPanel;
 use crate::ui::calculation_panel::CalculationPanel;
-use egui::Widget;
-use std::cmp::PartialEq;
-use std::fmt::Display;
 
 pub(super) struct UiState {
 	pub(super) calculation_panel: CalculationPanel,
