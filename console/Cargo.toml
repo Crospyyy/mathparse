@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 num = "0.4.3"
-library = {path = "../library"}
+library = { path = "../library" }

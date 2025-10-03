@@ -3,7 +3,7 @@ use eframe::emath::Vec2;
 use egui::{Context, Event, Key, RawInput, ViewportCommand};
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub fn switch_visibility(ctx: &Context, visible: bool, last_window_size: Option<Vec2>) {
@@ -26,9 +26,9 @@ pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool 
 	let (monitor_opt, win_size_opt) = ctx.input(|i| (i.viewport().monitor_size, last_window_size));
 
 	only_in_debug! {
-        dbg!(monitor_opt);
-        dbg!(win_size_opt);
-    }
+		dbg!(monitor_opt);
+		dbg!(win_size_opt);
+	}
 
 	if let (Some(monitor), Some(win_size)) = (monitor_opt, win_size_opt) {
 		let pos = (monitor - win_size) / 2.0;
@@ -73,9 +73,16 @@ impl Window {
 	}
 
 	pub(super) fn handle_window_control(&mut self, ctx: &Context, pressed_shortcut: &mut bool) {
-		let requested_focus = self.window_state.request_focus.load(std::sync::atomic::Ordering::Relaxed);
-		if requested_focus {
-			self.window_state.request_focus.store(false, std::sync::atomic::Ordering::Relaxed);
+		// store last window size
+		let mut guard = self.window_state.last_window_size.lock().unwrap();
+		let option = ctx.input(|i| i.viewport().outer_rect.map(|r| r.size()));
+		if let Some(size) = option {
+			*guard = Some(size);
+		};
+		drop(guard);
+
+		if self.window_state.request_focus.load(Ordering::Relaxed) {
+			self.window_state.request_focus.store(false, Ordering::Relaxed);
 			self.request_top_input_focus(ctx);
 			*pressed_shortcut = true;
 		}
@@ -119,11 +126,11 @@ impl WindowState {
 	}
 
 	pub(crate) fn is_pinned(&self) -> bool {
-		self.pinned.load(std::sync::atomic::Ordering::Relaxed)
+		self.pinned.load(Ordering::Relaxed)
 	}
 
 	fn set_pinned(&self, pinned: bool) {
-		self.pinned.store(pinned, std::sync::atomic::Ordering::Relaxed);
+		self.pinned.store(pinned, Ordering::Relaxed);
 	}
 
 	pub(crate) fn start_shortcut_listener(&self, ctx: &Context) {
@@ -133,12 +140,12 @@ impl WindowState {
 		let pinned = self.pinned.clone();
 		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
 			let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
-			if pinned.load(std::sync::atomic::Ordering::Relaxed) {
+			if pinned.load(Ordering::Relaxed) {
 				window_size = None;
 			}
 			switch_visibility(&ctx, true, window_size);
 			ctx.send_viewport_cmd(ViewportCommand::Focus);
-			req_focus.store(true, std::sync::atomic::Ordering::Relaxed);
+			req_focus.store(true, Ordering::Relaxed);
 		});
 	}
 }

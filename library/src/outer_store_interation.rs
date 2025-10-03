@@ -2,66 +2,66 @@ use crate::evaluation::DynamicResult;
 use crate::{FormulaStore, NamedSymbol};
 
 impl FormulaStore {
-    pub fn run(&mut self, input: impl ToString, dry_run: bool) -> RunResult {
-        let input = input.to_string();
-        if let Some((symbol, definition)) = input.split_once("=") {
-            if symbol.contains('=') || definition.contains('=') {
-                return RunError::ParseFailed("Only one '=' is allowed in a formula".to_owned()).into();
-            }
-            match self.add_symbol_from_string(&input, dry_run) {
-                Ok(symbol) => RunSuccess::AddedSymbol(symbol).into(),
-                Err(err) => RunError::FailedToAddSymbol(err.to_string()).into(),
-            }
-        } else {
-            match self.eval_dynamic_precision(&input, FormulaStore::DEFAULT_PRECISION_RANGE) {
-                Ok(result) => RunSuccess::CalculationResult(result).into(),
-                Err(err) => RunError::CalculationFailed(err.to_string()).into(),
-            }
-        }
-    }
+	pub fn run(&mut self, input: impl ToString, dry_run: bool) -> RunResult {
+		let input = input.to_string();
+		if let Some((symbol, definition)) = input.split_once("=") {
+			if symbol.contains('=') || definition.contains('=') {
+				return RunError::ParseFailed("Only one '=' is allowed in a formula".to_owned()).into();
+			}
+			match self.add_symbol_from_string(&input, dry_run) {
+				Ok(symbol) => RunSuccess::AddedSymbol(symbol).into(),
+				Err(err) => RunError::FailedToAddSymbol(err.to_string()).into(),
+			}
+		} else {
+			match self.eval_dynamic_precision(&input, FormulaStore::DEFAULT_PRECISION_RANGE) {
+				Ok(result) => RunSuccess::CalculationResult(result).into(),
+				Err(err) => RunError::CalculationFailed(err.to_string()).into(),
+			}
+		}
+	}
 }
 
 pub enum RunResult {
-    Ok(RunSuccess),
-    Err(RunError),
+	Ok(RunSuccess),
+	Err(RunError),
 }
 
 pub enum RunSuccess {
-    AddedSymbol(NamedSymbol),
-    CalculationResult(DynamicResult),
+	AddedSymbol(NamedSymbol),
+	CalculationResult(DynamicResult),
 }
 
 pub enum RunError {
-    ParseFailed(String),
-    CalculationFailed(String),
-    FailedToAddSymbol(String),
+	ParseFailed(String),
+	CalculationFailed(String),
+	FailedToAddSymbol(String),
 }
 
 impl RunResult {
-    pub fn calculation_result(self) -> Option<DynamicResult> {
-        match self {
-            RunResult::Ok(RunSuccess::CalculationResult(res)) => Some(res),
-            _ => None,
-        }
-    }
+	pub fn calculation_result(self) -> Option<DynamicResult> {
+		match self {
+			RunResult::Ok(RunSuccess::CalculationResult(res)) => Some(res),
+			_ => None,
+		}
+	}
 }
 
 impl RunError {
-    fn to_string(self) -> String {
-        match self {
-            RunError::ParseFailed(s) | RunError::CalculationFailed(s) | RunError::FailedToAddSymbol(s) => s,
-        }
-    }
+	fn to_string(self) -> String {
+		match self {
+			RunError::ParseFailed(s) | RunError::CalculationFailed(s) | RunError::FailedToAddSymbol(s) => s,
+		}
+	}
 }
 
 impl Into<RunResult> for RunSuccess {
-    fn into(self) -> RunResult {
-        RunResult::Ok(self)
-    }
+	fn into(self) -> RunResult {
+		RunResult::Ok(self)
+	}
 }
 
 impl Into<RunResult> for RunError {
-    fn into(self) -> RunResult {
-        RunResult::Err(self)
-    }
+	fn into(self) -> RunResult {
+		RunResult::Err(self)
+	}
 }

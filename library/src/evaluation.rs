@@ -12,484 +12,484 @@ use std::fmt::{Debug, Display, Formatter};
 use std::ops::RangeInclusive;
 use thiserror::Error;
 pub enum DynamicResult {
-    Exact(BigRational),
-    Checked { num: BigFloat, precision: u32 },
-    ReachedLimit(BigFloat),
+	Exact(BigRational),
+	Checked { num: BigFloat, precision: u32 },
+	ReachedLimit(BigFloat),
 }
 
 impl Element {
-    fn eval(&self, ctx: &mut Context) -> Option<Number> {
-        match self {
-            Element::Brackets(_)
-            | Element::String(_)
-            | Element::Variable(_)
-            | Element::Function { .. }
-            | Element::VariableOrFunction(_) => None,
-            Element::Plus(elements) => {
-                let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
-                if let Some(nan) = values.iter().find(|v| v.is_nan()) {
-                    return Some(nan.clone());
-                }
-                let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
-                Some(product)
-            },
-            Element::Multiply(elements) => {
-                let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
-                if let Some(nan) = values.iter().find(|v| v.is_nan()) {
-                    return Some(nan.clone());
-                }
-                if values.iter().any(|v| v == 0) {
-                    return Some(Number::from(0));
-                }
-                let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
-                Some(product)
-            },
-            Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
-            Element::Number(n) => Some(n.clone()),
-            Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-            Element::NumberWithExpression { expr_value } => Some(expr_value.get_function()(ctx)),
-            Element::FunctionWithExpression { arguments, expr_value } => {
-                let count = expr_value.get_param_count();
-                if !count.number_would_be_valid(arguments.len()) {
-                    return None;
-                }
-                match expr_value.get_function() {
-                    FunctionExpression::SingleArgument(fun) => Some(fun(&arguments[0].eval(ctx)?, ctx)),
-                    FunctionExpression::MultipleArguments(fun) => {
-                        let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
-                        Some(fun(args, ctx))
-                    },
-                }
-            },
-        }
-    }
+	fn eval(&self, ctx: &mut Context) -> Option<Number> {
+		match self {
+			Element::Brackets(_)
+			| Element::String(_)
+			| Element::Variable(_)
+			| Element::Function { .. }
+			| Element::VariableOrFunction(_) => None,
+			Element::Plus(elements) => {
+				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
+					return Some(nan.clone());
+				}
+				let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
+				Some(product)
+			},
+			Element::Multiply(elements) => {
+				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Option<_>>()?;
+				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
+					return Some(nan.clone());
+				}
+				if values.iter().any(|v| v == 0) {
+					return Some(Number::from(0));
+				}
+				let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
+				Some(product)
+			},
+			Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
+			Element::Number(n) => Some(n.clone()),
+			Element::Pow(b, e) => Some(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
+			Element::NumberWithExpression { expr_value } => Some(expr_value.get_function()(ctx)),
+			Element::FunctionWithExpression { arguments, expr_value } => {
+				let count = expr_value.get_param_count();
+				if !count.number_would_be_valid(arguments.len()) {
+					return None;
+				}
+				match expr_value.get_function() {
+					FunctionExpression::SingleArgument(fun) => Some(fun(&arguments[0].eval(ctx)?, ctx)),
+					FunctionExpression::MultipleArguments(fun) => {
+						let args = arguments.iter().map(|a| a.eval(ctx)).collect::<Option<Vec<_>>>()?;
+						Some(fun(args, ctx))
+					},
+				}
+			},
+		}
+	}
 
-    fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
-        match self {
-            Element::Brackets(_)
-            | Element::String(_)
-            | Element::Number(_)
-            | Element::NumberWithExpression { .. }
-            | Element::FunctionWithExpression { .. } => {},
-            Element::Plus(e) | Element::Multiply(e) => {
-                e.iter().for_each(|el| el.get_all_unexpanded_names(names));
-            },
-            Element::Pow(a, b) => {
-                a.get_all_unexpanded_names(names);
-                b.get_all_unexpanded_names(names);
-            },
-            Element::Negate(x) => x.get_all_unexpanded_names(names),
-            Element::Function { name, arguments } => {
-                names.insert(name.to_owned());
-                arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
-            },
-            Element::Variable(name) | Element::VariableOrFunction(name) => {
-                names.insert(name.to_owned());
-            },
-        }
-    }
+	fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
+		match self {
+			Element::Brackets(_)
+			| Element::String(_)
+			| Element::Number(_)
+			| Element::NumberWithExpression { .. }
+			| Element::FunctionWithExpression { .. } => {},
+			Element::Plus(e) | Element::Multiply(e) => {
+				e.iter().for_each(|el| el.get_all_unexpanded_names(names));
+			},
+			Element::Pow(a, b) => {
+				a.get_all_unexpanded_names(names);
+				b.get_all_unexpanded_names(names);
+			},
+			Element::Negate(x) => x.get_all_unexpanded_names(names),
+			Element::Function { name, arguments } => {
+				names.insert(name.to_owned());
+				arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
+			},
+			Element::Variable(name) | Element::VariableOrFunction(name) => {
+				names.insert(name.to_owned());
+			},
+		}
+	}
 }
 
 #[derive(Error, Debug)]
 pub enum EvaluationError {
-    #[error("Could not parse formula: {0}")]
-    CouldNotParse(String),
-    #[error("Could not evaluate formula: {0}")]
-    CouldNotEvaluate(String),
+	#[error("Could not parse formula: {0}")]
+	CouldNotParse(String),
+	#[error("Could not evaluate formula: {0}")]
+	CouldNotEvaluate(String),
 }
 
 #[derive(Debug, Error)]
 struct ExpansionError;
 impl Display for ExpansionError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Could not expand formula")
-    }
+	fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+		write!(f, "Could not expand formula")
+	}
 }
 
 impl FormulaStore {
-    pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number> {
-        self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
-    }
+	pub fn eval(&self, formula_str: &str, ctx: &mut Context) -> Result<Number> {
+		self.eval_with_benchmark(formula_str, ctx, &mut Benchmark::new())
+	}
 
-    fn eval_with_benchmark(
-        &self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
-    ) -> Result<Number> {
-        let mut inner_bench = benchmark.new_sub_bench();
-        let mut formula =
-            Element::parse_benched(formula_str, &mut inner_bench).map_err(EvaluationError::CouldNotParse)?;
-        benchmark.add_task_with_benchmark("Parsing", inner_bench);
+	fn eval_with_benchmark(
+		&self, formula_str: &str, ctx: &mut Context, benchmark: &mut Benchmark,
+	) -> Result<Number> {
+		let mut inner_bench = benchmark.new_sub_bench();
+		let mut formula =
+			Element::parse_benched(formula_str, &mut inner_bench).map_err(EvaluationError::CouldNotParse)?;
+		benchmark.add_task_with_benchmark("Parsing", inner_bench);
 
-        self.expand_and_optimize(&mut formula, benchmark, ctx)?;
+		self.expand_and_optimize(&mut formula, benchmark, ctx)?;
 
-        let result = benchmark!(
-            benchmark,
-            formula.eval(ctx).ok_or(EvaluationError::CouldNotEvaluate(formula_str.to_string()))?,
-            "Evaluation"
-        );
+		let result = benchmark!(
+			benchmark,
+			formula.eval(ctx).ok_or(EvaluationError::CouldNotEvaluate(formula_str.to_string()))?,
+			"Evaluation"
+		);
 
-        Ok(result)
-    }
+		Ok(result)
+	}
 
-    fn expand_and_optimize(
-        &self, formula: &mut Element, benchmark: &mut Benchmark, ctx: &mut Context,
-    ) -> Result<()> {
-        only_in_debug!(dbg!(formula.get_string(ctx)));
-        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        only_in_debug!(dbg!(formula.get_string(ctx)));
-        benchmark!(benchmark, self.expand_formula(formula, &HashSet::new())?, "Expansion");
-        only_in_debug!(dbg!(formula.get_string(ctx)));
-        benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
-        only_in_debug!(dbg!(formula.get_string(ctx)));
-        Ok(())
-    }
+	fn expand_and_optimize(
+		&self, formula: &mut Element, benchmark: &mut Benchmark, ctx: &mut Context,
+	) -> Result<()> {
+		only_in_debug!(dbg!(formula.get_string(ctx)));
+		benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
+		only_in_debug!(dbg!(formula.get_string(ctx)));
+		benchmark!(benchmark, self.expand_formula(formula, &HashSet::new())?, "Expansion");
+		only_in_debug!(dbg!(formula.get_string(ctx)));
+		benchmark!(benchmark, formula.optimize_and_reduce(), "Formula Optimization");
+		only_in_debug!(dbg!(formula.get_string(ctx)));
+		Ok(())
+	}
 
-    pub(crate) fn expand_formula(&self, formula: &mut Element, ignore_names: &HashSet<String>) -> Result<()> {
-        // todo look into how to do this more efficiently
-        let mut all_names = HashSet::new();
-        loop {
-            let before = all_names.clone();
-            all_names.clear();
-            formula.get_all_unexpanded_names(&mut all_names);
-            all_names = all_names.difference(ignore_names).cloned().collect();
-            only_in_debug!(dbg!(&all_names));
+	pub(crate) fn expand_formula(&self, formula: &mut Element, ignore_names: &HashSet<String>) -> Result<()> {
+		// todo look into how to do this more efficiently
+		let mut all_names = HashSet::new();
+		loop {
+			let before = all_names.clone();
+			all_names.clear();
+			formula.get_all_unexpanded_names(&mut all_names);
+			all_names = all_names.difference(ignore_names).cloned().collect();
+			only_in_debug!(dbg!(&all_names));
 
-            if all_names.is_empty() {
-                break;
-            }
-            if all_names == before {
-                return Err(ExpansionError.into());
-            }
-            for name in all_names.iter() {
-                formula.insert_symbol(&self.get_insertion_element_expanded(name, ignore_names)?)?;
-            }
-        }
+			if all_names.is_empty() {
+				break;
+			}
+			if all_names == before {
+				return Err(ExpansionError.into());
+			}
+			for name in all_names.iter() {
+				formula.insert_symbol(&self.get_insertion_element_expanded(name, ignore_names)?)?;
+			}
+		}
 
-        Ok(())
-    }
+		Ok(())
+	}
 
-    pub fn eval_dynamic_precision(
-        &mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
-    ) -> Result<DynamicResult> {
-        println!();
-        dbg!(&precision_range_bits.end());
+	pub fn eval_dynamic_precision(
+		&mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
+	) -> Result<DynamicResult> {
+		println!();
+		dbg!(&precision_range_bits.end());
 
-        let min_precision = *precision_range_bits.start();
-        let mut precision = min_precision;
-        let mut ctx = create_context(precision as usize);
-        dbg!(precision);
-        let first_result = self.eval(formula_str, &mut ctx)?;
+		let min_precision = *precision_range_bits.start();
+		let mut precision = min_precision;
+		let mut ctx = create_context(precision as usize);
+		dbg!(precision);
+		let first_result = self.eval(formula_str, &mut ctx)?;
 
-        let mut last_rounded = match first_result {
-            Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
-            Number::Float(f) => f,
-        };
-        if last_rounded.is_nan() {
-            return Ok(DynamicResult::Checked { num: last_rounded, precision });
-        }
-        only_in_debug!(dbg!(&last_rounded));
-        precision *= 2;
-        while precision <= *precision_range_bits.end() {
-            only_in_debug!(dbg!(precision));
-            ctx = create_context(precision as usize);
-            let result = self.eval(formula_str, &mut ctx)?;
+		let mut last_rounded = match first_result {
+			Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
+			Number::Float(f) => f,
+		};
+		if last_rounded.is_nan() {
+			return Ok(DynamicResult::Checked { num: last_rounded, precision });
+		}
+		only_in_debug!(dbg!(&last_rounded));
+		precision *= 2;
+		while precision <= *precision_range_bits.end() {
+			only_in_debug!(dbg!(precision));
+			ctx = create_context(precision as usize);
+			let result = self.eval(formula_str, &mut ctx)?;
 
-            let mut rounded = match result {
-                Number::Float(f) => f,
-                Number::Rational(r) => {
-                    return Ok(DynamicResult::Exact(r));
-                },
-            };
-            if rounded.is_nan() {
-                return Ok(DynamicResult::Checked { num: rounded, precision });
-            }
-            rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
-            rounded.set_inexact(true);
-            println!("{}", rounded);
+			let mut rounded = match result {
+				Number::Float(f) => f,
+				Number::Rational(r) => {
+					return Ok(DynamicResult::Exact(r));
+				},
+			};
+			if rounded.is_nan() {
+				return Ok(DynamicResult::Checked { num: rounded, precision });
+			}
+			rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
+			rounded.set_inexact(true);
+			println!("{}", rounded);
 
-            if last_rounded == rounded {
-                return Ok(DynamicResult::Checked { num: rounded, precision });
-            }
+			if last_rounded == rounded {
+				return Ok(DynamicResult::Checked { num: rounded, precision });
+			}
 
-            last_rounded = rounded;
-            precision *= 2;
-        }
-        Ok(DynamicResult::ReachedLimit(last_rounded))
-    }
+			last_rounded = rounded;
+			precision *= 2;
+		}
+		Ok(DynamicResult::ReachedLimit(last_rounded))
+	}
 
-    pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
+	pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::calculation::create_default_context;
-    use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-    use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
-    use crate::storing::FormulaStore;
-    use crate::{Element, FormattingOptions, Number};
-    use astro_float::ctx::Context;
-    use astro_float::{Error, expr};
+	use crate::calculation::create_default_context;
+	use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+	use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
+	use crate::storing::FormulaStore;
+	use crate::{Element, FormattingOptions, Number};
+	use astro_float::ctx::Context;
+	use astro_float::{Error, expr};
 
-    #[test]
-    fn test_formula_evaluation() {
-        let mut ctx = create_default_context();
-        let inputs = [
-            ("0/0", Some(Number::nan(Error::DivisionByZero.into()))),
-            ("1/0", Some(Number::nan(Error::DivisionByZero.into()))),
-            ("1+2", Some(3.into())),
-            ("1+2*3", Some(7.into())),
-            ("1+2*3-4/2", Some(5.into())),
-            ("(1+2)*3", Some(9.into())),
-            ("(1+2)*(3-4)", Some((-3).into())),
-            ("x/x-x", None),
-            // Potenzierungen
-            ("2^3", Some(8.into())),
-            ("2^3^2", Some(512.into())), // 2^(3^2) = 2^9
-            ("(2^3)^2", Some(64.into())),
-            ("-2^2", Some((-4).into())), // -(2^2)
-            ("(-2)^2", Some(4.into())),
-            ("16^(1/2)", Some(4.into())),
-            // Negation
-            ("-1", Some((-1).into())),
-            ("--1", Some(1.into())),
-            ("-(1+2)", Some((-3).into())),
-            // Komplexere Ausdrücke
-            ("1+2*3+4", Some(11.into())),
-            ("(1+2)*(3+4)", Some(21.into())),
-            ("2*3+4*5", Some(26.into())),
-            ("2*(3+4)*5", Some(70.into())),
-            // Division
-            ("8/2", Some(4.into())),
-            ("8/2/2", Some(2.into())),
-            ("8/(2*2)", Some(2.into())),
-            (
-                "1/2+1/3",
-                Some(
-                    Number::from(1)
-                        .div(&Number::from(2), &mut ctx)
-                        .plus(&Number::from(1).div(&Number::from(3), &mut ctx), &mut ctx),
-                ),
-            ),
-            // Nullwerte
-            ("0+0", Some(0.into())),
-            ("0*5", Some(0.into())),
-            ("5*0", Some(0.into())),
-            ("0^2", Some(0.into())),
-            // Dezimalzahlen
-            ("1.5+2.5", Some(4.into())),
-            ("3.14*2", Some(Number::from_string("3.14").unwrap().mul(&Number::from(2), &mut ctx))),
-            (
-                "10.5/2.5",
-                Some(
-                    Number::from_string("10.5").unwrap().div(&Number::from_string("2.5").unwrap(), &mut ctx),
-                ),
-            ),
-            // Fehlerfälle
-            ("", None),
-        ];
-        println!("Starting formula evaluation tests");
-        inputs.into_iter().for_each(|(i, o)| {
-            println!("Testing formula evaluation for input: {}", i);
-            let mut ctx1 = Context::new(
-                1024,
-                astro_float::RoundingMode::ToEven,
-                astro_float::Consts::new().unwrap(),
-                -100000,
-                100000,
-            );
-            let output = Element::parse(i).ok().as_ref().and_then(|e| e.eval(&mut ctx1));
-            assert_eq!(output, o);
-        });
-    }
+	#[test]
+	fn test_formula_evaluation() {
+		let mut ctx = create_default_context();
+		let inputs = [
+			("0/0", Some(Number::nan(Error::DivisionByZero.into()))),
+			("1/0", Some(Number::nan(Error::DivisionByZero.into()))),
+			("1+2", Some(3.into())),
+			("1+2*3", Some(7.into())),
+			("1+2*3-4/2", Some(5.into())),
+			("(1+2)*3", Some(9.into())),
+			("(1+2)*(3-4)", Some((-3).into())),
+			("x/x-x", None),
+			// Potenzierungen
+			("2^3", Some(8.into())),
+			("2^3^2", Some(512.into())), // 2^(3^2) = 2^9
+			("(2^3)^2", Some(64.into())),
+			("-2^2", Some((-4).into())), // -(2^2)
+			("(-2)^2", Some(4.into())),
+			("16^(1/2)", Some(4.into())),
+			// Negation
+			("-1", Some((-1).into())),
+			("--1", Some(1.into())),
+			("-(1+2)", Some((-3).into())),
+			// Komplexere Ausdrücke
+			("1+2*3+4", Some(11.into())),
+			("(1+2)*(3+4)", Some(21.into())),
+			("2*3+4*5", Some(26.into())),
+			("2*(3+4)*5", Some(70.into())),
+			// Division
+			("8/2", Some(4.into())),
+			("8/2/2", Some(2.into())),
+			("8/(2*2)", Some(2.into())),
+			(
+				"1/2+1/3",
+				Some(
+					Number::from(1)
+						.div(&Number::from(2), &mut ctx)
+						.plus(&Number::from(1).div(&Number::from(3), &mut ctx), &mut ctx),
+				),
+			),
+			// Nullwerte
+			("0+0", Some(0.into())),
+			("0*5", Some(0.into())),
+			("5*0", Some(0.into())),
+			("0^2", Some(0.into())),
+			// Dezimalzahlen
+			("1.5+2.5", Some(4.into())),
+			("3.14*2", Some(Number::from_string("3.14").unwrap().mul(&Number::from(2), &mut ctx))),
+			(
+				"10.5/2.5",
+				Some(
+					Number::from_string("10.5").unwrap().div(&Number::from_string("2.5").unwrap(), &mut ctx),
+				),
+			),
+			// Fehlerfälle
+			("", None),
+		];
+		println!("Starting formula evaluation tests");
+		inputs.into_iter().for_each(|(i, o)| {
+			println!("Testing formula evaluation for input: {}", i);
+			let mut ctx1 = Context::new(
+				1024,
+				astro_float::RoundingMode::ToEven,
+				astro_float::Consts::new().unwrap(),
+				-100000,
+				100000,
+			);
+			let output = Element::parse(i).ok().as_ref().and_then(|e| e.eval(&mut ctx1));
+			assert_eq!(output, o);
+		});
+	}
 
-    #[test]
-    fn test_eval_formula_store() {
-        let mut store = FormulaStore::new_empty();
-        let mut ctx = create_default_context();
-        store.add_symbol_from_string("f(x)=x^2", false).unwrap();
-        store.add_symbol_from_string("a=4", false).unwrap();
-        assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16);
-        assert!(store.eval("f", &mut ctx).is_err());
-    }
+	#[test]
+	fn test_eval_formula_store() {
+		let mut store = FormulaStore::new_empty();
+		let mut ctx = create_default_context();
+		store.add_symbol_from_string("f(x)=x^2", false).unwrap();
+		store.add_symbol_from_string("a=4", false).unwrap();
+		assert_eq!(store.eval("f(a)", &mut ctx).unwrap(), 16);
+		assert!(store.eval("f", &mut ctx).is_err());
+	}
 
-    #[test]
-    fn test_expression_functions() {
-        let mut store = FormulaStore::new_empty();
-        let mut ctx = create_default_context();
+	#[test]
+	fn test_expression_functions() {
+		let mut store = FormulaStore::new_empty();
+		let mut ctx = create_default_context();
 
-        store.define_default_symbols().unwrap();
+		store.define_default_symbols().unwrap();
 
-        // test signatures
-        fn generate_fn_call(fun_name: &str, arg_count: usize) -> String {
-            format!("{}({})", fun_name, vec!["0"; arg_count].join(","))
-        }
-        let mut test_with_multiple_arg_counts = |function_names: &[&str], expected: fn(usize) -> bool| {
-            for function in function_names {
-                for i in 0..5 {
-                    println!("Testing function: {} with {} arguments", function, i);
-                    assert_eq!(store.eval(&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
-                }
-            }
-        };
+		// test signatures
+		fn generate_fn_call(fun_name: &str, arg_count: usize) -> String {
+			format!("{}({})", fun_name, vec!["0"; arg_count].join(","))
+		}
+		let mut test_with_multiple_arg_counts = |function_names: &[&str], expected: fn(usize) -> bool| {
+			for function in function_names {
+				for i in 0..5 {
+					println!("Testing function: {} with {} arguments", function, i);
+					assert_eq!(store.eval(&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
+				}
+			}
+		};
 
-        let functions_that_take_one_argument =
-            ["sin", "cos", "tan", "sqrt", "abs", "log2", "log10", "ln", "floor", "ceil", "round"];
-        let functions_that_take_zero_or_more_arguments = ["sum"];
-        let functions_that_take_one_or_more_arguments = ["avg", "max", "min", "median"];
+		let functions_that_take_one_argument =
+			["sin", "cos", "tan", "sqrt", "abs", "log2", "log10", "ln", "floor", "ceil", "round"];
+		let functions_that_take_zero_or_more_arguments = ["sum"];
+		let functions_that_take_one_or_more_arguments = ["avg", "max", "min", "median"];
 
-        test_with_multiple_arg_counts(&functions_that_take_one_argument, |i| i == 1);
-        test_with_multiple_arg_counts(&functions_that_take_zero_or_more_arguments, |_| true);
-        test_with_multiple_arg_counts(&functions_that_take_one_or_more_arguments, |i| i >= 1);
+		test_with_multiple_arg_counts(&functions_that_take_one_argument, |i| i == 1);
+		test_with_multiple_arg_counts(&functions_that_take_zero_or_more_arguments, |_| true);
+		test_with_multiple_arg_counts(&functions_that_take_one_or_more_arguments, |i| i >= 1);
 
-        macro_rules! test_eval {
-            ($input:literal, $output:expr) => {
-                assert_eq!(store.eval($input, &mut ctx).ok(), Some($output))
-            };
-        }
-        test_eval!("rem(-2, 2)", Number::from(0));
-        test_eval!("rem(-1, 2)", Number::from(1));
-        test_eval!("rem(0, 2)", Number::from(0));
-        test_eval!("rem(1, 2)", Number::from(1));
-        test_eval!("rem(2, 2)", Number::from(0));
-        test_eval!(
-            "sin(123)",
-            fun_expr(
-                ExpressionFunType::SinWithRadians,
-                [mul([
-                    fun_expr(
-                        ExpressionFunType::Rem,
-                        [mul([num(123), inv(num_expr(ExpressionNumType::Pi))]), num(2),]
-                    ),
-                    num(2),
-                ])]
-            )
-            .eval(&mut ctx)
-            .unwrap()
-        );
-        test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
-        test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));
-        test_eval!("sqrt(123)", Number::Float(expr!(sqrt(123), &mut ctx)));
-        test_eval!("abs(-123)", 123.into());
-        test_eval!("log2(123)", Number::Float(expr!(log2(123), &mut ctx)));
-        test_eval!("avg(1,2,3)", 2.into());
-        test_eval!("max(1,2,3)", 3.into());
-        test_eval!("min(1,2,3)", 1.into());
-        test_eval!("sum(1,2,3)", 6.into());
-        test_eval!("median(1,2,3)", 2.into());
-        test_eval!("median(1,2,3,4)", Number::from_string("2.5").unwrap());
-        test_eval!("median(2,3,4,1)", Number::from_string("2.5").unwrap());
-        test_eval!("median(3,4,1,2)", Number::from_string("2.5").unwrap());
-        test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
-        test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
+		macro_rules! test_eval {
+			($input:literal, $output:expr) => {
+				assert_eq!(store.eval($input, &mut ctx).ok(), Some($output))
+			};
+		}
+		test_eval!("rem(-2, 2)", Number::from(0));
+		test_eval!("rem(-1, 2)", Number::from(1));
+		test_eval!("rem(0, 2)", Number::from(0));
+		test_eval!("rem(1, 2)", Number::from(1));
+		test_eval!("rem(2, 2)", Number::from(0));
+		test_eval!(
+			"sin(123)",
+			fun_expr(
+				ExpressionFunType::SinWithRadians,
+				[mul([
+					fun_expr(
+						ExpressionFunType::Rem,
+						[mul([num(123), inv(num_expr(ExpressionNumType::Pi))]), num(2),]
+					),
+					num(2),
+				])]
+			)
+			.eval(&mut ctx)
+			.unwrap()
+		);
+		test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
+		test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));
+		test_eval!("sqrt(123)", Number::Float(expr!(sqrt(123), &mut ctx)));
+		test_eval!("abs(-123)", 123.into());
+		test_eval!("log2(123)", Number::Float(expr!(log2(123), &mut ctx)));
+		test_eval!("avg(1,2,3)", 2.into());
+		test_eval!("max(1,2,3)", 3.into());
+		test_eval!("min(1,2,3)", 1.into());
+		test_eval!("sum(1,2,3)", 6.into());
+		test_eval!("median(1,2,3)", 2.into());
+		test_eval!("median(1,2,3,4)", Number::from_string("2.5").unwrap());
+		test_eval!("median(2,3,4,1)", Number::from_string("2.5").unwrap());
+		test_eval!("median(3,4,1,2)", Number::from_string("2.5").unwrap());
+		test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
+		test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
 
-        test_eval!("sum()", 0.into());
-        test_eval!("sum(0)", 0.into());
-        test_eval!("sum(0,0)", 0.into());
+		test_eval!("sum()", 0.into());
+		test_eval!("sum(0)", 0.into());
+		test_eval!("sum(0,0)", 0.into());
 
-        test_eval!("floor(123.456)", 123.into());
-        test_eval!("floor(-123.456)", Number::from(-124));
+		test_eval!("floor(123.456)", 123.into());
+		test_eval!("floor(-123.456)", Number::from(-124));
 
-        test_eval!("ceil(123.456)", Number::from(124));
-        test_eval!("ceil(-123.456)", Number::from(-123));
+		test_eval!("ceil(123.456)", Number::from(124));
+		test_eval!("ceil(-123.456)", Number::from(-123));
 
-        test_eval!("round(123.456)", Number::from(123));
-        test_eval!("round(123.789)", Number::from(124));
-        test_eval!("round(-123.456)", Number::from(-123));
-        test_eval!("round(-123.789)", Number::from(-124));
-    }
+		test_eval!("round(123.456)", Number::from(123));
+		test_eval!("round(123.789)", Number::from(124));
+		test_eval!("round(-123.456)", Number::from(-123));
+		test_eval!("round(-123.789)", Number::from(-124));
+	}
 
-    #[test]
-    fn test_define_functions_with_expression_function_definitions() {
-        let mut store = FormulaStore::new_empty();
-        let ctx = &mut create_default_context();
-        store.define_default_symbols().unwrap();
+	#[test]
+	fn test_define_functions_with_expression_function_definitions() {
+		let mut store = FormulaStore::new_empty();
+		let ctx = &mut create_default_context();
+		store.define_default_symbols().unwrap();
 
-        store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
-        assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
-        store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
+		store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
+		assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
+		store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
 
-        assert_eq!(store.eval("f(0)", ctx).unwrap(), Number::from_string("0").unwrap().sin(ctx));
-        assert_eq!(
-            store.eval("g(0)", ctx).unwrap(),
-            Number::from_string("0").unwrap().sin(ctx).plus(&Number::from_string("0").unwrap().cos(ctx), ctx)
-        );
+		assert_eq!(store.eval("f(0)", ctx).unwrap(), Number::from_string("0").unwrap().sin(ctx));
+		assert_eq!(
+			store.eval("g(0)", ctx).unwrap(),
+			Number::from_string("0").unwrap().sin(ctx).plus(&Number::from_string("0").unwrap().cos(ctx), ctx)
+		);
 
-        store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
-        assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2);
-        store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
-        assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2 + 1);
-    }
+		store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
+		assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2);
+		store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
+		assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2 + 1);
+	}
 
-    #[test]
-    fn test_general_evaluation() {
-        let mut store = FormulaStore::new_empty();
-        store.define_default_symbols().unwrap();
+	#[test]
+	fn test_general_evaluation() {
+		let mut store = FormulaStore::new_empty();
+		store.define_default_symbols().unwrap();
 
-        fn count_digits(s: &str) -> usize {
-            let s: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
-            s.trim_start_matches("0").len()
-        }
-        macro_rules! check_calculation {
-            ($formula:expr, $expected:expr) => {
-                check_calculation!($formula, $expected, count_digits($expected))
-            };
-            ($formula:expr, $expected:expr, $rounding:expr) => {{
-                let (formula, output) = ($formula, $expected);
-                let fmt = FormattingOptions::default().with_rounding($rounding);
-                let result = store
-                    .run(formula, false)
-                    .calculation_result()
-                    .unwrap()
-                    .to_string_detailed(fmt)
-                    .get_string()
-                    .clone();
-                assert_eq!(
-                    result, output,
-                    "For formula '{}', expected '{}', but got '{}'",
-                    formula, output, result
-                );
-            }};
-        }
-        check_calculation!(
-            "((12 + 3) * sin(0.5)) / (2 ^ 3)",
-            "0.89892288488288062551241487852919635265338131488862626597865614961037813"
-        );
-        check_calculation!(
-            "(cos(1) + (7 - (3 + 2))) * ( (10 / 2) + tan(0.25) )",
-            "13.350157200603297892624056197885460276733113344409248718867431711422992"
-        );
-        check_calculation!(
-            "( ( (25 / 5) + (2 ^ 3) ) * ( (sqrt(9) - 1) + sin(3.14 / 2) ) )",
-            "38.99999587811385"
-        );
-        check_calculation!("(((3.5 + 1.5) * (2.2 - 0.2)) / ( (10 - 8) ^ 2 )) + cos(0)", "3.5", 100);
-        check_calculation!(
-            "( (100 - (50 / (5 + 5))) * ( (20 / (2 ^ 2)) + 3 ) ) - tan(1)",
-            "758.4425922753451"
-        );
-        check_calculation!(
-            "( ( ( (2 + 3) * (4 + 1) ) - ( (9 - 7) * (8 / 2) ) ) ^ 2 ) + sin(2)",
-            "289.9092974268257"
-        );
-        check_calculation!(
-            "( (ln(e ^ 2)) + (ln(1000) - ln(10)) + cos(2)) / ( (5 + 5) / 2 )",
-            "1.23780466988819"
-        );
-        check_calculation!("((sin(1) ^ 2) + (cos(1) ^ 2)) * 42", "42", 100);
-        check_calculation!("(tan(0.5) + (sin(0.25) * cos(0.75))) / (2 ^ (1/2))", "0.5142965902018098");
-        check_calculation!(
-            "((ln(100) + ln(e)) * (sin(3.14159) + cos(3.14159 / 2)))",
-            "0.00002231073359233416412239818251719053988230415986601072682456917655910148"
-        );
+		fn count_digits(s: &str) -> usize {
+			let s: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
+			s.trim_start_matches("0").len()
+		}
+		macro_rules! check_calculation {
+			($formula:expr, $expected:expr) => {
+				check_calculation!($formula, $expected, count_digits($expected))
+			};
+			($formula:expr, $expected:expr, $rounding:expr) => {{
+				let (formula, output) = ($formula, $expected);
+				let fmt = FormattingOptions::default().with_rounding($rounding);
+				let result = store
+					.run(formula, false)
+					.calculation_result()
+					.unwrap()
+					.to_string_detailed(fmt)
+					.get_string()
+					.clone();
+				assert_eq!(
+					result, output,
+					"For formula '{}', expected '{}', but got '{}'",
+					formula, output, result
+				);
+			}};
+		}
+		check_calculation!(
+			"((12 + 3) * sin(0.5)) / (2 ^ 3)",
+			"0.89892288488288062551241487852919635265338131488862626597865614961037813"
+		);
+		check_calculation!(
+			"(cos(1) + (7 - (3 + 2))) * ( (10 / 2) + tan(0.25) )",
+			"13.350157200603297892624056197885460276733113344409248718867431711422992"
+		);
+		check_calculation!(
+			"( ( (25 / 5) + (2 ^ 3) ) * ( (sqrt(9) - 1) + sin(3.14 / 2) ) )",
+			"38.99999587811385"
+		);
+		check_calculation!("(((3.5 + 1.5) * (2.2 - 0.2)) / ( (10 - 8) ^ 2 )) + cos(0)", "3.5", 100);
+		check_calculation!(
+			"( (100 - (50 / (5 + 5))) * ( (20 / (2 ^ 2)) + 3 ) ) - tan(1)",
+			"758.4425922753451"
+		);
+		check_calculation!(
+			"( ( ( (2 + 3) * (4 + 1) ) - ( (9 - 7) * (8 / 2) ) ) ^ 2 ) + sin(2)",
+			"289.9092974268257"
+		);
+		check_calculation!(
+			"( (ln(e ^ 2)) + (ln(1000) - ln(10)) + cos(2)) / ( (5 + 5) / 2 )",
+			"1.23780466988819"
+		);
+		check_calculation!("((sin(1) ^ 2) + (cos(1) ^ 2)) * 42", "42", 100);
+		check_calculation!("(tan(0.5) + (sin(0.25) * cos(0.75))) / (2 ^ (1/2))", "0.5142965902018098");
+		check_calculation!(
+			"((ln(100) + ln(e)) * (sin(3.14159) + cos(3.14159 / 2)))",
+			"0.00002231073359233416412239818251719053988230415986601072682456917655910148"
+		);
 
-        check_calculation!("1/0", "NaN");
-        check_calculation!("0/0", "NaN");
-        check_calculation!("sqrt(-1)", "NaN");
-        check_calculation!("ln(0)", "-Inf");
-        check_calculation!("ln(-10)", "NaN");
-        check_calculation!("0^0", "1");
-        check_calculation!("(1/0) - (1/0)", "NaN");
-        check_calculation!("0.1 + 0.2", "0.3");
-        check_calculation!("(-2)^0.5", "NaN");
-        check_calculation!("5 * - -2", "10");
-    }
+		check_calculation!("1/0", "NaN");
+		check_calculation!("0/0", "NaN");
+		check_calculation!("sqrt(-1)", "NaN");
+		check_calculation!("ln(0)", "-Inf");
+		check_calculation!("ln(-10)", "NaN");
+		check_calculation!("0^0", "1");
+		check_calculation!("(1/0) - (1/0)", "NaN");
+		check_calculation!("0.1 + 0.2", "0.3");
+		check_calculation!("(-2)^0.5", "NaN");
+		check_calculation!("5 * - -2", "10");
+	}
 }

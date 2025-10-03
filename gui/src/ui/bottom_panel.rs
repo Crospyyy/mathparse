@@ -133,9 +133,9 @@ impl UiState {
 	pub fn last_history_entry_matches(&self, input: &str) -> bool {
 		self.bottom_panel.history.last().is_some_and(|entry| {
 			matches!(
-                &entry.content,
-                Calculation(e_input, _) if e_input == input
-            )
+				&entry.content,
+				Calculation(e_input, _) if e_input == input
+			)
 		})
 	}
 

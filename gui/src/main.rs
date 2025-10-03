@@ -11,23 +11,23 @@ mod ui;
 mod window_control;
 
 pub fn main() {
-    use eframe::NativeOptions;
-    let viewport = ViewportBuilder::default()
-        .with_decorations(false)
-        .with_transparent(true)
-        .with_taskbar(cfg!(debug_assertions))
-        .with_always_on_top();
+	use eframe::NativeOptions;
+	let viewport = ViewportBuilder::default()
+		.with_decorations(false)
+		.with_transparent(true)
+		.with_taskbar(cfg!(debug_assertions))
+		.with_always_on_top();
 
-    eframe::run_native(
-        "Quick Mafs",
-        NativeOptions { viewport, ..Default::default() },
-        Box::new(|cc| Ok(Box::new(Window::new(cc)))),
-    )
-    .expect("panic message");
+	eframe::run_native(
+		"Quick Mafs",
+		NativeOptions { viewport, ..Default::default() },
+		Box::new(|cc| Ok(Box::new(Window::new(cc)))),
+	)
+	.expect("panic message");
 }
 
 pub struct Window {
-    backend: Backend,
-    ui_state: UiState,
-    window_state: WindowState,
+	backend: Backend,
+	ui_state: UiState,
+	window_state: WindowState,
 }

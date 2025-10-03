@@ -119,7 +119,7 @@ impl LatexToken {
 								)?;
 								token =
 									LatexToken::Function("sqrt".into(), vec![LatexToken::Group(vec![arg])]);
-							}
+							},
 							r"\frac" => {
 								let num = inner_iter.next().ok_or(
 									LatexConversionError::ExpectedArgumentsAfterFunctionName(string.clone()),
@@ -128,18 +128,18 @@ impl LatexToken {
 									LatexConversionError::ExpectedArgumentsAfterFunctionName(string.clone()),
 								)?;
 								token = LatexToken::Group(vec![num, LatexToken::Word("/".into()), denom]);
-							}
+							},
 							_ => {
 								if !get_fun_name_end_of_string(string, false).is_empty() {
 									if matches!(
-                                        inner_iter.peek(),
-                                        Some(LatexToken::Function(..) | LatexToken::Group(_))
-                                    ) {
+										inner_iter.peek(),
+										Some(LatexToken::Function(..) | LatexToken::Group(_))
+									) {
 										let arg = inner_iter.next().unwrap();
 										token = LatexToken::Function(string.clone(), vec![arg]);
 									}
 								}
-							}
+							},
 						}
 					}
 					new_tokens.push(token)
@@ -153,11 +153,11 @@ impl LatexToken {
 					*self = inner_tokens.pop().unwrap();
 					return Ok(());
 				}
-			}
-			LatexToken::Word(_) => {}
+			},
+			LatexToken::Word(_) => {},
 			LatexToken::Function(_, args) => {
 				args.iter_mut().try_for_each(Self::parse_functions)?;
-			}
+			},
 		}
 		Ok(())
 	}
@@ -168,13 +168,13 @@ impl LatexToken {
 				let inner_str =
 					inner.iter().map(|a| a.to_string(true)).reduce(|a, b| a + &b).unwrap_or_default();
 				if outer_brackets { format!("({inner_str})") } else { inner_str }
-			}
+			},
 			LatexToken::Word(s) => s.to_string(),
 			LatexToken::Function(name, args) => {
 				let args_str =
 					args.iter().map(|a| a.to_string(false)).reduce(|a, b| a + ", " + &b).unwrap_or_default();
 				format!("{name}({args_str})")
-			}
+			},
 		}
 	}
 }
