@@ -170,26 +170,13 @@ impl FormulaStore {
 	pub fn eval_dynamic_precision(
 		&mut self, formula_str: &str, precision_range_bits: RangeInclusive<u32>,
 	) -> Result<DynamicResult> {
-		println!();
-		dbg!(&precision_range_bits.end());
+		let (min_precision, max_precision) = (*precision_range_bits.start(), *precision_range_bits.end());
 
-		let min_precision = *precision_range_bits.start();
 		let mut precision = min_precision;
-		let mut ctx = create_context(precision as usize);
-		dbg!(precision);
-		let first_result = self.eval(formula_str, &mut ctx)?;
+		let mut ctx;
+		let mut last_rounded = None;
 
-		let mut last_rounded = match first_result {
-			Number::Rational(r) => return Ok(DynamicResult::Exact(r)),
-			Number::Float(f) => f,
-		};
-		if last_rounded.is_nan() {
-			return Ok(DynamicResult::Checked { num: last_rounded, precision });
-		}
-		only_in_debug!(dbg!(&last_rounded));
-		precision *= 2;
-		while precision <= *precision_range_bits.end() {
-			only_in_debug!(dbg!(precision));
+		while last_rounded.is_none() || precision <= max_precision {
 			ctx = create_context(precision as usize);
 			let result = self.eval(formula_str, &mut ctx)?;
 
@@ -204,16 +191,17 @@ impl FormulaStore {
 			}
 			rounded = rounded.round(min_precision as usize, RoundingMode::ToEven);
 			rounded.set_inexact(true);
-			println!("{}", rounded);
 
-			if last_rounded == rounded {
+			if let Some(last_rounded) = &mut last_rounded
+				&& *last_rounded == rounded
+			{
 				return Ok(DynamicResult::Checked { num: rounded, precision });
 			}
 
-			last_rounded = rounded;
+			last_rounded = Some(rounded);
 			precision *= 2;
 		}
-		Ok(DynamicResult::ReachedLimit(last_rounded))
+		Ok(DynamicResult::ReachedLimit(last_rounded.unwrap()))
 	}
 
 	pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
