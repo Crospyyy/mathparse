@@ -49,7 +49,7 @@ pub struct FormattingOptions {
 
 pub enum FormattedCalculationOutput {
 	Exact { result: String, has_rounded: bool },
-	ApproximationChecked { result: String, precision_bits: u32 },
+	ApproximationChecked { result: String, precision_bits: usize },
 	ApproximationReachedLimit { result: String },
 }
 
@@ -221,11 +221,12 @@ impl ScientificNumber {
 		}
 
 		if refined_a.len() == 1 {
-			return if let Some(digit) = a.chars().nth(0).unwrap().to_digit(10) {
-				Some(Self::new(negative, vec![digit as u8], b))
-			} else {
-				None
-			};
+			return a
+				.chars()
+				.nth(0)
+				.unwrap()
+				.to_digit(10)
+				.map(|digit| Self::new(negative, vec![digit as u8], b));
 		}
 
 		if refined_a.chars().nth(1) == Some('.') {
@@ -309,7 +310,7 @@ impl ScientificNumber {
 			Ordering::Less => {
 				let mut output_string = vec![0; (-modified_exponent) as usize]
 					.into_iter()
-					.chain(rounded.into_iter())
+					.chain(rounded)
 					.map(|n| n.to_string())
 					.collect::<String>();
 				output_string.insert(1, '.');
@@ -349,8 +350,8 @@ impl ScientificNumber {
 		}
 	}
 
-	fn should_print_scientific(rounded: &Vec<u8>, exponent: i64, options: FormattingOptions) -> bool {
-		exponent.abs() as usize > options.non_scientific_decimals
+	fn should_print_scientific(rounded: &[u8], exponent: i64, options: FormattingOptions) -> bool {
+		exponent.unsigned_abs() as usize > options.non_scientific_decimals
 			&& !(exponent.is_positive() && rounded.len() as i64 > exponent)
 	}
 
@@ -388,8 +389,8 @@ impl DynamicResult {
 				FormattedCalculationOutput::Exact { result: string, has_rounded: rounded }
 			},
 			DynamicResult::Checked { num, precision } => {
-				let mut context = create_context(*precision as usize);
-				let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+				let mut context = create_context(*precision);
+				let string = if let Some(scientific) = ScientificNumber::from_big_float(num, &mut context) {
 					scientific.to_string(formatting_options)
 				} else {
 					num.to_string()
@@ -401,7 +402,7 @@ impl DynamicResult {
 			},
 			DynamicResult::ReachedLimit(num) => {
 				let mut context = create_context(num.precision().unwrap_or(1));
-				let string = if let Some(scientific) = ScientificNumber::from_big_float(&num, &mut context) {
+				let string = if let Some(scientific) = ScientificNumber::from_big_float(num, &mut context) {
 					scientific.to_string(formatting_options)
 				} else {
 					num.to_string()
@@ -413,7 +414,7 @@ impl DynamicResult {
 }
 
 impl FormattedCalculationOutput {
-	pub(crate) fn get_string(&self) -> &String {
+	pub fn get_string(&self) -> &String {
 		match self {
 			FormattedCalculationOutput::Exact { result, .. } => result,
 			FormattedCalculationOutput::ApproximationChecked { result, .. } => result,
@@ -536,7 +537,7 @@ fn camel_to_snake_case(s: &str) -> String {
 }
 
 fn rational_to_string(ratio: &BigRational, formatting_options: FormattingOptions) -> (String, bool) {
-	let scientific = long_division(&ratio.numer(), &ratio.denom(), formatting_options.round_to_decimals);
+	let scientific = long_division(ratio.numer(), ratio.denom(), formatting_options.round_to_decimals);
 	(scientific.0.to_string(formatting_options), scientific.1)
 }
 

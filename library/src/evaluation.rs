@@ -1,24 +1,43 @@
-use crate::benchmarking::TaskAdder;
+use crate::benchmarking::Benchmark;
 use crate::calculation::create_context;
 use crate::expression_values::FunctionExpression;
 use crate::outer_store_interation::RunPrecision;
 use crate::storing::FormulaStore;
-use crate::{Benchmark, Element, Number, RoundingMode, benchmark, only_in_debug};
+use crate::{Element, Number, RoundingMode, only_in_debug};
 use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
 use num_rational::BigRational;
+use num_traits::ToPrimitive;
 use std::collections::HashSet;
-use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::RangeInclusive;
 use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum DynamicResult {
 	Exact(BigRational),
 	Checked { num: BigFloat, precision: usize },
 	ReachedLimit(BigFloat),
+}
+
+impl DynamicResult {
+	pub fn as_i32(&self) -> Option<i32> {
+		match self {
+			DynamicResult::Exact(r) => {
+				if r.is_integer() {
+					r.to_i32()
+				} else {
+					None
+				}
+			},
+			_ => None,
+		}
+	}
+
+	pub fn is_exact(&self) -> bool {
+		matches!(self, DynamicResult::Exact(_))
+	}
 }
 
 #[derive(Error, Debug)]
@@ -51,7 +70,7 @@ impl Element {
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
 					return Ok(nan.clone());
 				}
-				if values.iter().any(|v| v == 0) {
+				if values.iter().any(|v| *v == 0) {
 					return Ok(Number::from(0));
 				}
 				let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
@@ -155,7 +174,7 @@ impl Display for ExpansionError {
 }
 
 impl FormulaStore {
-	fn expand_and_optimize(&self, formula: &mut Element, benchmark: &mut TaskAdder) -> Result<()> {
+	fn expand_and_optimize(&self, formula: &mut Element, benchmark: &mut Benchmark) -> Result<()> {
 		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
 		benchmark.benchmark("Expansion", || self.expand_formula(formula, &HashSet::new()))?;
 		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
@@ -187,7 +206,7 @@ impl FormulaStore {
 	}
 
 	pub fn eval_new(
-		&self, formula_str: &str, precision: RunPrecision, benchmark: &mut TaskAdder,
+		&self, formula_str: &str, precision: RunPrecision, benchmark: &mut Benchmark,
 	) -> Result<DynamicResult> {
 		let mut formula = benchmark
 			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
@@ -197,7 +216,7 @@ impl FormulaStore {
 
 		// todo add result caching
 
-		let result = match precision {
+		match precision {
 			RunPrecision::Fixed(p) => {
 				let mut ctx = create_context(p);
 				match benchmark.benchmark("Evaluation", || formula.eval(&mut ctx))? {
@@ -207,8 +226,7 @@ impl FormulaStore {
 			},
 			RunPrecision::Dynamic(min, max) => benchmark
 				.benchmark("Dynamic Precision Evaluation", || formula.eval_dynamic_precision(min, max)),
-		};
-		result
+		}
 	}
 
 	pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);
@@ -216,15 +234,50 @@ impl FormulaStore {
 
 #[cfg(test)]
 mod tests {
-	use crate::benchmarking::TaskAdder;
+	use crate::benchmarking::Benchmark;
 	use crate::calculation::create_default_context;
-	use crate::expression_values::{ExpressionFunType, ExpressionNumType};
-	use crate::formula_short::{fun_expr, inv, mul, num, num_expr};
+	use crate::outer_store_interation::RunOptions;
 	use crate::outer_store_interation::RunPrecision;
 	use crate::storing::FormulaStore;
-	use crate::{Element, FormattingOptions, Number};
+	use crate::{DynamicResult, Element, FormattingOptions, Number};
 	use astro_float::ctx::Context;
-	use astro_float::{Error, expr};
+	use astro_float::{BigFloat, Error};
+	use num_rational::BigRational;
+	use std::str::FromStr;
+
+	#[test]
+	fn test_as_i32() {
+		fn create_exact_result(num: i64) -> DynamicResult {
+			DynamicResult::Exact(BigRational::from_integer(num.into()))
+		}
+		fn create_exact_result_rat(num: i64, denom: i64) -> DynamicResult {
+			DynamicResult::Exact(BigRational::new(num.into(), denom.into()))
+		}
+
+		fn create_checked_result(s: &str) -> DynamicResult {
+			DynamicResult::Checked { num: BigFloat::from_str(s).unwrap(), precision: 64 }
+		}
+
+		fn create_reached_limit_result(s: &str) -> DynamicResult {
+			DynamicResult::ReachedLimit(BigFloat::from_str(s).unwrap())
+		}
+
+		assert_eq!(create_exact_result(42).as_i32(), Some(42));
+		assert_eq!(create_checked_result("42").as_i32(), None);
+		assert_eq!(create_reached_limit_result("42").as_i32(), None);
+
+		assert_eq!(create_exact_result(-1).as_i32(), Some(-1));
+		assert_eq!(create_checked_result("-1").as_i32(), None);
+		assert_eq!(create_reached_limit_result("-1").as_i32(), None);
+
+		assert_eq!(create_exact_result_rat(3, 2).as_i32(), None);
+		assert_eq!(create_reached_limit_result("2.5").as_i32(), None);
+
+		assert_eq!(create_exact_result(4294967296).as_i32(), None);
+		assert_eq!(create_exact_result(4294967295).as_i32(), None);
+		assert_eq!(create_exact_result(2147483648).as_i32(), None);
+		assert_eq!(create_exact_result(2147483647).as_i32(), Some(2147483647));
+	}
 
 	#[test]
 	fn test_formula_evaluation() {
@@ -293,7 +346,7 @@ mod tests {
 				-100000,
 				100000,
 			);
-			let output = Element::parse(i).ok().as_ref().and_then(|e| e.eval(&mut ctx1));
+			let output = Element::parse(i).ok().as_ref().and_then(|e| e.eval(&mut ctx1).ok());
 			assert_eq!(output, o);
 		});
 	}
@@ -305,31 +358,38 @@ mod tests {
 		store.add_symbol_from_string("a=4", false).unwrap();
 		assert_eq!(
 			store
-				.eval_new("f(a)", RunPrecision::default(), &mut TaskAdder::new("eval"))
+				.eval_new("f(a)", RunPrecision::default(), &mut Benchmark::new("eval"))
 				.unwrap()
 				.to_string_detailed(FormattingOptions::default())
 				.get_string(),
 			"16"
 		);
-		assert!(store.eval_new("f", RunPrecision::default(), &mut TaskAdder::new("eval")).is_err());
+		assert!(store.eval_new("f", RunPrecision::default(), &mut Benchmark::new("eval")).is_err());
 	}
 
 	#[test]
 	fn test_expression_functions() {
-		let mut store = FormulaStore::new_empty();
-		let mut ctx = create_default_context();
-
-		store.define_default_symbols().unwrap();
+		let store = &mut FormulaStore::new_with_default_symbols();
 
 		// test signatures
 		fn generate_fn_call(fun_name: &str, arg_count: usize) -> String {
 			format!("{}({})", fun_name, vec!["0"; arg_count].join(","))
 		}
-		let mut test_with_multiple_arg_counts = |function_names: &[&str], expected: fn(usize) -> bool| {
+		let test_with_multiple_arg_counts = |function_names: &[&str], expected: fn(usize) -> bool| {
 			for function in function_names {
 				for i in 0..5 {
 					println!("Testing function: {} with {} arguments", function, i);
-					assert_eq!(store.eval(&generate_fn_call(function, i), &mut ctx).is_ok(), expected(i));
+					assert_eq!(
+						store
+							.eval_new(
+								&generate_fn_call(function, i),
+								RunPrecision::default(),
+								&mut Benchmark::new("Evaluate")
+							)
+							.map(|r| r.as_i32())
+							.is_ok(),
+						expected(i)
+					);
 				}
 			}
 		};
@@ -343,83 +403,49 @@ mod tests {
 		test_with_multiple_arg_counts(&functions_that_take_zero_or_more_arguments, |_| true);
 		test_with_multiple_arg_counts(&functions_that_take_one_or_more_arguments, |i| i >= 1);
 
-		macro_rules! test_eval {
-			($input:literal, $output:expr) => {
-				assert_eq!(store.eval($input, &mut ctx).ok(), Some($output))
-			};
-		}
-		test_eval!("rem(-2, 2)", Number::from(0));
-		test_eval!("rem(-1, 2)", Number::from(1));
-		test_eval!("rem(0, 2)", Number::from(0));
-		test_eval!("rem(1, 2)", Number::from(1));
-		test_eval!("rem(2, 2)", Number::from(0));
-		test_eval!(
-			"sin(123)",
-			fun_expr(
-				ExpressionFunType::SinWithRadians,
-				[mul([
-					fun_expr(
-						ExpressionFunType::Rem,
-						[mul([num(123), inv(num_expr(ExpressionNumType::Pi))]), num(2),]
-					),
-					num(2),
-				])]
-			)
-			.eval(&mut ctx)
-			.unwrap()
-		);
-		test_eval!("cos(123)", Number::Float(expr!(cos(123), &mut ctx)));
-		test_eval!("tan(123)", Number::Float(expr!(tan(123), &mut ctx)));
-		test_eval!("sqrt(123)", Number::Float(expr!(sqrt(123), &mut ctx)));
-		test_eval!("abs(-123)", 123.into());
-		test_eval!("log2(123)", Number::Float(expr!(log2(123), &mut ctx)));
-		test_eval!("avg(1,2,3)", 2.into());
-		test_eval!("max(1,2,3)", 3.into());
-		test_eval!("min(1,2,3)", 1.into());
-		test_eval!("sum(1,2,3)", 6.into());
-		test_eval!("median(1,2,3)", 2.into());
-		test_eval!("median(1,2,3,4)", Number::from_string("2.5").unwrap());
-		test_eval!("median(2,3,4,1)", Number::from_string("2.5").unwrap());
-		test_eval!("median(3,4,1,2)", Number::from_string("2.5").unwrap());
-		test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
-		test_eval!("median(4,1,2,3)", Number::from_string("2.5").unwrap());
+		store.quick_eval("rem(-2, 2)", 0);
+		store.quick_eval("rem(-1, 2)", 1);
+		store.quick_eval("rem(0, 2)", 0);
+		store.quick_eval("rem(1, 2)", 1);
+		store.quick_eval("rem(2, 2)", 0);
+		store.quick_eval("abs(-123)", 123);
+		store.quick_eval("avg(1,2,3)", 2);
+		store.quick_eval("max(1,2,3)", 3);
+		store.quick_eval("min(1,2,3)", 1);
+		store.quick_eval("sum(1,2,3)", 6);
+		store.quick_eval("median(1,2,3)", 2);
+		store.quick_eval2("median(1,2,3,4)", "2.5");
+		store.quick_eval2("median(2,3,4,1)", "2.5");
+		store.quick_eval2("median(3,4,1,2)", "2.5");
+		store.quick_eval2("median(4,1,2,3)", "2.5");
+		store.quick_eval2("median(4,1,2,3)", "2.5");
+		store.quick_eval("min(1,2,3)", 1);
+		store.quick_eval("sum()", 0);
+		store.quick_eval("sum(0)", 0);
+		store.quick_eval("sum(0,0)", 0);
+		store.quick_eval("ceil(123.456)", 124);
+		store.quick_eval("floor(123.456)", 123);
+		store.quick_eval("floor(-123.456)", -124);
 
-		test_eval!("sum()", 0.into());
-		test_eval!("sum(0)", 0.into());
-		test_eval!("sum(0,0)", 0.into());
+		store.quick_eval("ceil(123.456)", 124);
+		store.quick_eval("ceil(-123.456)", -123);
 
-		test_eval!("floor(123.456)", 123.into());
-		test_eval!("floor(-123.456)", Number::from(-124));
-
-		test_eval!("ceil(123.456)", Number::from(124));
-		test_eval!("ceil(-123.456)", Number::from(-123));
-
-		test_eval!("round(123.456)", Number::from(123));
-		test_eval!("round(123.789)", Number::from(124));
-		test_eval!("round(-123.456)", Number::from(-123));
-		test_eval!("round(-123.789)", Number::from(-124));
-	}
-
-	#[test]
-	fn test_define_functions_with_expression_function_definitions() {
-		let mut store = FormulaStore::new_empty();
-		let ctx = &mut create_default_context();
-		store.define_default_symbols().unwrap();
+		store.quick_eval("round(123.456)", 123);
+		store.quick_eval("round(123.789)", 124);
+		store.quick_eval("round(-123.456)", -123);
+		store.quick_eval("round(-123.789)", -124);
 
 		store.add_symbol_from_string("f(x)=sin(x)", false).unwrap();
-		assert!(matches!(store.add_symbol_from_string("g(x)=undefined(x)", false), Err(_)));
+		assert!(store.add_symbol_from_string("g(x)=undefined(x)", false).is_err());
 		store.add_symbol_from_string("g(x)=f(x)+cos(x)", false).unwrap();
 
-		assert_eq!(store.eval("f(0)", ctx).unwrap(), Number::from_string("0").unwrap().sin(ctx));
-		assert_eq!(
-			store.eval("g(0)", ctx).unwrap(),
-			Number::from_string("0").unwrap().sin(ctx).plus(&Number::from_string("0").unwrap().cos(ctx), ctx)
-		);
+		store.quick_eval("f(0)", 0);
+		store.quick_eval("g(0)", 1);
 
-		store.add_symbol_from_string("good_sum(x,y)=sum(x,y)+sum(x,y)", false).unwrap();
-		assert_eq!(store.eval("good_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2);
+		store.add_symbol_from_string("good_sum(x,y) = sum(x,y) + sum(x,y)", false).unwrap();
+		store.quick_eval("good_sum(1,2)", 1 + 2 + 1 + 2);
 		store.add_symbol_from_string("weird_sum(x,y)=sum(x,y)+sum(x,y,1)", false).unwrap();
-		assert_eq!(store.eval("weird_sum(1,2)", ctx).unwrap(), 1 + 2 + 1 + 2 + 1);
+		store.quick_eval("weird_sum(1,2)", 1 + 2 + 1 + 2 + 1);
 	}
 
 	#[test]
@@ -439,7 +465,7 @@ mod tests {
 				let (formula, output) = ($formula, $expected);
 				let fmt = FormattingOptions::default().with_rounding($rounding);
 				let result = store
-					.run(formula, false)
+					.run_new(formula, RunOptions::default(), &mut Benchmark::new("Evaluate"))
 					.calculation_result()
 					.unwrap()
 					.to_string_detailed(fmt)
@@ -452,6 +478,7 @@ mod tests {
 				);
 			}};
 		}
+
 		check_calculation!(
 			"((12 + 3) * sin(0.5)) / (2 ^ 3)",
 			"0.89892288488288062551241487852919635265338131488862626597865614961037813"
@@ -494,5 +521,28 @@ mod tests {
 		check_calculation!("0.1 + 0.2", "0.3");
 		check_calculation!("(-2)^0.5", "NaN");
 		check_calculation!("5 * - -2", "10");
+
+		check_calculation!(
+			"sin(123)",
+			"-0.459903490689591251292435715293231810808580607381042580927742868029959"
+		);
+		check_calculation!(
+			"cos(123)",
+			"-0.887968906691855428978322569442621150811865560981614293926181503346636"
+		);
+		check_calculation!(
+			"tan(123)",
+			"0.5179274715856551831319240756392856882012784222828477932177680554912204"
+		);
+		check_calculation!(
+			"sqrt(123)",
+			"11.090536506409417162051600102609932918463376742454020022877312839085002"
+		);
+		check_calculation!("sqrt(15129)", "123");
+		check_calculation!(
+			"log2(123)",
+			"6.9425145053392398746197102514707252094534827932226660599060107680885122"
+		);
+		check_calculation!("log2(1024)", "10");
 	}
 }

@@ -4,7 +4,6 @@ use crate::parsing::signature::ParamCount;
 use crate::{Number, only_in_debug};
 use astro_float::ctx::Context;
 use astro_float::expr;
-use std::rc::Rc;
 
 fn pi(ctx: &mut Context) -> Number {
 	Number::Float(ctx.const_pi())

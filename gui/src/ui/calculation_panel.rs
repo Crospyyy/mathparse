@@ -91,13 +91,6 @@ fn format_number_result(r: DynamicResult, rounding_digits: usize) -> StringWithI
 	}
 }
 
-pub fn caret_pos_from_output(output: &TextEditOutput) -> Option<Pos2> {
-	let cursor_range = output.cursor_range?; // None => no caret / not focused
-	let ccursor = cursor_range.primary;
-	let caret_rect_in_galley = output.galley.pos_from_cursor(ccursor); // relative to galley origin
-	Some(output.galley_pos + caret_rect_in_galley.left_top().to_vec2())
-}
-
 pub(super) trait MulReplacement {
 	fn replace_mul(&self) -> String;
 	fn unreplace_mul(&self) -> String;
@@ -203,7 +196,8 @@ impl UiState {
 	}
 
 	pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
-		let cursor_pos =
+		// todo do bracket highlighting in here
+		let _cursor_pos =
 			get_cursor_range((ui.ctx(), self.calculation_panel.calculation_input.top_user_input_id));
 		self.calculation_panel.calculation_input.top_user_input =
 			self.calculation_panel.calculation_input.top_user_input.replace_mul();
@@ -223,17 +217,17 @@ impl UiState {
 	}
 
 	pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) {
-		let pos = last_caret_pos_from_output(&output);
-		if let Some(Ok(result)) = &self.calculation_panel.calculation_result {
-			if let OutputString::Result(StringWithInfo { main, .. }) = result {
-				ui.painter_at(output.response.rect).text(
-					pos,
-					Align2::LEFT_TOP,
-					" ".to_owned() + &main,
-					TEXTEDIT_FONT_ID,
-					ui.visuals().text_color(),
-				);
-			}
+		let pos = last_caret_pos_from_output(output);
+		if let Some(Ok(result)) = &self.calculation_panel.calculation_result
+			&& let OutputString::Result(StringWithInfo { main, .. }) = result
+		{
+			ui.painter_at(output.response.rect).text(
+				pos,
+				Align2::LEFT_TOP,
+				" ".to_owned() + main,
+				TEXTEDIT_FONT_ID,
+				ui.visuals().text_color(),
+			);
 		}
 	}
 

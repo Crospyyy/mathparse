@@ -6,7 +6,6 @@ use crate::{Element, ExpressionFunType, ExpressionNumType, Number, NumberContext
 use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
-use thiserror::Error;
 
 pub struct FormulaStore {
 	symbols: HashMap<String, Symbol>,
@@ -69,7 +68,7 @@ impl FormulaStore {
 		self.add_expression_fun(
 			"median",
 			CustomFunction::multiple_arguments(
-				"median".into(),
+				"median",
 				ParamCount::AtLeast(1),
 				|args: Vec<Number>, ctx: &mut Context| {
 					if let Some(median) = Number::median(&args, ctx) {
@@ -86,7 +85,7 @@ impl FormulaStore {
 		self.add_expression_fun(
 			"max",
 			CustomFunction::multiple_arguments(
-				"max".into(),
+				"max",
 				ParamCount::AtLeast(1),
 				|args: Vec<Number>, ctx: &mut Context| {
 					if let Some(max) = Number::max_of_several(&args, ctx) {
@@ -192,7 +191,7 @@ impl FormulaStore {
 		// add the already defined functions with variable argument count
 		let mut required_signatures: Signatures = defined_signatures.clone();
 		required_signatures.retain(|_, signature| matches!(signature, Signature::FunctionNOrMoreParams(_)));
-		required_signatures.add_all_undefined_symbols_of_formula(&content);
+		required_signatures.add_all_undefined_symbols_of_formula(content);
 
 		Signatures::refine_signature_and_undefined(
 			symbol_name_and_args,
@@ -412,7 +411,7 @@ impl Element {
 				(Element::Variable(_), None, _) => {
 					*self = insert.formula.clone();
 				},
-				(Element::VariableOrFunction(name), params, _) => {
+				(Element::VariableOrFunction(..), params, _) => {
 					if params.is_some() {
 						println!("Skipping this because there is no call yet");
 					} else {
@@ -468,8 +467,9 @@ impl Element {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::create_default_context;
+	use crate::benchmarking::Benchmark;
 	use crate::formula_short::{fun_expr, mul, num, var};
+	use crate::outer_store_interation::RunPrecision;
 	use macros::formula_matches;
 
 	#[test]
@@ -581,38 +581,36 @@ mod tests {
 
 	#[test]
 	fn test_storing() {
-		use crate::calculation::create_default_context;
-
 		println!("### Test storing formulas ###");
 
 		let mut store = FormulaStore::new_empty();
-		let mut ctx = create_default_context();
-		check_add!(store, "f=123", "f");
-		assert!(matches!(store.add_symbol_from_string("1=1", false), Err(_)));
-		assert!(matches!(store.add_symbol_from_string("f=1", false), Err(_)));
-		assert!(matches!(store.add_symbol_from_string("x", false), Err(_)));
 
-		assert!(matches!(store.add_symbol_from_string("g(l)=x^2", false), Err(_)));
+		check_add!(store, "f=123", "f");
+		assert!(store.add_symbol_from_string("1=1", false).is_err());
+		assert!(store.add_symbol_from_string("f=1", false).is_err());
+		assert!(store.add_symbol_from_string("x", false).is_err());
+
+		assert!(store.add_symbol_from_string("g(l)=x^2", false).is_err());
 		check_add!(store, "g(g)=g^2", "g");
-		assert!(matches!(store.add_symbol_from_string("g=2", false), Err(_)));
+		assert!(store.add_symbol_from_string("g=2", false).is_err());
 
 		check_add!(store, "f2(f)=f*3", "f2");
-		assert!(matches!(store.add_symbol_from_string("f3=f2()", false), Err(_)));
+		assert!(store.add_symbol_from_string("f3=f2()", false).is_err());
 
-		let result = store.eval("f", &mut ctx);
-		assert_eq!(result.ok(), Some(123.into()));
-		assert!(matches!(store.eval("f()", &mut ctx), Err(_)));
-		assert!(matches!(store.eval("g()", &mut ctx), Err(_)));
-		assert_eq!(store.eval("g(2)", &mut ctx).ok(), Some(4.into()));
-		assert_eq!(store.eval("f2(2)", &mut ctx).ok(), Some(6.into()));
+		store.quick_eval("f", 123);
+		assert!(store.eval_new("f()", RunPrecision::default(), &mut Benchmark::new("Evaluation")).is_err());
+		assert!(store.eval_new("g()", RunPrecision::default(), &mut Benchmark::new("Evaluation")).is_err());
+		store.quick_eval("g(2)", 4);
+		store.quick_eval("f2(2)", 6);
 
 		check_add!(store, "add(a,b)=a+b", "add");
 		check_add!(store, "mul(a,b)=a*b", "mul");
 		check_add!(store, "div(a,b)=a/b", "div");
-		assert_eq!(store.eval("add(1,2)", &mut ctx).ok(), Some(3.into()));
+		store.quick_eval("add(1,2)", 3);
+
 		check_add!(store, "run(a, b, fun)=fun(a, b)", "run");
-		assert_eq!(store.eval("run(1, 2, add)", &mut ctx).ok(), Some(3.into()));
-		assert_eq!(store.eval("run(1, 2, mul)", &mut ctx).ok(), Some(2.into()));
-		assert_eq!(store.eval("run(1, 2, div)", &mut ctx).ok(), Some(Number::from_string("0.5").unwrap()));
+		store.quick_eval("run(1, 2, add)", 3);
+		store.quick_eval("run(1, 2, mul)", 2);
+		store.quick_eval2("run(1, 2, div)", "0.5");
 	}
 }

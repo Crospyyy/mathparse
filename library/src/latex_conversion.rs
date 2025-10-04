@@ -14,7 +14,7 @@ pub enum LatexConversionError {
 pub fn convert_from_latex_if_needed(s: &str) -> Option<Result<String, LatexConversionError>> {
 	let trimmed = s.trim();
 	let is_surrounded = trimmed.starts_with("$") && trimmed.ends_with("$");
-	let looks_like_latex = is_surrounded || contains_latex_like_syntax(&trimmed);
+	let looks_like_latex = is_surrounded || contains_latex_like_syntax(trimmed);
 	if !looks_like_latex {
 		return None;
 	};
@@ -24,7 +24,7 @@ pub fn convert_from_latex_if_needed(s: &str) -> Option<Result<String, LatexConve
 pub fn convert_latex_to_math(s: &str) -> Result<String, LatexConversionError> {
 	let mut s = s.trim().to_string();
 	if s.starts_with("$") && s.ends_with("$") {
-		s = s.trim_start_matches(|c| c == '$').trim_end_matches(|c| c == '$').to_string();
+		s = s.trim_start_matches('$').trim_end_matches('$').to_string();
 	}
 	if s.contains('$') {
 		return Err(LatexConversionError::ContainsUnexpectedCharacterInsideFormula('$'));
@@ -35,7 +35,7 @@ pub fn convert_latex_to_math(s: &str) -> Result<String, LatexConversionError> {
 	debug_print!("tokenized: {:?}", t);
 	t.parse_functions()?;
 	debug_print!("parsed functions: {:?}", t);
-	Ok(t.to_string(false).into())
+	Ok(t.to_string(false))
 }
 
 fn contains_latex_like_syntax(s: &str) -> bool {
@@ -75,13 +75,14 @@ impl LatexToken {
 		let closing_brackets = "})";
 		let brackets = opening_brackets.to_string() + closing_brackets;
 		let operations = "*/+^-=".to_string();
-		if let Some(c) = s.chars().nth(0) {
-			if operations.contains(c) {
-				let string = s[..1].to_string();
-				*s = &s[1..];
-				return Ok(Self::Word(string));
-			}
+		if let Some(c) = s.chars().nth(0)
+			&& operations.contains(c)
+		{
+			let string = s[..1].to_string();
+			*s = &s[1..];
+			return Ok(Self::Word(string));
 		}
+
 		if s.chars().nth(0).is_some_and(|c| opening_brackets.contains(c)) {
 			*s = &s[1..];
 			*s = s.trim_start();
@@ -130,14 +131,13 @@ impl LatexToken {
 								token = LatexToken::Group(vec![num, LatexToken::Word("/".into()), denom]);
 							},
 							_ => {
-								if !get_fun_name_end_of_string(string, false).is_empty() {
-									if matches!(
+								if !get_fun_name_end_of_string(string, false).is_empty()
+									&& matches!(
 										inner_iter.peek(),
 										Some(LatexToken::Function(..) | LatexToken::Group(_))
 									) {
-										let arg = inner_iter.next().unwrap();
-										token = LatexToken::Function(string.clone(), vec![arg]);
-									}
+									let arg = inner_iter.next().unwrap();
+									token = LatexToken::Function(string.clone(), vec![arg]);
 								}
 							},
 						}
@@ -203,7 +203,7 @@ mod tests {
 		];
 		for (input, expected) in data {
 			let result = convert_latex_to_math(input).unwrap();
-			assert_eq!(result, expected);
+			assert_eq!(result, expected, "input: {}", input);
 		}
 	}
 }

@@ -1,6 +1,6 @@
 use astro_float::BigFloat;
 use num_rational::BigRational;
-use std::fmt::{Debug, Display, Pointer};
+use std::fmt::Debug;
 
 mod benchmarking;
 pub(crate) mod calculation;
@@ -22,6 +22,7 @@ pub use calculation::create_default_context;
 pub use evaluation::DynamicResult;
 pub use latex_conversion::convert_from_latex_if_needed;
 pub use outer_store_interation::{RunError, RunResult, RunSuccess};
+pub use outer_store_interation::{RunOptions, RunPrecision};
 pub use parsing::{Signature, get_fun_name_end_of_string};
 pub use printing::{FormattedCalculationOutput, FormattingOptions};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
@@ -113,7 +114,7 @@ mod formula_short {
 	}
 
 	pub fn num_expr(value: ExpressionNumType) -> Element {
-		Element::NumberWithExpression { expr_value: value.into() }
+		Element::NumberWithExpression { expr_value: value }
 	}
 
 	pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {

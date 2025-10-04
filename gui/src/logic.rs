@@ -1,7 +1,7 @@
 use crate::ui::bottom_panel::Page;
 use anyhow::Result;
 use egui::Response;
-use library::{FormulaStore, RunResult, RunSuccess, Symbol};
+use library::{Benchmark, FormulaStore, RunOptions, RunResult, RunSuccess, Symbol, only_in_debug};
 use std::collections::HashSet;
 
 pub struct Backend {
@@ -34,11 +34,20 @@ impl Backend {
 	}
 
 	pub fn dry_run(&mut self, input: &str) -> RunResult {
-		self.formula_store.run(input, true)
+		self.formula_store.run_new(
+			input,
+			RunOptions { dry_run: true, ..Default::default() },
+			&mut Benchmark::new("Dry run"),
+		)
 	}
 
 	pub fn run(&mut self, input: &str) -> RunResult {
-		let result = self.formula_store.run(input, false);
+		let mut benchmark = Benchmark::new("Running input");
+		let result = self.formula_store.run_new(input, RunOptions::default(), &mut benchmark);
+		only_in_debug!({
+			let task = benchmark.finalize();
+			task.print();
+		});
 		if let RunResult::Ok(RunSuccess::AddedSymbol(s)) = &result {
 			self.custom_symbols.insert(s.name().clone());
 		}

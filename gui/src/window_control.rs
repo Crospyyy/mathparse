@@ -69,7 +69,7 @@ impl Window {
 	}
 
 	pub(crate) fn get_last_window_size(&self) -> Option<Vec2> {
-		self.window_state.last_window_size.lock().unwrap().clone()
+		*self.window_state.last_window_size.lock().unwrap()
 	}
 
 	pub(super) fn handle_window_control(&mut self, ctx: &Context, pressed_shortcut: &mut bool) {

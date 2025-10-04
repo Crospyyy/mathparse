@@ -1,13 +1,12 @@
 use crate::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
-use crate::{Element, FormulaStore, Number, create_default_context, formula};
+use crate::{Element, FormulaStore, Number, formula};
 use astro_float::Error;
 use macros::formula_matches;
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};
 use std::cmp::PartialEq;
-use std::mem;
 use std::ops::{Add, Mul, Neg, Rem};
 use strum::{EnumCount, IntoEnumIterator};
 
@@ -49,7 +48,7 @@ impl Element {
 			| Element::Multiply(elements)
 			| Element::Function { arguments: elements, .. }
 			| Element::FunctionWithExpression { arguments: elements, .. } => {
-				elements.iter_mut().map(|arg| operation(arg)).reduce(|a, b| a || b).unwrap_or(false)
+				elements.iter_mut().map(operation).reduce(|a, b| a || b).unwrap_or(false)
 			},
 			Element::Pow(base, exponent) => operation(base) || operation(exponent),
 			Element::Negate(element) => operation(element),
@@ -62,7 +61,7 @@ impl Element {
 		}
 	}
 
-	fn handle_empty_or_one_element(elements: &Vec<Element>, neutral_element: u16) -> Option<Element> {
+	fn handle_empty_or_one_element(elements: &[Element], neutral_element: u16) -> Option<Element> {
 		if elements.is_empty() {
 			Some(formula!(num(neutral_element as i32)))
 		} else if elements.len() == 1 {
@@ -218,11 +217,11 @@ impl Element {
 						*this_base = Box::new(this_base_number.abs().into());
 						return;
 					}
-					if formula_matches!(this_exponent.as_ref(), num(-1)) {
-						if let Some(r) = this_base_number.get_exact_rational() {
-							*self = Number::from(r.recip()).into();
-							return;
-						}
+					if formula_matches!(this_exponent.as_ref(), num(-1))
+						&& let Some(r) = this_base_number.get_exact_rational()
+					{
+						*self = Number::from(r.recip()).into();
+						return;
 					}
 				}
 
@@ -257,7 +256,6 @@ impl Element {
 						let new_pow = mul([inner_p.clone(), this_exponent.as_ref().clone()]);
 						*self = formula!(pow(inner_b.clone(), new_pow));
 						self.optimize_and_reduce();
-						return;
 					}
 				} else if let Some(inner) = formula_matches!(this_base.as_ref(), mul(x..)) {
 					let new_elements = inner
@@ -266,7 +264,6 @@ impl Element {
 						.collect::<Vec<_>>();
 					*self = mul(new_elements);
 					self.optimize_and_reduce();
-					return;
 				}
 			},
 			Element::Negate(x) => {
@@ -277,7 +274,6 @@ impl Element {
 				}
 				if let Some(inner) = formula_matches!(x.as_ref(), neg(x)) {
 					*self = inner.clone();
-					return;
 				}
 			},
 		}
@@ -361,7 +357,6 @@ fn list_element_optimization(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::formula_short::{inv, mul, num, var};
 	use crate::{FormulaStore, create_default_context};
 
 	macro_rules! test {
@@ -481,22 +476,18 @@ mod tests {
 	fn test_expr_fun_optimization() {
 		// pi optimization
 		let mut fs = FormulaStore::new_empty();
-		let ctx = &mut create_default_context();
+
 		fs.define_default_symbols().unwrap();
-		macro_rules! quick_assert_eq {
-			($input:expr, $exp:expr) => {
-				assert_eq!(fs.eval($input, ctx).ok(), Some($exp));
-			};
-		}
-		quick_assert_eq!("sin(2*pi)", Number::from(0));
-		quick_assert_eq!("sin(-2*pi)", Number::from(0));
-		quick_assert_eq!("sin(10*pi)", Number::from(0));
-		quick_assert_eq!("sin(pi)", Number::from(0));
-		quick_assert_eq!("sin(-pi)", Number::from(0));
-		quick_assert_eq!("sin(pi/2)", Number::from(1));
-		quick_assert_eq!("sin(-pi/2)", Number::from(-1));
-		quick_assert_eq!("sin(pi/6)", Number::from_string("0.5").unwrap());
-		quick_assert_eq!("sin(-pi/6)", Number::from_string("-0.5").unwrap());
-		quick_assert_eq!("sin(pi/3)", fs.eval("sqrt(3)/2", ctx).unwrap());
+
+		fs.quick_eval("sin(2*pi)", 0);
+		fs.quick_eval("sin(-2*pi)", 0);
+		fs.quick_eval("sin(10*pi)", 0);
+		fs.quick_eval("sin(pi)", 0);
+		fs.quick_eval("sin(-pi)", 0);
+		fs.quick_eval("sin(pi/2)", 1);
+		fs.quick_eval("sin(-pi/2)", -1);
+		fs.quick_eval2("sin(pi/6)", "0.5");
+		fs.quick_eval2("sin(-pi/6)", "-0.5");
+		fs.quick_eval2("sin(pi/3)", "sqrt(3)/2");
 	}
 }

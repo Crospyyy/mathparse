@@ -175,7 +175,7 @@ impl Number {
 // implement operations where there is a list of numbers as a parameter
 impl Number {
 	pub fn sum(numbers: &[Self], ctx: &mut Context) -> Self {
-		numbers.iter().fold(Number::from(0), |a, b| a.plus(&b, ctx))
+		numbers.iter().fold(Number::from(0), |a, b| a.plus(b, ctx))
 	}
 
 	/// Returns `None` if numbers is an empty array

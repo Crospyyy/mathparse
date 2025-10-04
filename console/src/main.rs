@@ -2,14 +2,13 @@ fn main() {
 	run_formula_evaluator();
 }
 
-use library::{FormattingOptions, FormulaStore, create_default_context};
+use library::{Benchmark, FormattingOptions, FormulaStore, RunPrecision};
 use num::{BigInt, BigRational};
 use std::io::{Write, stdin, stdout};
 
 pub fn run_formula_evaluator() {
 	let mut store = FormulaStore::new_empty();
 	store.define_default_symbols().unwrap();
-	let ctx = &mut create_default_context();
 
 	loop {
 		println!("\nInput a formula:");
@@ -24,14 +23,15 @@ pub fn run_formula_evaluator() {
 				Err(s) => println!("Error: {}", s),
 			}
 		} else {
-			let result1 = store.eval(&line, ctx);
+			let result1 =
+				store.eval_new(&line, RunPrecision::default(), &mut Benchmark::new("Evaluate input"));
 			match result1 {
 				Ok(result) => {
-					let result_string = result.to_string_reuse_context(FormattingOptions::default(), ctx);
+					let result_string = result.to_string_detailed(FormattingOptions::default());
 					if result.is_exact() {
-						println!("= {}", result_string);
+						println!("= {}", result_string.get_string());
 					} else {
-						println!("≈ {}", result_string);
+						println!("≈ {}", result_string.get_string());
 					}
 				},
 				Err(s) => {

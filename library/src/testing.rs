@@ -76,10 +76,33 @@ macro_rules! formula {
 }
 
 #[cfg(test)]
-mod test {
-	use crate::Element;
+pub mod test {
 	use crate::Number;
+	use crate::benchmarking::Benchmark;
+	use crate::outer_store_interation::RunPrecision;
+	use crate::{Element, FormulaStore};
 	use macros::{formula_matches, return_tokens};
+
+	impl FormulaStore {
+		pub(crate) fn quick_eval(&self, input: &str, n: i32) {
+			let result = self
+				.eval_new(input, RunPrecision::default(), &mut Benchmark::new("Evaluate"))
+				.ok()
+				.and_then(|n| n.as_i32());
+			assert_eq!(result, Some(n), "Failed to evaluate expression: {}", input);
+		}
+
+		pub(crate) fn quick_eval2(&self, input: &str, n: &str) {
+			let result =
+				self.eval_new(input, RunPrecision::default(), &mut Benchmark::new("Evaluate")).unwrap();
+			let result2 = self.eval_new(n, RunPrecision::default(), &mut Benchmark::new("Evaluate")).unwrap();
+			assert_eq!(
+				result, result2,
+				"Failed to evaluate expression: {} with expected output {}",
+				input, n
+			);
+		}
+	}
 
 	#[test]
 	fn test_proc_macros() {

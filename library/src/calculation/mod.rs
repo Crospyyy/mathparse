@@ -1,6 +1,5 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
 use crate::expression_values::ValueRange;
-use crate::printing::FormattingOptions;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
@@ -9,7 +8,6 @@ use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
 use regex::Regex;
 use std::cmp::Ordering;
-use std::ops::Neg;
 use std::sync::LazyLock;
 
 pub(crate) mod expression_functions;

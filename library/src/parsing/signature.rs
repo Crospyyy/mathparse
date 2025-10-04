@@ -3,7 +3,6 @@ use anyhow::{Result, anyhow};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
-use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Signature {
@@ -176,8 +175,7 @@ impl Signatures {
 		let parameter_names =
 			opt_fun_args.as_ref().map(|v| v.names.iter().cloned().collect()).unwrap_or(HashSet::new());
 
-		let all_undefined_names =
-			undefined_signatures.iter().map(|(n, _)| n).cloned().collect::<HashSet<_>>();
+		let all_undefined_names = undefined_signatures.keys().cloned().collect::<HashSet<_>>();
 		for name in all_undefined_names {
 			if parameter_names.contains(&name) {
 				continue;
@@ -193,7 +191,7 @@ impl Signatures {
 						already_defined_sig
 					));
 				}
-				undefined_signatures.update_signature(&formula, &name, already_defined_sig.clone())
+				undefined_signatures.update_signature(formula, &name, already_defined_sig.clone())
 			}
 		}
 		if let Some(args) = &mut opt_fun_args.0 {
@@ -300,8 +298,7 @@ impl Element {
                         .iter()
                         .enumerate()
                         .filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
-                        .map(|(i, e)| e.get_name().map(|n| (i, n)))
-                        .flatten()
+                        .filter_map(|(i, e)| e.get_name().map(|n| (i, n)))
                     {
                         if arg_name != name {
                             list.insert((arg_name.to_string(), i));

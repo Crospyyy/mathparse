@@ -1,11 +1,11 @@
 use crate::Number;
 use crate::parsing::signature::ParamCount;
 use astro_float::ctx::Context;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ExpressionFunType {
+pub(crate) enum ExpressionFunType {
 	Custom(CustomFunction),
 	Sin,
 	SinWithRadians,
@@ -57,19 +57,6 @@ impl CustomFunction {
 
 	pub fn get_fn(&self) -> FunctionExpression {
 		self.function.clone()
-	}
-
-	pub fn get_fn_single_arg(&self) -> Option<Rc<dyn Fn(&Number, &mut Context) -> Number>> {
-		match &self.function {
-			FunctionExpression::SingleArgument(f) => Some(f.clone()),
-			_ => None,
-		}
-	}
-	pub fn get_fn_multiple_args(&self) -> Option<Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>> {
-		match &self.function {
-			FunctionExpression::MultipleArguments(f) => Some(f.clone()),
-			_ => None,
-		}
 	}
 }
 

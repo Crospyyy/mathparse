@@ -1,4 +1,5 @@
-use crate::{Benchmark, Element, Number, benchmark};
+use crate::benchmarking::Benchmark;
+use crate::{Element, Number};
 use regex::Regex;
 use std::mem;
 use std::sync::LazyLock;
@@ -19,7 +20,7 @@ pub fn get_fun_name_end_of_string(name: &str, allow_first_char_digit: bool) -> S
 		"".to_owned()
 	} else {
 		let name = name[name.len() - valid_chars_count..].to_owned();
-		if allow_first_char_digit || name.chars().nth(0).is_some_and(|c| !matches!(c, '0'..='9')) {
+		if allow_first_char_digit || name.chars().next().is_some_and(|c| !c.is_ascii_digit()) {
 			name
 		} else {
 			"".to_owned()
@@ -29,27 +30,47 @@ pub fn get_fun_name_end_of_string(name: &str, allow_first_char_digit: bool) -> S
 
 impl Element {
 	pub fn parse(input: &str) -> Result<Self, String> {
-		Self::parse_benched(input, &mut Benchmark::new())
+		Self::parse_benched(input, &mut Benchmark::new("Parse formula"))
 	}
 
 	pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
 		let b = benchmark;
 
-		let cow = benchmark!(b, Element::preprocess_string(&input), "preprocess_string_minus");
-		let chars = benchmark!(b, cow.chars().collect::<Vec<_>>(), "convert_to_chars");
+		let cow = b.benchmark("preprocess_string_minus", || Element::preprocess_string(&input));
+		let chars = b.benchmark("convert_to_chars", || cow.chars().collect::<Vec<_>>());
 		let mut start = 0;
-		let mut formula = benchmark!(b, Element::resolve_brackets(&chars, &mut start), "resolve_brackets");
-		benchmark!(b, formula.resolve_functions(), "resolve_functions");
-		benchmark!(b, formula.process_plus(), "process_plus");
-		benchmark!(b, formula.process_minus(), "process_minus");
-		benchmark!(b, formula.process_multiply(), "process_multiply");
-		benchmark!(b, formula.process_divide(), "process_divide");
-		benchmark!(b, formula.process_minus(), "process_minus_2");
-		benchmark!(b, formula.process_pow()?, "process_pow");
-		benchmark!(b, formula.process_minus(), "process_minus_3");
-		benchmark!(b, formula.process_numbers_and_variables(), "process_numbers_and_variables");
-		benchmark!(b, formula.remove_unneeded_outer_brackets(), "remove_unneeded_outer_brackets");
-		benchmark!(b, formula.convert_to_variables_where_possible(), "convert_to_variables_where_possible");
+		let mut formula = b.benchmark("resolve_brackets", || Element::resolve_brackets(&chars, &mut start));
+		b.benchmark("resolve_functions", || {
+			formula.resolve_functions();
+		});
+		b.benchmark("process_plus", || {
+			formula.process_plus();
+		});
+		b.benchmark("process_minus", || {
+			formula.process_minus();
+		});
+		b.benchmark("process_multiply", || {
+			formula.process_multiply();
+		});
+		b.benchmark("process_divide", || {
+			formula.process_divide();
+		});
+		b.benchmark("process_minus_2", || {
+			formula.process_minus();
+		});
+		b.benchmark("process_pow", || formula.process_pow())?;
+		b.benchmark("process_minus_3", || {
+			formula.process_minus();
+		});
+		b.benchmark("process_numbers_and_variables", || {
+			formula.process_numbers_and_variables();
+		});
+		b.benchmark("remove_unneeded_outer_brackets", || {
+			formula.remove_unneeded_outer_brackets();
+		});
+		b.benchmark("convert_to_variables_where_possible", || {
+			formula.convert_to_variables_where_possible();
+		});
 		if formula.anything_unparsed() {
 			Err("Parts of the formula could not be parsed".to_owned())
 		} else {
@@ -90,7 +111,7 @@ impl Element {
 					elements.push(Element::String(input[*start..i].iter().collect()));
 				}
 				i += 1; // ensure the pointer is behind the opening brackets
-				elements.push(Self::resolve_brackets(&input, &mut i));
+				elements.push(Self::resolve_brackets(input, &mut i));
 				*start = i;
 			}
 			if char == ')' {
@@ -191,8 +212,8 @@ impl Element {
 		match self {
 			Element::Brackets(elements) => {
 				if let Some(Element::String(str)) = elements.first() {
-					if str.starts_with('-') {
-						let new_string = str[1..].to_owned();
+					if let Some(trimmed) = str.strip_prefix('-') {
+						let new_string = trimmed.to_owned();
 						if new_string.is_empty() {
 							elements.remove(0);
 						} else {
@@ -200,10 +221,8 @@ impl Element {
 						}
 						*self = Element::Negate(Box::new(self.clone()));
 					}
-				} else {
-					if elements.len() == 1 {
-						elements[0].process_minus();
-					}
+				} else if elements.len() == 1 {
+					elements[0].process_minus();
 				}
 				if let Element::Brackets(groups) = self {
 					groups.iter_mut().for_each(|e| match e {
@@ -219,8 +238,8 @@ impl Element {
 				elements.iter_mut().for_each(Element::process_minus);
 			},
 			Element::String(s) => {
-				if s.starts_with('-') {
-					*self = Element::Negate(Box::new(Element::String(s[1..].to_owned())));
+				if let Some(stripped) = s.strip_prefix('-') {
+					*self = Element::Negate(Box::new(Element::String(stripped.to_owned())));
 					self.process_minus();
 				}
 			},
@@ -337,7 +356,7 @@ impl Element {
 					create_recursive_pow(self, new_elements)?;
 				}
 				match self {
-					Element::Brackets(elements) => elements.iter_mut().map(Element::process_pow).collect(),
+					Element::Brackets(elements) => elements.iter_mut().try_for_each(Element::process_pow),
 					Element::Pow(b, e) => {
 						b.process_pow()?;
 						e.process_pow()
@@ -346,7 +365,7 @@ impl Element {
 				}
 			},
 			Element::Plus(elements) | Element::Multiply(elements) => {
-				elements.iter_mut().map(Element::process_pow).collect()
+				elements.iter_mut().try_for_each(Element::process_pow)
 			},
 			Element::Negate(e) => e.process_pow(),
 			Element::String(s) => {
@@ -360,7 +379,7 @@ impl Element {
 				b.process_pow()?;
 				p.process_pow()
 			},
-			Element::Function { arguments, .. } => arguments.iter_mut().map(Element::process_pow).collect(),
+			Element::Function { arguments, .. } => arguments.iter_mut().try_for_each(Element::process_pow),
 			Element::Variable(_)
 			| Element::Number(_)
 			| Element::VariableOrFunction(_)
@@ -520,7 +539,7 @@ fn split_list_by_char(input: &[Element], delimiter: char) -> Option<Vec<Element>
 
 	fn add_current_group(groups: &mut Vec<Element>, current_group: &mut Vec<Element>) {
 		if !current_group.is_empty() {
-			let mut group_to_add = mem::replace(current_group, Vec::new());
+			let mut group_to_add = mem::take(current_group);
 			if group_to_add.len() == 1 {
 				groups.push(group_to_add.pop().unwrap());
 			} else {

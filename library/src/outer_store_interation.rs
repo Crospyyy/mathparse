@@ -1,4 +1,4 @@
-use crate::benchmarking::TaskAdder;
+use crate::benchmarking::Benchmark;
 use crate::evaluation::DynamicResult;
 use crate::{FormulaStore, NamedSymbol};
 
@@ -50,7 +50,7 @@ impl From<RunError> for RunResult {
 // new public interface for formula store
 impl FormulaStore {
 	pub fn run_new(
-		&mut self, input: impl ToString, run_options: RunOptions, bench: &mut TaskAdder,
+		&mut self, input: impl ToString, run_options: RunOptions, bench: &mut Benchmark,
 	) -> RunResult {
 		let input = input.to_string();
 		if let Some((symbol, definition)) = input.split_once("=") {
@@ -89,4 +89,13 @@ impl Default for RunPrecision {
 pub struct RunOptions {
 	pub dry_run: bool,
 	pub precision: RunPrecision,
+}
+
+impl Default for RunOptions {
+	/// Default options for running inputs.
+	/// - `dry_run`: false
+	/// - `precision`: default
+	fn default() -> Self {
+		RunOptions { dry_run: false, precision: RunPrecision::default() }
+	}
 }

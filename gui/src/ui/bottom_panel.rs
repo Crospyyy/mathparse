@@ -147,7 +147,7 @@ impl UiState {
 	}
 
 	pub fn show_tab_selector(&mut self, ui: &mut Ui) {
-		let x = Sides::default().show(
+		Sides::default().show(
 			ui,
 			|ui| {
 				self.add_selectable_label(ui, Page::History, "Show calculation history");
@@ -199,7 +199,7 @@ impl UiState {
 				);
 			}
 
-			for (i, entry) in self.bottom_panel.history.iter().rev().enumerate() {
+			for entry in self.bottom_panel.history.iter().rev() {
 				let mut margin = Margin::symmetric(10, 7);
 				margin.right += 2;
 				Frame::window(ui.style()).shadow(Shadow::NONE).inner_margin(margin).show(ui, |ui| {

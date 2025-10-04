@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use quote::{TokenStreamExt, quote};
+use quote::quote;
 
 /// # Usage
 /// ## Element matcher \[EM\]
@@ -409,12 +409,12 @@ mod new {
 		// sammle tokens bis zum kommatrennzeichen
 		let mut segment = Vec::new();
 		for tt in ts.into_iter() {
-			if let TokenTree::Punct(p) = &tt {
-				if p.as_char() == ',' {
-					result.push(segment.into_iter().collect());
-					segment = Vec::new();
-					continue;
-				}
+			if let TokenTree::Punct(p) = &tt
+				&& p.as_char() == ','
+			{
+				result.push(segment.into_iter().collect());
+				segment = Vec::new();
+				continue;
 			}
 			segment.push(tt);
 		}
@@ -431,7 +431,7 @@ mod new {
 		if match_expr.len() > 2 {
 			panic!("Expected no more than two tokens in match expression");
 		}
-		let match_ident = match match_expr.get(0) {
+		let match_ident = match match_expr.first() {
 			Some(TokenTree::Ident(i)) => i.clone(),
 			_ => panic!("expected identifier"),
 		};
@@ -534,7 +534,7 @@ mod new {
 					}
 				},
 				2.. => SingleOrMultipleElementMatcher::EachMatch(
-					split.into_iter().map(|t| ElementMatcher::parse(t)).collect(),
+					split.into_iter().map(ElementMatcher::parse).collect(),
 				),
 			}
 		}

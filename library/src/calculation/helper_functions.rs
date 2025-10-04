@@ -152,12 +152,12 @@ pub(super) fn rational_from_float(float: &BigFloat) -> Option<BigRational> {
 	let sign_positive = float.sign()?.is_positive();
 	let exponent = float.exponent()?;
 	let mantissa = float.mantissa_digits()?;
-	let bytes: Vec<u8> = mantissa.iter().rev().map(|v| v.to_be_bytes().into_iter()).flatten().collect();
+	let bytes: Vec<u8> = mantissa.iter().rev().flat_map(|v| v.to_be_bytes().into_iter()).collect();
 	let numerator = BigRational::from_integer(BigInt::from_bytes_be(
 		if sign_positive { IntSign::Plus } else { IntSign::Minus },
 		&bytes,
 	));
-	let exp_adj = exponent - (mantissa.len() * size_of::<Word>() * 8) as i32;
+	let exp_adj = exponent - (size_of_val(mantissa) * 8) as i32;
 	let ratio = numerator * BigRational::from_integer(2.into()).pow(exp_adj);
 	Some(ratio)
 }
@@ -172,8 +172,6 @@ pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
 	dbg!(&r);
 	let mapped = if r < rational(1) {
 		r
-	} else if r < rational(2) {
-		rational(2) - r
 	} else if r < rational(3) {
 		rational(2) - r
 	} else {

@@ -227,18 +227,18 @@ impl Window {
 			return;
 		};
 		let string = get_fun_name_end_of_string(
-			&self.ui_state.calculation_panel.calculation_input.top_user_input.char_range(0..cursor_pos),
+			self.ui_state.calculation_panel.calculation_input.top_user_input.char_range(0..cursor_pos),
 			true,
 		);
-		if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_digit(10)) {
+		if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_ascii_digit()) {
 			return;
 		}
-		let Some(first_char_pos) = string.chars().position(|c| !c.is_digit(10)) else {
+		let Some(first_char_pos) = string.chars().position(|c| !c.is_ascii_digit()) else {
 			return;
 		};
 		let pos_before = cursor_pos - string.len();
 		let insert_pos = pos_before + first_char_pos;
-		self.ui_state.calculation_panel.calculation_input.top_user_input.insert_str(insert_pos, "*");
+		self.ui_state.calculation_panel.calculation_input.top_user_input.insert(insert_pos, '*');
 		let mut add_move_cursor_right = 1;
 
 		if pos_before > 0 {
@@ -328,7 +328,7 @@ impl Window {
 	pub fn get_autocompletion_result<'a>(
 		input_string: &str, cursor_pos: usize, formula_store: &'a FormulaStore,
 	) -> Option<AutocompletionResult<'a>> {
-		let input_symbol_name = get_fun_name_end_of_string(&input_string.char_range(0..cursor_pos), false);
+		let input_symbol_name = get_fun_name_end_of_string(input_string.char_range(0..cursor_pos), false);
 		if input_symbol_name.is_empty() {
 			return None;
 		}
@@ -372,7 +372,7 @@ impl Window {
 	fn preprocess_brackets(&mut self, ui: &mut Ui) {
 		let Some(mut typed_brackets) = ui.input_mut(|ip| {
 			ip.events.retain(|e| match e {
-				Event::Text(text) => text.chars().all(|c| c.is_ascii()),
+				Event::Text(text) => text.is_ascii(),
 				_ => true,
 			});
 			let text_bracket_check = |t: &&String| t.ends_with("(");
@@ -470,7 +470,7 @@ pub fn set_cursor_pos(response: &Response, cursor_pos: usize) {
 
 pub fn get_cursor_pos<'a>(response: impl Into<CursorPosSource<'a>>) -> Option<usize> {
 	let source = response.into();
-	let state = TextEdit::load_state(&source.ctx(), source.id())?;
+	let state = TextEdit::load_state(source.ctx(), source.id())?;
 	state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
 }
 

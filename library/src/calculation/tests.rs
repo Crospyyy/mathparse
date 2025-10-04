@@ -1,8 +1,8 @@
-use crate::Number;
+use crate::calculation::create_default_context;
 use crate::calculation::helper_functions::{
 	big_int_to_power_of_inv_of_big_int, power_rational_and_rational, rational_from_float,
 };
-use crate::calculation::{FormattingOptions, create_default_context};
+use crate::{FormattingOptions, Number};
 use astro_float::BigFloat;
 use num_bigint::BigInt;
 use num_rational::BigRational;
