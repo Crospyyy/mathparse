@@ -499,7 +499,7 @@ mod tests {
 	fn test_add_symbols() {
 		let mut all = FormulaStore::new_empty();
 		check_add!(all, "fun(a,b)=a+b", "fun");
-		assert!(matches!(all.add_symbol_from_string("fun(a,b)=a+b", false), Err(_)));
+		assert!(all.add_symbol_from_string("fun(a,b)=a+b", false).is_err());
 		println!("{:?}", all.get_symbols_sorted());
 		check_add!(all, "fun2(a,b,c)=fun(a,b)+c", "fun2");
 		println!("{:?}", all.get_symbols_sorted());

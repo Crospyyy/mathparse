@@ -130,7 +130,8 @@ fn determine_outest_cursor_pos(str: &str, min: usize, max: usize) -> usize {
 	let mut outest_layer = 0;
 	let mut layer = 0;
 	for i in min..max {
-		layer += match str.chars().nth(i).unwrap() {
+		// the ' ' character is used to prevent the program from crashing (see #35)
+		layer += match str.chars().nth(i).unwrap_or(' ') {
 			')' => -1,
 			'(' => 1,
 			_ => continue,
