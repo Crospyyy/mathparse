@@ -146,6 +146,9 @@ fn determine_outest_cursor_pos(str: &str, min: usize, max: usize) -> usize {
 
 fn find_bracket_range(str: &str, idx: usize) -> Option<(usize, usize)> {
 	let chars: Vec<_> = str.chars().collect();
+	if chars.len() < idx {
+		return None;
+	}
 	let mut min = 0;
 	let mut indenting = 0;
 	for i in (0..idx).rev() {
