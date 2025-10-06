@@ -46,7 +46,9 @@ impl FormulaStore {
             }
         }
 		
-		define_functions!(Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln, Fac);
+		define_functions!(
+			Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln, Fac
+		);
 
 		self.add_expression_fun(
 			// todo add these as native expression functions
@@ -132,6 +134,7 @@ impl FormulaStore {
 		self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
 		self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
 		self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
+		self.add_symbol_from_string("binomial(n, k) = fac(n) / (fac(n - k) * fac(k))", false)?;
 
 		Ok(())
 	}
