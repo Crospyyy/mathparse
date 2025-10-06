@@ -2,6 +2,7 @@ use crate::logic::UiInteraction;
 use crate::ui::UiState;
 use crate::ui::bottom_panel::HistoryEntryContent::{Calculation, SymbolDefinition};
 use crate::ui::calculation_panel::{MulReplacement, StringWithInfo};
+use eframe::epaint::text::TextWrapMode;
 use eframe::epaint::{Margin, Shadow};
 use egui::style::ScrollStyle;
 use egui::{Frame, RichText, ScrollArea, Sides, Ui};
@@ -69,7 +70,7 @@ impl HistoryEntry {
 			RichText::new(text).size(12.0)
 		}
 
-		Sides::new().show(
+		Sides::new().wrap_mode(TextWrapMode::Wrap).shrink_left().show(
 			ui,
 			|ui| {
 				ui.horizontal(|ui| {
