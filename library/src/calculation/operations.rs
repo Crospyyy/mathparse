@@ -1,6 +1,7 @@
 use super::*;
 use crate::calculation::helper_functions::power_rational_and_rational;
 use crate::inexact_if_needed;
+use num_bigint::BigInt;
 
 /// Macro to implement operations that convert the number to a float and apply the operation
 macro_rules! float_op {
@@ -51,6 +52,27 @@ impl Number {
 		} else {
 			let float = self.get_float(ctx);
 			Self::from(inexact_if_needed!(float.floor(), float))
+		}
+	}
+	
+	pub fn fac(&self, ctx: &mut Context) -> Self {
+		if let Some(r) = self.get_exact_rational()
+			&& r.is_integer()
+			&& let Some(n) = r.numer().to_i32()
+		{
+			if n < 0 {
+				return Self::nan(None); // factorial is not defined for negative numbers
+			}
+			if n > 10000 {
+				return Self::nan(None); // prevent extremely long calculations
+			}
+			let mut result = BigInt::from(1);
+			for i in 1..=n {
+				result *= BigInt::from(i);
+			}
+			Self::from(BigRational::from_integer(result))
+		} else {
+			Self::nan(None)
 		}
 	}
 

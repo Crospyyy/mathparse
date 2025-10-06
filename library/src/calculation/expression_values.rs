@@ -22,6 +22,7 @@ pub(crate) enum ExpressionFunType {
 	Log2,
 	Log10,
 	Ln,
+	Fac,
 	AssertValueRange(ValueRange),
 }
 

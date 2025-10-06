@@ -1,6 +1,6 @@
 use crate::calculation::create_context;
 use crate::evaluation::DynamicResult;
-use crate::expression_values::ExpressionFunType;
+use crate::calculation::expression_values::ExpressionFunType;
 use crate::parsing::signature::ParamCount;
 use crate::{Element, ExpressionNumType, Number, create_default_context};
 use astro_float::ctx::Context;

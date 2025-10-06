@@ -1,8 +1,8 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
-use crate::expression_values::ValueRange;
+use expression_values::ValueRange;
 use crate::{Element, Number, NumberContext};
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
+use astro_float::{expr, BigFloat, Consts, Error, RoundingMode};
 use macros::formula_matches;
 use num_rational::BigRational;
 use num_traits::{Signed, ToPrimitive, Zero};
@@ -16,6 +16,7 @@ mod operations;
 #[cfg(test)]
 mod tests;
 mod trait_implementations;
+pub mod expression_values;
 
 static REGEX_NUMBER_UNDERSCORE_REMOVAL: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"(\d)_(\d)").unwrap());
 

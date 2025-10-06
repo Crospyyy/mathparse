@@ -5,7 +5,6 @@ use std::fmt::Debug;
 mod benchmarking;
 pub(crate) mod calculation;
 mod evaluation;
-mod expression_values;
 mod latex_conversion;
 mod optimization;
 mod outer_store_interation;
@@ -14,7 +13,7 @@ mod printing;
 mod storing;
 mod testing;
 
-use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+use calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
@@ -23,7 +22,7 @@ pub use evaluation::DynamicResult;
 pub use latex_conversion::convert_from_latex_if_needed;
 pub use outer_store_interation::{RunError, RunResult, RunSuccess};
 pub use outer_store_interation::{RunOptions, RunPrecision};
-pub use parsing::{Signature, get_fun_name_end_of_string};
+pub use parsing::{get_fun_name_end_of_string, Signature};
 pub use printing::{FormattedCalculationOutput, FormattingOptions};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
@@ -68,9 +67,9 @@ pub enum Number {
 
 #[allow(unused)]
 mod formula_short {
-	use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+	use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 	use crate::{Element, Number};
-	use astro_float::{BigFloat, Error};
+	use astro_float::Error;
 
 	pub fn nan(error: Option<Error>) -> Element {
 		Element::Number(Number::nan(error))

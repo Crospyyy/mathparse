@@ -1,4 +1,4 @@
-use crate::expression_values::{ExpressionFunType, ExpressionNumType};
+use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
 use crate::{Element, FormulaStore, Number, formula};
 use astro_float::Error;

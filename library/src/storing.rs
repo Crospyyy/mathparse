@@ -1,4 +1,4 @@
-use crate::expression_values::{CustomFunction, FunctionExpression};
+use crate::calculation::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{
 	OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
@@ -45,8 +45,8 @@ impl FormulaStore {
                 $(self.add_expression_fun(&stringify!($op).to_lowercase(), ExpressionFunType::$op, false)?);+
             }
         }
-
-		define_functions!(Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln);
+		
+		define_functions!(Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln, Fac);
 
 		self.add_expression_fun(
 			// todo add these as native expression functions

@@ -1,5 +1,5 @@
+use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType, FunctionExpression};
 use crate::calculation::helper_functions::sin_radians;
-use crate::expression_values::{ExpressionFunType, ExpressionNumType, FunctionExpression};
 use crate::parsing::signature::ParamCount;
 use crate::{Number, only_in_debug};
 use astro_float::ctx::Context;
@@ -74,6 +74,7 @@ impl ExpressionFunType {
 			ExpressionFunType::Log2 => FunctionExpression::single_argument(Number::log2),
 			ExpressionFunType::Log10 => FunctionExpression::single_argument(Number::log10),
 			ExpressionFunType::Ln => FunctionExpression::single_argument(Number::ln),
+			ExpressionFunType::Fac => FunctionExpression::single_argument(Number::fac),
 			ExpressionFunType::AssertValueRange(range) => {
 				let r = *range;
 				FunctionExpression::single_argument(move |n, _c| {
@@ -101,6 +102,7 @@ impl ExpressionFunType {
 			| ExpressionFunType::Log10
 			| ExpressionFunType::Ln
 			| ExpressionFunType::SinWithRadians
+			| ExpressionFunType::Fac
 			| ExpressionFunType::AssertValueRange(_) => ParamCount::Exactly(1),
 			ExpressionFunType::Custom(c) => c.param_count,
 		}

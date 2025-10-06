@@ -1,6 +1,6 @@
 use crate::benchmarking::Benchmark;
 use crate::calculation::create_context;
-use crate::expression_values::FunctionExpression;
+use crate::calculation::expression_values::FunctionExpression;
 use crate::outer_store_interation::RunPrecision;
 use crate::storing::FormulaStore;
 use crate::{Element, Number, RoundingMode, only_in_debug};
