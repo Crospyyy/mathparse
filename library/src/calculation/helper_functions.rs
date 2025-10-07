@@ -1,7 +1,7 @@
 use crate::Number;
 use crate::calculation::helper_functions;
 use astro_float::ctx::Context;
-use astro_float::{BigFloat, Error, Word, expr};
+use astro_float::{BigFloat, Error, expr};
 use num_bigint::BigInt;
 use num_rational::BigRational;
 use num_traits::{One, Signed, ToPrimitive, Zero};

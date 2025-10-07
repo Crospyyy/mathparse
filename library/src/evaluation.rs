@@ -161,8 +161,7 @@ impl Element {
 pub enum EvaluationError {
 	#[error("Could not parse formula: {0}")]
 	CouldNotParse(String),
-	#[error("Could not evaluate formula: {0}")]
-	CouldNotEvaluate(String),
+	// todo find a better way to to error handling
 }
 
 #[derive(Debug, Error)]

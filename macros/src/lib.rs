@@ -155,27 +155,6 @@ mod new {
 				var_count,
 			)
 		}
-		fn create_code_variable_input_len(matcher: ElementMatcher) -> MatchOutput {
-			let match_output = matcher.perform_match(quote! { i });
-			let tokens = match_output.tokens;
-			if match_output.var_count == 0 {
-				MatchOutput::no_output(quote! {
-					for i in inputs {
-						#tokens?;
-					}
-					Some(())
-				})
-			} else {
-				MatchOutput::with_output(
-					quote! {
-						Some(inputs.iter().map(|i| {
-							#tokens?
-						}).collect::<Option<Vec<_>>>()?);
-					},
-					1,
-				)
-			}
-		}
 	}
 
 	pub enum MatchElement {
@@ -199,18 +178,6 @@ mod new {
 				"fun" => Some(MatchElement::Function),
 				"neg" => Some(MatchElement::Negate),
 				_ => None,
-			}
-		}
-
-		fn as_str(&self) -> &str {
-			match self {
-				MatchElement::Number => "num",
-				MatchElement::Negate => "neg",
-				MatchElement::Plus => "plus",
-				MatchElement::Multiply => "mul",
-				MatchElement::Pow => "pow",
-				MatchElement::Variable => "var",
-				MatchElement::Function => "fun",
 			}
 		}
 

@@ -55,7 +55,7 @@ impl Number {
 		}
 	}
 	
-	pub fn fac(&self, ctx: &mut Context) -> Self {
+	pub fn fac(&self, _ctx: &mut Context) -> Self {
 		if let Some(r) = self.get_exact_rational()
 			&& r.is_integer()
 			&& let Some(n) = r.numer().to_i32()

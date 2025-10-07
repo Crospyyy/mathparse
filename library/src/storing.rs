@@ -156,7 +156,9 @@ impl FormulaStore {
 
 		self.add_symbol_from_sig_and_def(sig, def, dry_run)
 	}
-
+	
+	// todo check whether this is needed
+	#[allow(unused)]
 	pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
 		let symbol = self.symbols.get(name)?;
 		Some(InsertionElement {

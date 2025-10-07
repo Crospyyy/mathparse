@@ -140,11 +140,4 @@ impl Number {
 			Number::Float(f) => f.is_zero(),
 		}
 	}
-
-	pub(crate) fn is_integer(&self) -> bool {
-		match self {
-			Number::Rational(r) => r.is_integer(),
-			Number::Float(f) => f.is_int(),
-		}
-	}
 }

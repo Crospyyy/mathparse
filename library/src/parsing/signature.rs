@@ -46,15 +46,6 @@ impl ParamCount {
 }
 
 impl Signature {
-	pub(crate) fn accepts_param_count(&self, count: usize) -> bool {
-		match self {
-			Signature::NumberOrFunction => false,
-			Signature::Number => false,
-			Signature::Function(params) => params.len() == count,
-			Signature::FunctionNOrMoreParams(n) => count >= *n,
-			Signature::Conflicting => false,
-		}
-	}
 	fn refine_with(&mut self, new: Self) {
 		match (&mut *self, new) {
 			(Signature::NumberOrFunction, new) => *self = new,

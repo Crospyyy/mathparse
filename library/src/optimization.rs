@@ -1,14 +1,12 @@
 use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
-use crate::{Element, FormulaStore, Number, formula};
+use crate::{Element, Number, formula};
 use astro_float::Error;
 use macros::formula_matches;
 use num_bigint::BigInt;
 use num_rational::BigRational;
-use num_traits::{One, Signed, ToPrimitive, Zero};
-use std::cmp::PartialEq;
+use num_traits::{One, Signed, Zero};
 use std::ops::{Add, Mul, Neg, Rem};
-use strum::{EnumCount, IntoEnumIterator};
 
 #[macro_export]
 macro_rules! quick_match {
@@ -42,6 +40,8 @@ fn remove_inverse_elements(elements: &mut Vec<Element>, inverse_check: impl Fn(&
 }
 
 impl Element {
+	// todo check whether this can be used instead of the manual approach in optimize_and_reduce
+	#[allow(unused)]
 	fn run_on_children(&mut self, operation: &mut impl Fn(&mut Element) -> bool) -> bool {
 		match self {
 			Element::Plus(elements)
@@ -140,8 +140,8 @@ impl Element {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
 				};
-
-				let result = list_element_optimization(
+				
+				let _ = list_element_optimization(
 					elements,
 					BigRational::add,
 					inverse_check,
@@ -357,7 +357,7 @@ fn list_element_optimization(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::{FormulaStore, create_default_context};
+	use crate::FormulaStore;
 
 	macro_rules! test {
 		($input:expr,$expected:expr) => {{

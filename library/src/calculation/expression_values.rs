@@ -5,7 +5,7 @@ use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum ExpressionFunType {
+pub enum ExpressionFunType {
 	Custom(CustomFunction),
 	Sin,
 	SinWithRadians,
@@ -33,7 +33,7 @@ impl From<CustomFunction> for ExpressionFunType {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct CustomFunction {
+pub struct CustomFunction {
 	pub(crate) name: &'static str,
 	pub(crate) param_count: ParamCount,
 	function: FunctionExpression,
@@ -43,7 +43,8 @@ impl CustomFunction {
 	pub(crate) fn new(name: &'static str, param_count: ParamCount, function: FunctionExpression) -> Self {
 		CustomFunction { name, param_count, function }
 	}
-
+	
+	#[allow(unused)]
 	pub(crate) fn single_argument(
 		name: &'static str, param_count: ParamCount, f: impl Fn(&Number, &mut Context) -> Number + 'static,
 	) -> Self {

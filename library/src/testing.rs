@@ -1,32 +1,3 @@
-mod some_future_work {
-	macro_rules! write_if_true {
-        (true, $($tts:tt),+) => {
-            $($tts),+
-        };
-        (false, $($tts:tt),+)=>{}
-    }
-
-	macro_rules! any {
-        () => {
-            false
-        };
-        (true) => {true};
-        (false) => {false};
-        (true, $($l:tt),+) => {
-            true
-        };
-        (false, $($l:tt),+) => {
-            any!($($l),*)
-        };
-    }
-
-	macro_rules! input_contains_var {
-		($($tts:tt),+) => {
-			input_contains_var!()
-		};
-	}
-}
-
 #[macro_export]
 macro_rules! fancy_assert_eq {
 	($a:expr, $b:expr) => {

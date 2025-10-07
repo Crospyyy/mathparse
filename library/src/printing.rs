@@ -1,6 +1,6 @@
 use crate::calculation::create_context;
-use crate::evaluation::DynamicResult;
 use crate::calculation::expression_values::ExpressionFunType;
+use crate::evaluation::DynamicResult;
 use crate::parsing::signature::ParamCount;
 use crate::{Element, ExpressionNumType, Number, create_default_context};
 use astro_float::ctx::Context;
@@ -204,7 +204,9 @@ impl ScientificNumber {
 			float.convert_to_radix(Radix::Dec, ctx.rounding_mode(), ctx.consts()).ok()?;
 		Some(Self::new(sign.is_negative(), numbers, exp as i64 - 1))
 	}
-
+	
+	// todo check whether this is needed
+	#[allow(unused)]
 	fn from_scientific_string(str: &str) -> Option<Self> {
 		let (a, b) = str.split_once("e")?;
 		let b: i64 = b.parse().ok()?;
@@ -269,8 +271,8 @@ impl ScientificNumber {
 			vec.remove(0);
 			*exponent -= 1;
 		}
-
-		let mut has_rounded = true;
+		
+		let has_rounded;
 
 		let mut rounded = if round_to_decimals >= vec.len() {
 			has_rounded = false;

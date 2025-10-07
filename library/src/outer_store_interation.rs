@@ -27,14 +27,6 @@ impl RunResult {
 	}
 }
 
-impl RunError {
-	fn to_string(self) -> String {
-		match self {
-			RunError::ParseFailed(s) | RunError::CalculationFailed(s) | RunError::FailedToAddSymbol(s) => s,
-		}
-	}
-}
-
 impl From<RunSuccess> for RunResult {
 	fn from(value: RunSuccess) -> Self {
 		RunResult::Ok(value)
