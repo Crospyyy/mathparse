@@ -173,9 +173,11 @@ impl Display for ExpansionError {
 }
 
 impl FormulaStore {
-	fn expand_and_optimize(&self, formula: &mut Element, benchmark: &mut Benchmark) -> Result<()> {
+	pub(crate) fn expand_and_optimize(
+		&self, formula: &mut Element, benchmark: &mut Benchmark, exclude_from_expansion: &HashSet<String>,
+	) -> Result<()> {
 		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
-		benchmark.benchmark("Expansion", || self.expand_formula(formula, &HashSet::new()))?;
+		benchmark.benchmark("Expansion", || self.expand_formula(formula, exclude_from_expansion))?;
 		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
 		Ok(())
 	}
@@ -209,9 +211,10 @@ impl FormulaStore {
 	) -> Result<DynamicResult> {
 		let mut formula = benchmark
 			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
-
-		benchmark
-			.bench_with_inner("Expansion and Optimization", |b| self.expand_and_optimize(&mut formula, b))?;
+		
+		benchmark.bench_with_inner("Expansion and Optimization", |b| {
+			self.expand_and_optimize(&mut formula, b, &HashSet::new())
+		})?;
 
 		// todo add result caching
 

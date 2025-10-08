@@ -1,5 +1,5 @@
-use crate::{Element, Symbol};
-use anyhow::{Result, anyhow};
+use crate::Element;
+use anyhow::{anyhow, Result};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
@@ -32,7 +32,7 @@ pub(crate) struct OptionalFunctionDeclarationArguments(Option<FunctionDeclaratio
 
 #[derive(Debug)]
 pub(crate) struct FunctionDeclarationArguments {
-	names: Vec<String>,
+	pub(crate) names: Vec<String>,
 	signatures: Signatures,
 }
 
@@ -319,21 +319,8 @@ impl Element {
 	}
 }
 
-impl OptionalFunctionDeclarationArguments {
-	pub(crate) fn create_symbol(self, formula: Element) -> Symbol {
-		Symbol::new(
-			self.0
-				.as_ref()
-				.map(|args| Signature::Function(args.get_signatures_in_right_order()))
-				.unwrap_or(Signature::Number),
-			self.0.map(|b| b.names),
-			formula,
-		)
-	}
-}
-
 impl FunctionDeclarationArguments {
-	fn get_signatures_in_right_order(&self) -> Vec<Signature> {
+	pub(crate) fn get_signatures_in_right_order(&self) -> Vec<Signature> {
 		self.names.iter().map(|name| self.signatures.get(name).unwrap().clone()).collect::<Vec<_>>()
 	}
 }

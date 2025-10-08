@@ -2,7 +2,7 @@ use crate::calculation::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{
 	OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
-use crate::{Element, ExpressionFunType, ExpressionNumType, Number, NumberContext};
+use crate::{Benchmark, Element, ExpressionFunType, ExpressionNumType, Number, NumberContext};
 use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
@@ -15,7 +15,10 @@ pub struct FormulaStore {
 pub struct Symbol {
 	signature: Signature,
 	params: Option<Vec<String>>,
+	/// This is the original unoptimized formula
 	formula: Element,
+	/// This is the optimized and reduced formula, which is used for evaluation
+	optimized_formula: Element,
 }
 
 #[derive(Debug)]
@@ -45,7 +48,7 @@ impl FormulaStore {
                 $(self.add_expression_fun(&stringify!($op).to_lowercase(), ExpressionFunType::$op, false)?);+
             }
         }
-		
+
 		define_functions!(
 			Sin, Asin, Cos, Acos, Tan, Atan, Floor, Ceil, Round, Abs, Rem, Log2, Log10, Ln, Fac
 		);
@@ -131,6 +134,7 @@ impl FormulaStore {
 
 		self.add_expression_var("pi", ExpressionNumType::Pi, false)?;
 		self.add_expression_var("e", ExpressionNumType::E, false)?;
+
 		self.add_symbol_from_string("deg(rad)=rad/pi*180", false)?;
 		self.add_symbol_from_string("rad(deg)=deg/180*pi", false)?;
 		self.add_symbol_from_string("sqrt(x)=x^(1/2)", false)?;
@@ -156,7 +160,7 @@ impl FormulaStore {
 
 		self.add_symbol_from_sig_and_def(sig, def, dry_run)
 	}
-	
+
 	// todo check whether this is needed
 	#[allow(unused)]
 	pub(crate) fn get_insertion_element(&self, name: &str) -> Option<InsertionElement> {
@@ -238,8 +242,14 @@ impl FormulaStore {
 			self.symbols.iter().map(|(name, symbol)| (name.clone(), symbol.signature.clone())).collect();
 
 		Self::resolve_formula_and_refine_call_signature(&mut opt_func_args, &content, &defined_signatures)?;
-
-		Ok(opt_func_args.create_symbol(content))
+		let mut optimized_and_expanded = content.clone();
+		let flatten = opt_func_args.iter().flat_map(|x| x.names.iter()).cloned().collect();
+		self.expand_and_optimize(
+			&mut optimized_and_expanded,
+			&mut Benchmark::new("Expansion and optimization"),
+			&flatten,
+		)?;
+		Ok(Symbol::create_from(opt_func_args, content, optimized_and_expanded))
 	}
 
 	fn add_symbol_from_sig_and_def(
@@ -260,7 +270,11 @@ impl FormulaStore {
 		let parameter_names = None;
 		let signature = Signature::Number;
 		let formula = Element::NumberWithExpression { expr_value };
-		self.add_symbol_new(&name.to_string(), Symbol::new(signature, parameter_names, formula), dry_run)
+		self.add_symbol_new(
+			&name.to_string(),
+			Symbol::new(signature, parameter_names, formula.clone(), formula),
+			dry_run,
+		)
 	}
 
 	fn add_expression_fun(
@@ -272,13 +286,33 @@ impl FormulaStore {
 			ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
 		};
 		let element = Element::FunctionWithExpression { arguments: vec![], expr_value };
-		self.add_symbol_new(&name.to_string(), Symbol::new(signature, params, element), dry_run)
+		self.add_symbol_new(
+			&name.to_string(),
+			Symbol::new(signature, params, element.clone(), element),
+			dry_run,
+		)
 	}
 }
 
 impl Symbol {
-	pub(crate) fn new(signature: Signature, params: Option<Vec<String>>, formula: Element) -> Self {
-		Self { signature, params, formula }
+	pub(crate) fn create_from(
+		opt_func_args: OptionalFunctionDeclarationArguments, content: Element, optimized: Element,
+	) -> Self {
+		Symbol::new(
+			opt_func_args
+				.as_ref()
+				.map(|args| Signature::Function(args.get_signatures_in_right_order()))
+				.unwrap_or(Signature::Number),
+			opt_func_args.as_ref().map(|b| b.names.clone()),
+			content,
+			optimized,
+		)
+	}
+	
+	pub(crate) fn new(
+		signature: Signature, params: Option<Vec<String>>, formula: Element, optimized: Element,
+	) -> Self {
+		Self { signature, params, formula, optimized_formula: optimized }
 	}
 
 	pub fn signature(&self) -> &Signature {
