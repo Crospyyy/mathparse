@@ -123,7 +123,7 @@ impl Display for Page {
 impl UiState {
 	pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol) {
 		self.bottom_panel.history.push(HistoryEntry::new_symbol_definition(
-			symbol.symbol().get_full_string(symbol.name(), &mut create_default_context()).replace_mul(),
+			symbol.symbol().get_full_string(symbol.name(), &mut create_default_context(), false).replace_mul(),
 		));
 	}
 
@@ -144,7 +144,7 @@ impl UiState {
 		let elements = formula_store.get_symbols_sorted();
 		let ctx = &mut create_default_context();
 		self.bottom_panel.all_symbol_strings =
-			elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx).replace_mul()).collect();
+			elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx, false).replace_mul()).collect();
 	}
 
 	pub fn show_tab_selector(&mut self, ui: &mut Ui) {

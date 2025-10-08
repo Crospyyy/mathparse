@@ -190,7 +190,7 @@ impl FormulaStore {
 			all_names.clear();
 			formula.get_all_unexpanded_names(&mut all_names);
 			all_names = all_names.difference(ignore_names).cloned().collect();
-			only_in_debug!(dbg!(&all_names));
+			//only_in_debug!(dbg!(&all_names));
 
 			if all_names.is_empty() {
 				break;

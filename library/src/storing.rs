@@ -2,7 +2,8 @@ use crate::calculation::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{
 	OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
-use crate::{Benchmark, Element, ExpressionFunType, ExpressionNumType, Number, NumberContext};
+use crate::{Benchmark, Element, ExpressionFunType, ExpressionNumType, Number, NumberContext, debug_print};
+use crate::{create_default_context, only_in_debug};
 use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
 use std::collections::{HashMap, HashSet};
@@ -157,7 +158,6 @@ impl FormulaStore {
 		let (sig, def) = string.split_once("=").ok_or(anyhow!("String doesn't contain '='"))?;
 		let sig = Element::parse(sig).map_err(|err| anyhow!("First formula could not be parsed: {err}"))?;
 		let def = Element::parse(def).map_err(|err| anyhow!("Second formula could not be parsed: {err}"))?;
-
 		self.add_symbol_from_sig_and_def(sig, def, dry_run)
 	}
 
@@ -176,11 +176,11 @@ impl FormulaStore {
 		&self, name: &str, ignore_names: &HashSet<String>,
 	) -> Result<InsertionElement> {
 		let symbol = self.symbols.get(name).ok_or(anyhow!("Symbol `{name}` not found"))?;
-
-		let mut formula = symbol.formula.clone();
-		let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
-
-		self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
+		
+		let formula = symbol.optimized_formula.clone();
+		// let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
+		
+		// self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
 
 		Ok(InsertionElement { name: name.to_string(), parameters: symbol.params.clone(), formula })
 	}
@@ -259,6 +259,11 @@ impl FormulaStore {
 		self.check_symbol_name_availability(symbol_name_and_args.get_name())?;
 
 		let symbol = self.resolve_new_symbol(symbol_name_and_args.function_args, def)?;
+		
+		debug_print!(
+			"New formula definition: {}",
+			symbol.get_full_string(&symbol_name_and_args.name, &mut create_default_context(), true)
+		);
 		self.add_symbol_new(&symbol_name_and_args.name, symbol.clone(), dry_run)?;
 
 		Ok(NamedSymbol::new(symbol_name_and_args.name, symbol))
@@ -308,7 +313,7 @@ impl Symbol {
 			optimized,
 		)
 	}
-	
+
 	pub(crate) fn new(
 		signature: Signature, params: Option<Vec<String>>, formula: Element, optimized: Element,
 	) -> Self {
@@ -338,9 +343,15 @@ impl Symbol {
 			Signature::Conflicting => "Conflicting".to_owned(),
 		}
 	}
-
-	pub fn get_full_string(&self, name: &str, ctx: &mut NumberContext) -> String {
-		format!("{} = {}", self.get_signature_string(name), self.formula.get_string(ctx))
+	
+	pub fn get_full_string(
+		&self, name: &str, ctx: &mut NumberContext, show_optimized_formula: bool,
+	) -> String {
+		format!(
+			"{} = {}",
+			self.get_signature_string(name),
+			if show_optimized_formula { &self.optimized_formula } else { &self.formula }.get_string(ctx)
+		)
 	}
 }
 

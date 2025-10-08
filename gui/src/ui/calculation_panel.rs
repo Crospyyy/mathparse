@@ -189,7 +189,7 @@ impl UiState {
 			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
 				let string =
-					s.symbol().get_full_string(s.name(), &mut create_default_context()).replace_mul();
+					s.symbol().get_full_string(s.name(), &mut create_default_context(), false).replace_mul();
 				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string)))
 			},
 		}
