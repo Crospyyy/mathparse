@@ -164,6 +164,7 @@ impl Number {
 	}
 
 	pub fn pow(&self, other: &Self, ctx: &mut Context) -> Self {
+        println!("Calculating power: {:?} ^ {:?}", self, other);
 		if let (Some(a), Some(b)) = (self.get_exact_rational(), other.get_exact_rational()) {
 			return power_rational_and_rational(&a, &b, ctx);
 		}

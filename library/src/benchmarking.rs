@@ -53,6 +53,7 @@ impl Task {
 		}
 	}
 	pub fn print(&self) {
+        println!();
 		self.print_internal(0);
 	}
 }

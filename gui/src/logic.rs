@@ -34,11 +34,14 @@ impl Backend {
 	}
 
 	pub fn dry_run(&mut self, input: &str) -> RunResult {
-		self.formula_store.run_new(
+        let mut benchmark = Benchmark::new("Dry run");
+        let result = self.formula_store.run_new(
 			input,
 			RunOptions { dry_run: true, ..Default::default() },
-			&mut Benchmark::new("Dry run"),
-		)
+            &mut benchmark,
+        );
+        benchmark.finalize().print();
+        result
 	}
 
 	pub fn run(&mut self, input: &str) -> RunResult {

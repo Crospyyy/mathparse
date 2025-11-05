@@ -1,6 +1,6 @@
-use crate::only_in_debug;
-use crate::{debug_print, Number};
 use crate::calculation::helper_functions;
+use crate::only_in_debug;
+use crate::{Number, debug_print};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Error, expr};
 use num_bigint::BigInt;
@@ -35,8 +35,11 @@ macro_rules! inexact_if_needed {
 pub(super) fn power_rational_and_rational(
 	base: &BigRational, exponent: &BigRational, ctx: &mut Context,
 ) -> Number {
+    println!("Both base and exponent are exact rationals: {:?} ^ {:?}", base, exponent);
+
 	macro_rules! safe_return_float_calculation {
 		() => {
+            println!("Falling back to float calculation");
 			let base_float = float_from_rational(base, ctx);
 			let exponent_float = float_from_rational(exponent, ctx);
 			return Number::from(inexact_if_needed!(
@@ -47,17 +50,21 @@ pub(super) fn power_rational_and_rational(
 		};
 	}
 	if exponent.is_one() {
+        println!("Exponent is 1, returning base");
 		// x1/x2 ^ 1 = x1/x2
 		return Number::from(base.clone());
 	}
 	if exponent.is_zero() {
+        println!("Exponent is 0, returning 1");
 		// x1/x2 ^ 0 = 1
 		return Number::from(BigRational::one()); // any number to the power of 0 is 1
 	}
 	if exponent.is_negative() && base.is_zero() {
+        println!("Exponent is negative and base is zero, returning NaN");
 		return Number::nan(Some(Error::DivisionByZero));
 	}
 	if exponent.is_integer() {
+        println!("Exponent is an integer");
 		// x1/x2 ^ n = (x1^n)/(x2^n)
 		let Some(exp) = exponent.to_i32() else {
 			safe_return_float_calculation!();
@@ -68,11 +75,15 @@ pub(super) fn power_rational_and_rational(
 	// If we reach here, we have a case like x1/x2 ^ (n/d)
 	// We now do the following: (x1/x2 ^ n) ^ (1/d)
 	let intermediate = if exponent.numer().is_one() {
+        println!("Exponent numerator is 1");
 		base.clone()
 	} else {
+        println!("Exponent numerator is not 1");
 		let Some(exp) = exponent.numer().to_i32() else {
+            println!("Exponent numerator is not convertible to i32");
 			safe_return_float_calculation!();
 		};
+        println!("Raising base to the power of exponent numerator: {}", exp);
 		base.pow(exp)
 	};
 
@@ -199,8 +210,8 @@ pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
 		let negator = negate_if(1, mapped.is_negative());
 		return Number::from(expr!(negator * sqrt(3) / 2, &mut *ctx));
 	}
-	
-	debug_print!("return sin calculation");
+    
+    debug_print!("return sin calculation");
 	let float = helper_functions::float_from_rational(&(mapped / rational(2)), ctx);
 	let sin_input = expr!(float * pi, &mut *ctx);
 	let float = expr!(sin(sin_input), &mut *ctx);

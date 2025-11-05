@@ -12,6 +12,7 @@ use num_traits::ToPrimitive;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::RangeInclusive;
+use std::time::Instant;
 use thiserror::Error;
 
 #[derive(Debug, PartialEq)]
@@ -104,8 +105,12 @@ impl Element {
 		let mut last_rounded = None;
 
 		while last_rounded.is_none() || precision <= max_precision {
-			ctx = create_context(precision);
-			let result = self.eval(&mut ctx)?;
+            let mut benchmark =
+                Benchmark::new(format!("Single Dynamic Precision Eval with precision: {}", precision));
+            
+            ctx = benchmark.benchmark("Create Context", || create_context(precision));
+            
+            let result = benchmark.benchmark("Evaluation", || self.eval(&mut ctx))?;
 
 			let mut rounded = match result {
 				Number::Float(f) => f,
@@ -116,8 +121,10 @@ impl Element {
 			if rounded.is_nan() {
 				return Ok(DynamicResult::Checked { num: rounded, precision });
 			}
-			rounded = rounded.round(min_precision, RoundingMode::ToEven);
+            rounded = benchmark.benchmark("Rounding", || rounded.round(min_precision, RoundingMode::ToEven));
 			rounded.set_inexact(true);
+            
+            benchmark.finalize().print();
 
 			if let Some(last_rounded) = &mut last_rounded
 				&& *last_rounded == rounded
@@ -209,9 +216,11 @@ impl FormulaStore {
 	pub fn eval_new(
 		&self, formula_str: &str, precision: RunPrecision, benchmark: &mut Benchmark,
 	) -> Result<DynamicResult> {
+        println!("Running input: {}", formula_str);
+
 		let mut formula = benchmark
 			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
-		
+
 		benchmark.bench_with_inner("Expansion and Optimization", |b| {
 			self.expand_and_optimize(&mut formula, b, &HashSet::new())
 		})?;
@@ -241,13 +250,14 @@ mod tests {
 	use crate::outer_store_interation::RunOptions;
 	use crate::outer_store_interation::RunPrecision;
 	use crate::storing::FormulaStore;
-	use crate::{DynamicResult, Element, FormattingOptions, Number};
+    use crate::{DynamicResult, Element, FormattingOptions, Number, RoundingMode};
 	use astro_float::ctx::Context;
-	use astro_float::{BigFloat, Error};
+    use astro_float::{expr, BigFloat, Consts, Error};
 	use num_rational::BigRational;
 	use std::str::FromStr;
-
-	#[test]
+    use std::time::Instant;
+    
+    #[test]
 	fn test_as_i32() {
 		fn create_exact_result(num: i64) -> DynamicResult {
 			DynamicResult::Exact(BigRational::from_integer(num.into()))
@@ -547,4 +557,25 @@ mod tests {
 		);
 		check_calculation!("log2(1024)", "10");
 	}
+    
+    #[test]
+    fn test_speed_of_pow_op() {
+        let element = Element::parse("2.2^2.2222").unwrap();
+        println!("{}", element.get_debug_string());
+        let t1 = Instant::now();
+        let number = element
+            .eval(&mut Context::new(2048, RoundingMode::ToEven, Consts::new().unwrap(), -10000000, 1000000))
+            .unwrap();
+        println!("{:?}", t1.elapsed());
+    }
+    
+    #[test]
+    fn test_speed_of_float_lib() {
+        let base = BigFloat::from_str("2.2").unwrap();
+        let exponent = BigFloat::from_str("2.222232").unwrap();
+        let mut ctx = Context::new(2048, RoundingMode::ToEven, Consts::new().unwrap(), -10000000, 1000000);
+        let t1 = Instant::now();
+        let _result = expr!(pow(base, exponent), &mut ctx);
+        println!("{:?}", t1.elapsed());
+    }
 }
