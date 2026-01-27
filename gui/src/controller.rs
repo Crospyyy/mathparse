@@ -11,8 +11,8 @@ use egui::{
 	RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui, Visuals, Widget,
 };
 use library::{
-	FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
-	get_fun_name_end_of_string, only_in_debug, quick_match,
+	FormattingOptions, FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed,
+	debug_print, get_fun_name_end_of_string, only_in_debug, quick_match,
 };
 use regex::Regex;
 use std::process::exit;
@@ -312,7 +312,9 @@ impl Window {
 		match action {
 			RunSuccess::AddedSymbol(symbol) => {
 				self.ui_state.update_all_symbol_strings(self.backend.formula_store());
-				self.ui_state.add_symbol_definition_to_history(symbol);
+				let value =
+					self.backend.run(symbol.name()).calculation_result();
+				self.ui_state.add_symbol_definition_to_history(symbol, value);
 				self.ui_state.calculation_panel.calculation_input.top_user_input.clear();
 				self.update_calculation_result();
 			},

@@ -6,7 +6,7 @@ use eframe::epaint::text::TextWrapMode;
 use eframe::epaint::{Margin, Shadow};
 use egui::style::ScrollStyle;
 use egui::{Frame, RichText, ScrollArea, Sides, Ui};
-use library::{FormulaStore, NamedSymbol, create_default_context};
+use library::{DynamicResult, FormattingOptions, FormulaStore, NamedSymbol, create_default_context};
 use std::fmt::Display;
 
 pub struct BottomPanel {
@@ -28,7 +28,8 @@ pub struct HistoryEntry {
 
 pub enum HistoryEntryContent {
 	Calculation(String, StringWithInfo),
-	SymbolDefinition(String),
+	/// The defined symbol string, and optionally its value as string
+	SymbolDefinition(String, Option<String>),
 	ClearedSymbols,
 }
 
@@ -36,7 +37,7 @@ impl HistoryEntryContent {
 	fn get_symbol(&self) -> char {
 		match self {
 			Calculation(..) => '🖩',
-			SymbolDefinition(_) => '⛃',
+			SymbolDefinition(..) => '⛃',
 			HistoryEntryContent::ClearedSymbols => '🗑',
 		}
 	}
@@ -47,8 +48,8 @@ impl HistoryEntry {
 		Self { content: Calculation(input, result), time: Self::get_current_time() }
 	}
 
-	pub fn new_symbol_definition(string: String) -> Self {
-		Self { content: SymbolDefinition(string), time: Self::get_current_time() }
+	pub fn new_symbol_definition(string: String, value: Option<String>) -> Self {
+		Self { content: SymbolDefinition(string, value), time: Self::get_current_time() }
 	}
 
 	pub fn cleared_symbols() -> Self {
@@ -89,8 +90,15 @@ impl HistoryEntry {
 								});
 							});
 						},
-						SymbolDefinition(text) => {
-							ui.label(regular_format(text));
+						SymbolDefinition(text, value) => {
+							if let Some(value) = value {
+								ui.vertical(|ui| {
+									ui.label(regular_format(text));
+									ui.label(regular_format(format!("= {}", value)));
+								});
+							} else {
+								ui.label(regular_format(text));
+							}
 						},
 						HistoryEntryContent::ClearedSymbols => {
 							ui.label(regular_format("Cleared Symbols"));
@@ -121,10 +129,19 @@ impl Display for Page {
 }
 
 impl UiState {
-	pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol) {
-		self.bottom_panel.history.push(HistoryEntry::new_symbol_definition(
-			symbol.symbol().get_full_string(symbol.name(), &mut create_default_context(), false).replace_mul(),
-		));
+	pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol, value: Option<DynamicResult>) {
+		let mut value =
+			value.map(|r| r.to_string_detailed(FormattingOptions::default()).get_string().to_owned());
+		let formula_string = symbol.symbol().formula().get_string(&mut create_default_context());
+		if value.as_ref().is_some_and(|value_string| value_string == &formula_string) {
+			value = None;
+		}
+		let symbol_string = symbol
+			.symbol()
+			.get_full_string(symbol.name(), &mut create_default_context(), false)
+			.replace_mul();
+
+		self.bottom_panel.history.push(HistoryEntry::new_symbol_definition(symbol_string, value));
 	}
 
 	pub fn add_calculation_to_history(&mut self, input: String, result: StringWithInfo) {
@@ -143,8 +160,10 @@ impl UiState {
 	pub fn update_all_symbol_strings(&mut self, formula_store: &FormulaStore) {
 		let elements = formula_store.get_symbols_sorted();
 		let ctx = &mut create_default_context();
-		self.bottom_panel.all_symbol_strings =
-			elements.iter().map(|(name, symbol)| symbol.get_full_string(name, ctx, false).replace_mul()).collect();
+		self.bottom_panel.all_symbol_strings = elements
+			.iter()
+			.map(|(name, symbol)| symbol.get_full_string(name, ctx, false).replace_mul())
+			.collect();
 	}
 
 	pub fn show_tab_selector(&mut self, ui: &mut Ui) {
