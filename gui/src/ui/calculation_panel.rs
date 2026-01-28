@@ -188,8 +188,7 @@ impl UiState {
 				Ok(OutputString::Result(self.format_number_result(r)))
 			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
-				let string =
-					s.symbol().get_full_string(s.name(), &mut create_default_context(), false).replace_mul();
+				let string = s.get_full_string(&mut create_default_context(), false).replace_mul();
 				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string)))
 			},
 		}

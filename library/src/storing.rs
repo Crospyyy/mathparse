@@ -176,10 +176,10 @@ impl FormulaStore {
 		&self, name: &str, ignore_names: &HashSet<String>,
 	) -> Result<InsertionElement> {
 		let symbol = self.symbols.get(name).ok_or(anyhow!("Symbol `{name}` not found"))?;
-		
+
 		let formula = symbol.optimized_formula.clone();
 		// let params_hashset = HashSet::from_iter(symbol.params.iter().flatten().cloned());
-		
+
 		// self.expand_formula(&mut formula, &ignore_names.union(&params_hashset).cloned().collect())?;
 
 		Ok(InsertionElement { name: name.to_string(), parameters: symbol.params.clone(), formula })
@@ -259,7 +259,7 @@ impl FormulaStore {
 		self.check_symbol_name_availability(symbol_name_and_args.get_name())?;
 
 		let symbol = self.resolve_new_symbol(symbol_name_and_args.function_args, def)?;
-		
+
 		debug_print!(
 			"New formula definition: {}",
 			symbol.get_full_string(&symbol_name_and_args.name, &mut create_default_context(), true)
@@ -343,7 +343,7 @@ impl Symbol {
 			Signature::Conflicting => "Conflicting".to_owned(),
 		}
 	}
-	
+
 	pub fn get_full_string(
 		&self, name: &str, ctx: &mut NumberContext, show_optimized_formula: bool,
 	) -> String {
@@ -366,6 +366,10 @@ impl NamedSymbol {
 
 	pub fn symbol(&self) -> &Symbol {
 		&self.symbol
+	}
+
+	pub fn get_full_string(&self, ctx: &mut NumberContext, show_optimized_formula: bool) -> String {
+		self.symbol.get_full_string(&self.name, ctx, show_optimized_formula)
 	}
 }
 

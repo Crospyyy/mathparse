@@ -136,10 +136,7 @@ impl UiState {
 		if value.as_ref().is_some_and(|value_string| value_string == &formula_string) {
 			value = None;
 		}
-		let symbol_string = symbol
-			.symbol()
-			.get_full_string(symbol.name(), &mut create_default_context(), false)
-			.replace_mul();
+		let symbol_string = symbol.get_full_string(&mut create_default_context(), false).replace_mul();
 
 		self.bottom_panel.history.push(HistoryEntry::new_symbol_definition(symbol_string, value));
 	}
