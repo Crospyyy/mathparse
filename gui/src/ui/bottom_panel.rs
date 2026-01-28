@@ -1,13 +1,14 @@
-use crate::logic::UiInteraction;
+use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
 use crate::ui::bottom_panel::HistoryEntryContent::{Calculation, SymbolDefinition};
-use crate::ui::calculation_panel::{MulReplacement, StringWithInfo};
+use crate::ui::calculation_panel::MulReplacement;
 use eframe::epaint::text::TextWrapMode;
 use eframe::epaint::{Margin, Shadow};
 use egui::style::ScrollStyle;
 use egui::{Frame, RichText, ScrollArea, Sides, Ui};
-use library::{DynamicResult, FormattingOptions, FormulaStore, NamedSymbol, create_default_context};
+use library::{FormulaStore, NamedSymbol, StringWithInfo, create_default_context};
 use std::fmt::Display;
+use std::ops::Not;
 
 pub struct BottomPanel {
 	pub selected_page: Page,
@@ -29,7 +30,7 @@ pub struct HistoryEntry {
 pub enum HistoryEntryContent {
 	Calculation(String, StringWithInfo),
 	/// The defined symbol string, and optionally its value as string
-	SymbolDefinition(String, Option<String>),
+	SymbolDefinition(String, Option<StringWithInfo>),
 	ClearedSymbols,
 }
 
@@ -44,16 +45,8 @@ impl HistoryEntryContent {
 }
 
 impl HistoryEntry {
-	pub fn new_calculation(input: String, result: StringWithInfo) -> Self {
-		Self { content: Calculation(input, result), time: Self::get_current_time() }
-	}
-
-	pub fn new_symbol_definition(string: String, value: Option<String>) -> Self {
-		Self { content: SymbolDefinition(string, value), time: Self::get_current_time() }
-	}
-
-	pub fn cleared_symbols() -> Self {
-		Self { content: HistoryEntryContent::ClearedSymbols, time: Self::get_current_time() }
+	pub fn new(content: HistoryEntryContent) -> Self {
+		Self { content, time: Self::get_current_time() }
 	}
 
 	fn get_current_time() -> String {
@@ -94,7 +87,12 @@ impl HistoryEntry {
 							if let Some(value) = value {
 								ui.vertical(|ui| {
 									ui.label(regular_format(text));
-									ui.label(regular_format(format!("= {}", value)));
+									ui.horizontal(|ui| {
+										ui.label(regular_format(&value.main));
+										if let Some(info) = &value.info {
+											ui.label(smaller_format(info).weak());
+										}
+									});
 								});
 							} else {
 								ui.label(regular_format(text));
@@ -129,20 +127,26 @@ impl Display for Page {
 }
 
 impl UiState {
-	pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol, value: Option<DynamicResult>) {
-		let mut value =
-			value.map(|r| r.to_string_detailed(FormattingOptions::default()).get_string().to_owned());
-		let formula_string = symbol.symbol().formula().get_string(&mut create_default_context());
-		if value.as_ref().is_some_and(|value_string| value_string == &formula_string) {
-			value = None;
-		}
+	pub fn add_symbol_definition_to_history(&mut self, symbol: NamedSymbol, backend: &mut Backend) {
+		let value = symbol
+			.symbol()
+			.formula()
+			.is_number()
+			.not()
+			.then(|| {
+				backend
+					.run(&symbol.get_signature_string())
+					.calculation_result()
+					.map(|r| self.format_number_result(r))
+			})
+			.flatten();
 		let symbol_string = symbol.get_full_string(&mut create_default_context(), false).replace_mul();
-
-		self.bottom_panel.history.push(HistoryEntry::new_symbol_definition(symbol_string, value));
+		self.bottom_panel.history.push(HistoryEntry::new(SymbolDefinition(symbol_string, value)));
 	}
 
 	pub fn add_calculation_to_history(&mut self, input: String, result: StringWithInfo) {
-		self.bottom_panel.history.push(HistoryEntry::new_calculation(input.clone().replace_mul(), result))
+		let input1 = input.clone().replace_mul();
+		self.bottom_panel.history.push(HistoryEntry::new(Calculation(input1, result)))
 	}
 
 	pub fn last_history_entry_matches(&self, input: &str) -> bool {

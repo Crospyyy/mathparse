@@ -360,6 +360,10 @@ impl NamedSymbol {
 		Self { name, symbol }
 	}
 
+	pub fn get_signature_string(&self) -> String {
+		self.symbol.get_signature_string(&self.name)
+	}
+
 	pub fn name(&self) -> &String {
 		&self.name
 	}

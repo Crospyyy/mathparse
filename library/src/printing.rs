@@ -204,7 +204,7 @@ impl ScientificNumber {
 			float.convert_to_radix(Radix::Dec, ctx.rounding_mode(), ctx.consts()).ok()?;
 		Some(Self::new(sign.is_negative(), numbers, exp as i64 - 1))
 	}
-	
+
 	// todo check whether this is needed
 	#[allow(unused)]
 	fn from_scientific_string(str: &str) -> Option<Self> {
@@ -271,7 +271,7 @@ impl ScientificNumber {
 			vec.remove(0);
 			*exponent -= 1;
 		}
-		
+
 		let has_rounded;
 
 		let mut rounded = if round_to_decimals >= vec.len() {
@@ -410,6 +410,34 @@ impl DynamicResult {
 					num.to_string()
 				};
 				FormattedCalculationOutput::ApproximationReachedLimit { result: string }
+			},
+		}
+	}
+}
+
+pub struct StringWithInfo {
+	/// The main string representation (e.g., "= 1.23" or "≈ 3.14")
+	pub main: String,
+	/// Additional info string (e.g., " (rounded)" or " (512-bit precision)")
+	pub info: Option<String>,
+}
+
+impl StringWithInfo {
+	pub fn new(r: DynamicResult, rounding_digits: usize) -> StringWithInfo {
+		let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
+		let output = r.to_string_detailed(formatting_options);
+		match output {
+			FormattedCalculationOutput::Exact { result, has_rounded } => StringWithInfo {
+				main: format!("= {}", result),
+				info: has_rounded.then_some(" (rounded)".to_owned()),
+			},
+			FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => StringWithInfo {
+				main: format!("≈ {}", result),
+				info: Some(format!(" ({}-bit precision)", precision_bits)),
+			},
+			FormattedCalculationOutput::ApproximationReachedLimit { result } => StringWithInfo {
+				main: format!("≈ {}", result),
+				info: Some(" (reached precision limit)".to_owned()),
 			},
 		}
 	}

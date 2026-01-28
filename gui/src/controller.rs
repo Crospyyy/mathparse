@@ -1,6 +1,6 @@
 use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
-use crate::ui::bottom_panel::{HistoryEntry, Page};
+use crate::ui::bottom_panel::{HistoryEntry, HistoryEntryContent, Page};
 use crate::window_control::{WindowState, switch_visibility};
 use crate::{Window, logic};
 use eframe::{App, CreationContext, Frame};
@@ -146,7 +146,10 @@ impl Window {
 						return;
 					}
 					self.backend.clear_custom_symbols();
-					self.ui_state.bottom_panel.history.push(HistoryEntry::cleared_symbols());
+					self.ui_state
+						.bottom_panel
+						.history
+						.push(HistoryEntry::new(HistoryEntryContent::ClearedSymbols));
 					self.ui_state.update_all_symbol_strings(self.backend.formula_store());
 					self.update_calculation_result();
 				},
@@ -312,9 +315,7 @@ impl Window {
 		match action {
 			RunSuccess::AddedSymbol(symbol) => {
 				self.ui_state.update_all_symbol_strings(self.backend.formula_store());
-				let value =
-					self.backend.run(symbol.name()).calculation_result();
-				self.ui_state.add_symbol_definition_to_history(symbol, value);
+				self.ui_state.add_symbol_definition_to_history(symbol, &mut self.backend);
 				self.ui_state.calculation_panel.calculation_input.top_user_input.clear();
 				self.update_calculation_result();
 			},

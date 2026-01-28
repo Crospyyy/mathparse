@@ -23,7 +23,7 @@ pub use latex_conversion::convert_from_latex_if_needed;
 pub use outer_store_interation::{RunError, RunResult, RunSuccess};
 pub use outer_store_interation::{RunOptions, RunPrecision};
 pub use parsing::{get_fun_name_end_of_string, Signature};
-pub use printing::{FormattedCalculationOutput, FormattingOptions};
+pub use printing::{FormattedCalculationOutput, FormattingOptions, StringWithInfo};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]

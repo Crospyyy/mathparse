@@ -14,8 +14,8 @@ use egui::{
 	Widget,
 };
 use library::{
-	DynamicResult, FormattedCalculationOutput, FormattingOptions, FormulaStore, RunError, RunResult,
-	RunSuccess, create_default_context,
+	DynamicResult, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, StringWithInfo,
+	create_default_context,
 };
 
 pub struct CalculationPanel {
@@ -37,11 +37,6 @@ impl CalculationPanel {
 pub enum OutputString {
 	SymbolDefinition(String),
 	Result(StringWithInfo),
-}
-
-pub struct StringWithInfo {
-	pub main: String,
-	pub info: Option<String>,
 }
 
 pub(crate) struct CalculationInput {
@@ -70,25 +65,6 @@ struct InputCache {
 enum CursorRange {
 	Single(usize),
 	Range(usize, usize),
-}
-
-fn format_number_result(r: DynamicResult, rounding_digits: usize) -> StringWithInfo {
-	let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
-	let output = r.to_string_detailed(formatting_options);
-	match output {
-		FormattedCalculationOutput::Exact { result, has_rounded } => StringWithInfo {
-			main: format!("= {}", result),
-			info: has_rounded.then_some(" (rounded)".to_owned()),
-		},
-		FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => StringWithInfo {
-			main: format!("≈ {}", result),
-			info: Some(format!(" ({} bit precision)", precision_bits)),
-		},
-		FormattedCalculationOutput::ApproximationReachedLimit { result } => StringWithInfo {
-			main: format!("≈ {}", result),
-			info: Some(" (reached precision limit)".to_owned()),
-		},
-	}
 }
 
 pub(super) trait MulReplacement {
@@ -195,7 +171,7 @@ impl UiState {
 	}
 
 	pub fn format_number_result(&self, r: DynamicResult) -> StringWithInfo {
-		format_number_result(r, self.calculation_panel.rounding_digits)
+		StringWithInfo::new(r, self.calculation_panel.rounding_digits)
 	}
 
 	pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
