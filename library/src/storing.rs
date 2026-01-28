@@ -173,7 +173,7 @@ impl FormulaStore {
 	}
 
 	pub(crate) fn get_insertion_element_expanded(
-		&self, name: &str, ignore_names: &HashSet<String>,
+		&self, name: &str, _ignore_names: &HashSet<String>,
 	) -> Result<InsertionElement> {
 		let symbol = self.symbols.get(name).ok_or(anyhow!("Symbol `{name}` not found"))?;
 
@@ -205,8 +205,8 @@ impl FormulaStore {
 		Signatures::refine_signature_and_undefined(
 			symbol_name_and_args,
 			&mut required_signatures,
-			&content,
-			&defined_signatures,
+			content,
+			defined_signatures,
 		)?;
 
 		if !required_signatures.is_empty() {
@@ -380,21 +380,21 @@ impl NamedSymbol {
 impl InsertionElement {
 	pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element> {
 		if let Some(insert_args) = &self.parameters {
-			if let Element::FunctionWithExpression { expr_value, .. } = &self.formula {
-				if insert_args.is_empty() {
-					if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
-						return Err(anyhow!(
-							"The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
-							self.name,
-							expr_value.get_param_count(),
-							param_values.len()
-						));
-					}
-					return Ok(Element::FunctionWithExpression {
-						arguments: param_values,
-						expr_value: expr_value.clone(),
-					});
+			if let Element::FunctionWithExpression { expr_value, .. } = &self.formula
+				&& insert_args.is_empty()
+			{
+				if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
+					return Err(anyhow!(
+						"The function `{}` expects parameters, that match {:?}, but {} parameters were provided",
+						self.name,
+						expr_value.get_param_count(),
+						param_values.len()
+					));
 				}
+				return Ok(Element::FunctionWithExpression {
+					arguments: param_values,
+					expr_value: expr_value.clone(),
+				});
 			}
 			let self_arguments = param_values;
 			if insert_args.len() != self_arguments.len() {
@@ -537,11 +537,11 @@ mod tests {
 		use astro_float::expr;
 
 		let ctx = &mut create_default_context();
-		assert_eq!(ctx.const_pi().inexact(), true);
-		assert_eq!(ctx.const_e().inexact(), true);
-		assert_eq!(BigFloat::nan(None).inexact(), false);
-		assert_eq!(expr!(sqrt(16), &mut *ctx).inexact(), false);
-		assert_eq!(expr!(pow(16, 0.5), &mut *ctx).inexact(), true);
+		assert!(ctx.const_pi().inexact());
+		assert!(ctx.const_e().inexact());
+		assert!(!BigFloat::nan(None).inexact());
+		assert!(!expr!(sqrt(16), &mut *ctx).inexact());
+		assert!(expr!(pow(16, 0.5), &mut *ctx).inexact());
 	}
 
 	macro_rules! check_add {

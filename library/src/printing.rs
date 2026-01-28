@@ -19,8 +19,12 @@ pub enum Formula {
 	Number(String),
 	Variable(String),
 	Pow(Box<Formula>, Box<Formula>),
+	#[allow(dead_code)]
 	Division(Box<Formula>, Box<Formula>),
-	Function { name: String, arguments: Vec<Formula> },
+	Function {
+		name: String,
+		arguments: Vec<Formula>,
+	},
 	ForcedBrackets(Vec<Self>),
 }
 

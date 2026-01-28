@@ -140,7 +140,7 @@ impl Element {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
 				};
-				
+
 				let _ = list_element_optimization(
 					elements,
 					BigRational::add,
@@ -214,7 +214,7 @@ impl Element {
 							.is_some_and(|x| x.is_integer() && is_even(&x))
 					{
 						// (-a)^(even integer) = (a)^(even integer)
-						*this_base = Box::new(this_base_number.abs().into());
+						**this_base = this_base_number.abs().into();
 						return;
 					}
 					if formula_matches!(this_exponent.as_ref(), num(-1))

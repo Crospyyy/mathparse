@@ -4,6 +4,9 @@ use astro_float::ctx::Context;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 
+type SingleArgFn = Rc<dyn Fn(&Number, &mut Context) -> Number>;
+type MultipleArgFn = Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum ExpressionFunType {
 	Custom(CustomFunction),
@@ -43,7 +46,7 @@ impl CustomFunction {
 	pub(crate) fn new(name: &'static str, param_count: ParamCount, function: FunctionExpression) -> Self {
 		CustomFunction { name, param_count, function }
 	}
-	
+
 	#[allow(unused)]
 	pub(crate) fn single_argument(
 		name: &'static str, param_count: ParamCount, f: impl Fn(&Number, &mut Context) -> Number + 'static,
@@ -71,8 +74,8 @@ impl PartialEq for CustomFunction {
 
 #[derive(Clone)]
 pub enum FunctionExpression {
-	SingleArgument(Rc<dyn Fn(&Number, &mut Context) -> Number>),
-	MultipleArguments(Rc<dyn Fn(Vec<Number>, &mut Context) -> Number>),
+	SingleArgument(SingleArgFn),
+	MultipleArguments(MultipleArgFn),
 }
 
 impl Debug for FunctionExpression {

@@ -121,7 +121,6 @@ impl Window {
 pub struct WindowState {
 	request_focus: Arc<AtomicBool>,
 	last_frame_had_focus: bool,
-	centered: bool,
 	pinned: Arc<AtomicBool>,
 	pub(crate) last_window_size: Arc<Mutex<Option<Vec2>>>,
 }
@@ -131,7 +130,6 @@ impl WindowState {
 		Self {
 			request_focus: Arc::new(AtomicBool::new(false)),
 			last_frame_had_focus: false,
-			centered: false,
 			pinned: Arc::new(AtomicBool::new(false)),
 			last_window_size: Arc::new(Mutex::new(None)),
 		}

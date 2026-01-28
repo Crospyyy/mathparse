@@ -43,7 +43,7 @@ fn test_parsing_on_manual_formulas() {
 fn debug_formula_parsing_process(input: &str, expected_output: Option<Element>) {
 	let mut ctx = create_default_context();
 	let expected_output = expected_output;
-	let cow = Element::preprocess_string(&input);
+	let cow = Element::preprocess_string(input);
 
 	println!();
 	print_heading("Starting formula parsing");

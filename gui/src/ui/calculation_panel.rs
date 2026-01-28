@@ -42,6 +42,7 @@ pub enum OutputString {
 pub(crate) struct CalculationInput {
 	pub(crate) top_user_input: String,
 	pub(crate) top_user_input_id: Id,
+	#[allow(unused)]
 	top_input_cache: InputCache,
 }
 
@@ -63,7 +64,9 @@ struct InputCache {
 
 #[derive(PartialEq)]
 enum CursorRange {
+	#[allow(unused)]
 	Single(usize),
+	#[allow(unused)]
 	Range(usize, usize),
 }
 
@@ -140,8 +143,8 @@ fn find_bracket_range(str: &str, idx: usize) -> Option<(usize, usize)> {
 	}
 	indenting = 0;
 	let mut max = chars.len();
-	for i in idx..chars.len() {
-		indenting += match chars[i] {
+	for (i, &ch) in chars.iter().enumerate().skip(idx) {
+		indenting += match ch {
 			')' => -1,
 			'(' => 1,
 			_ => continue,

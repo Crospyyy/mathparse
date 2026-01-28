@@ -36,7 +36,7 @@ impl Element {
 	pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
 		let b = benchmark;
 
-		let cow = b.benchmark("preprocess_string_minus", || Element::preprocess_string(&input));
+		let cow = b.benchmark("preprocess_string_minus", || Element::preprocess_string(input));
 		let chars = b.benchmark("convert_to_chars", || cow.chars().collect::<Vec<_>>());
 		let mut start = 0;
 		let mut formula = b.benchmark("resolve_brackets", || Element::resolve_brackets(&chars, &mut start));

@@ -11,8 +11,8 @@ use egui::{
 	RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui, Visuals, Widget,
 };
 use library::{
-	FormattingOptions, FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed,
-	debug_print, get_fun_name_end_of_string, only_in_debug, quick_match,
+	FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
+	get_fun_name_end_of_string, only_in_debug, quick_match,
 };
 use regex::Regex;
 use std::process::exit;
@@ -480,10 +480,6 @@ pub fn get_cursor_pos<'a>(response: impl Into<CursorPosSource<'a>>) -> Option<us
 pub struct CursorPosSource<'a>(&'a Context, Id);
 
 impl<'a> CursorPosSource<'a> {
-	fn new(ctx: &'a Context, text_edit_id: Id) -> Self {
-		Self(ctx, text_edit_id)
-	}
-
 	fn ctx(&self) -> &Context {
 		self.0
 	}

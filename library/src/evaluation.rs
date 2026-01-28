@@ -3,7 +3,7 @@ use crate::calculation::create_context;
 use crate::calculation::expression_values::FunctionExpression;
 use crate::outer_store_interation::RunPrecision;
 use crate::storing::FormulaStore;
-use crate::{Element, Number, RoundingMode, only_in_debug};
+use crate::{Element, Number, RoundingMode};
 use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
@@ -211,7 +211,7 @@ impl FormulaStore {
 	) -> Result<DynamicResult> {
 		let mut formula = benchmark
 			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
-		
+
 		benchmark.bench_with_inner("Expansion and Optimization", |b| {
 			self.expand_and_optimize(&mut formula, b, &HashSet::new())
 		})?;
