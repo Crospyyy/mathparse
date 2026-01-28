@@ -1,6 +1,6 @@
 use crate::Window;
 use crate::controller::{get_cursor_pos, get_cursor_range};
-use crate::logic::UiInteraction;
+use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
 use eframe::emath::{Align2, Pos2, Rect, Vec2};
 use eframe::epaint::text::cursor::CCursor;
@@ -34,8 +34,10 @@ impl CalculationPanel {
 	}
 }
 
+#[derive(Debug)]
 pub enum OutputString {
-	SymbolDefinition(String),
+	/// A string representing the definition of a symbol, along with an optional value
+	SymbolDefinition(String, Option<StringWithInfo>),
 	Result(StringWithInfo),
 }
 
@@ -158,7 +160,9 @@ fn find_bracket_range(str: &str, idx: usize) -> Option<(usize, usize)> {
 }
 
 impl UiState {
-	pub fn generate_output_string(&self, result: RunResult) -> Result<OutputString, String> {
+	pub fn generate_output_string(
+		&self, result: RunResult, backend: &mut Backend,
+	) -> Result<OutputString, String> {
 		match result {
 			RunResult::Err(RunError::ParseFailed(s)) => Err(format!("Parse Error: {}", s)),
 			RunResult::Err(RunError::CalculationFailed(s)) => Err(format!("Calculation Error: {}", s)),
@@ -168,7 +172,12 @@ impl UiState {
 			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
 				let string = s.get_full_string(&mut create_default_context(), false).replace_mul();
-				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string)))
+				let value = backend
+					.evaluate(dbg!(s.symbol().formula().clone()))
+					.flatten()
+					.ok()
+					.map(|d| self.format_number_result(d));
+				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string), value))
 			},
 		}
 	}
@@ -198,19 +207,25 @@ impl UiState {
 		response
 	}
 
-	pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) {
+	pub fn show_inline_result(&self, ui: &mut Ui, output: &TextEditOutput) -> Option<()> {
 		let pos = last_caret_pos_from_output(output);
-		if let Some(Ok(result)) = &self.calculation_panel.calculation_result
-			&& let OutputString::Result(StringWithInfo { main, .. }) = result
-		{
-			ui.painter_at(output.response.rect).text(
-				pos,
-				Align2::LEFT_TOP,
-				" ".to_owned() + main,
-				TEXTEDIT_FONT_ID,
-				ui.visuals().text_color(),
-			);
-		}
+		println!("Showing inline result at pos {:?}", pos);
+		let calculation_result = self.calculation_panel.calculation_result.as_ref()?.as_ref().ok()?;
+		println!("Calculation result: {:?}", calculation_result);
+		let text = match calculation_result {
+			OutputString::SymbolDefinition(_, Some(value)) => &value.main,
+			OutputString::Result(StringWithInfo { main, .. }) => main,
+			_ => return None,
+		};
+
+		ui.painter_at(output.response.rect).text(
+			pos,
+			Align2::LEFT_TOP,
+			" ".to_owned() + text,
+			TEXTEDIT_FONT_ID,
+			ui.visuals().text_color(),
+		);
+		Some(())
 	}
 
 	pub fn show_brackets_highlighting(&self, ui: &mut Ui, output: &TextEditOutput) -> Option<()> {
@@ -258,7 +273,7 @@ impl UiState {
 		match &self.calculation_panel.calculation_result {
 			Some(Ok(result)) => {
 				let (main, info) = match result {
-					OutputString::SymbolDefinition(main) => (main, None),
+					OutputString::SymbolDefinition(main, _) => (main, None),
 					OutputString::Result(StringWithInfo { main, info }) => (main, info.as_ref()),
 				};
 				job.append(main, 0.0, format.clone());

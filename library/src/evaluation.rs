@@ -212,13 +212,19 @@ impl FormulaStore {
 		let mut formula = benchmark
 			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
 
+		self.eval_new_without_parsing(precision, benchmark, &mut formula)?
+	}
+
+	pub fn eval_new_without_parsing(
+		&self, precision: RunPrecision, benchmark: &mut Benchmark, formula: &mut Element,
+	) -> Result<Result<DynamicResult>> {
 		benchmark.bench_with_inner("Expansion and Optimization", |b| {
-			self.expand_and_optimize(&mut formula, b, &HashSet::new())
+			self.expand_and_optimize(formula, b, &HashSet::new())
 		})?;
 
 		// todo add result caching
 
-		match precision {
+		Ok(match precision {
 			RunPrecision::Fixed(p) => {
 				let mut ctx = create_context(p);
 				match benchmark.benchmark("Evaluation", || formula.eval(&mut ctx))? {
@@ -228,7 +234,7 @@ impl FormulaStore {
 			},
 			RunPrecision::Dynamic(min, max) => benchmark
 				.benchmark("Dynamic Precision Evaluation", || formula.eval_dynamic_precision(min, max)),
-		}
+		})
 	}
 
 	pub const DEFAULT_PRECISION_RANGE: RangeInclusive<u32> = 512..=(1 << 20);

@@ -1,7 +1,9 @@
 use crate::ui::bottom_panel::Page;
 use anyhow::Result;
 use egui::Response;
-use library::{Benchmark, FormulaStore, RunOptions, RunResult, RunSuccess, Symbol, only_in_debug};
+use library::{
+	Benchmark, DynamicResult, Element, FormulaStore, RunOptions, RunResult, RunSuccess, Symbol, only_in_debug,
+};
 use std::collections::HashSet;
 
 pub struct Backend {
@@ -31,6 +33,11 @@ impl Backend {
 
 	pub(crate) fn formula_store(&self) -> &FormulaStore {
 		&self.formula_store
+	}
+
+	pub fn evaluate(&self, mut formula: Element) -> Result<Result<DynamicResult>> {
+		let benchmark = &mut Benchmark::new("Evaluate formula");
+		self.formula_store.eval_new_without_parsing(RunOptions::default().precision, benchmark, &mut formula)
 	}
 
 	pub fn dry_run(&mut self, input: &str) -> RunResult {

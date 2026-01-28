@@ -419,6 +419,7 @@ impl DynamicResult {
 	}
 }
 
+#[derive(Debug)]
 pub struct StringWithInfo {
 	/// The main string representation (e.g., "= 1.23" or "≈ 3.14")
 	pub main: String,

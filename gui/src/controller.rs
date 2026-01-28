@@ -176,7 +176,9 @@ impl Window {
 			self.ui_state.show_brackets_highlighting(ui, &output);
 			let autocompletion_visible =
 				self.ui_state.show_autocompletion(ui, &response, self.backend.formula_store());
-			if autocompletion_visible {
+			if autocompletion_visible
+				|| self.ui_state.calculation_panel.calculation_input.top_user_input.contains('=')
+			{
 				self.ui_state.show_inline_result(ui, &output);
 			}
 		}
@@ -298,7 +300,7 @@ impl Window {
 		self.ui_state.calculation_panel.calculation_result = if input.is_empty() {
 			None
 		} else {
-			Some(self.ui_state.generate_output_string(self.backend.dry_run(&input)))
+			Some(self.ui_state.generate_output_string(self.backend.dry_run(&input), &mut self.backend))
 		}
 	}
 
