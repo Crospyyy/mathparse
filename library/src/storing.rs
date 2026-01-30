@@ -331,7 +331,8 @@ impl Symbol {
 	pub fn formula(&self) -> &Element {
 		&self.formula
 	}
-
+	
+	/// Get the call signature string like `fun(a, b)` or `var_xy`
 	pub fn get_signature_string(&self, name: &str) -> String {
 		match self.signature {
 			Signature::NumberOrFunction => name.to_string(),

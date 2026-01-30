@@ -17,6 +17,7 @@ use library::{
 	DynamicResult, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, StringWithInfo,
 	create_default_context,
 };
+use std::ops::Not;
 
 pub struct CalculationPanel {
 	pub(crate) calculation_input: CalculationInput,
@@ -172,11 +173,19 @@ impl UiState {
 			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
 				let string = s.get_full_string(&mut create_default_context(), false).replace_mul();
-				let value = backend
-					.evaluate(dbg!(s.symbol().formula().clone()))
-					.flatten()
-					.ok()
-					.map(|d| self.format_number_result(d));
+				let value = s
+					.symbol()
+					.formula()
+					.is_number()
+					.not()
+					.then(|| {
+						backend
+							.evaluate(dbg!(s.symbol().formula().clone()))
+							.flatten()
+							.ok()
+							.map(|d| self.format_number_result(d))
+					})
+					.flatten();
 				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string), value))
 			},
 		}
