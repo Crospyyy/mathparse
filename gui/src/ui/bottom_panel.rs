@@ -1,12 +1,12 @@
 use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
 use crate::ui::bottom_panel::HistoryEntryContent::{Calculation, SymbolDefinition};
-use crate::ui::calculation_panel::MulReplacement;
+use crate::ui::calculation_panel::CONVERTER;
 use eframe::epaint::text::TextWrapMode;
 use eframe::epaint::{Margin, Shadow};
 use egui::style::ScrollStyle;
 use egui::{Frame, RichText, ScrollArea, Sides, Ui};
-use library::{FormulaStore, NamedSymbol, StringWithInfo, create_default_context};
+use library::{FormulaStore, NamedSymbol, ResultStringWithInfo, create_default_context};
 use std::fmt::Display;
 use std::ops::Not;
 
@@ -28,9 +28,9 @@ pub struct HistoryEntry {
 }
 
 pub enum HistoryEntryContent {
-	Calculation(String, StringWithInfo),
+	Calculation(String, ResultStringWithInfo),
 	/// The defined symbol string, and optionally its value as string
-	SymbolDefinition(String, Option<StringWithInfo>),
+	SymbolDefinition(String, Option<ResultStringWithInfo>),
 	ClearedSymbols,
 }
 
@@ -137,15 +137,16 @@ impl UiState {
 				backend
 					.run(&symbol.get_signature_string())
 					.calculation_result()
-					.map(|r| self.format_number_result(r))
+					.map(|r| self.create_result_string(r))
 			})
 			.flatten();
-		let symbol_string = symbol.get_full_string(&mut create_default_context(), false).replace_mul();
+		let symbol_string =
+			CONVERTER.convert_to_pretty(&symbol.get_full_string(&mut create_default_context(), false));
 		self.bottom_panel.history.push(HistoryEntry::new(SymbolDefinition(symbol_string, value)));
 	}
-
-	pub fn add_calculation_to_history(&mut self, input: String, result: StringWithInfo) {
-		let input1 = input.clone().replace_mul();
+	
+	pub fn add_calculation_to_history(&mut self, input: String, result: ResultStringWithInfo) {
+		let input1 = CONVERTER.convert_to_pretty(&input.clone());
 		self.bottom_panel.history.push(HistoryEntry::new(Calculation(input1, result)))
 	}
 
@@ -163,7 +164,7 @@ impl UiState {
 		let ctx = &mut create_default_context();
 		self.bottom_panel.all_symbol_strings = elements
 			.iter()
-			.map(|(name, symbol)| symbol.get_full_string(name, ctx, false).replace_mul())
+			.map(|(name, symbol)| CONVERTER.convert_to_pretty(&symbol.get_full_string(name, ctx, false)))
 			.collect();
 	}
 

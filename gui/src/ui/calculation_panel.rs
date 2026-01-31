@@ -6,6 +6,7 @@ use eframe::emath::{Align2, Pos2, Rect, Vec2};
 use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontId};
+use egui::ahash::HashMap;
 use egui::containers::menu::{MenuButton, MenuConfig};
 use egui::text::CCursorRange;
 use egui::text_edit::TextEditOutput;
@@ -13,11 +14,40 @@ use egui::{
 	DragValue, FontSelection, Id, Key, Label, PopupCloseBehavior, Response, RichText, Sides, TextEdit, Ui,
 	Widget,
 };
+use lazy_static::lazy_static;
 use library::{
-	DynamicResult, FormattingOptions, FormulaStore, RunError, RunResult, RunSuccess, StringWithInfo,
+	DynamicResult, FormattingOptions, FormulaStore, ResultStringWithInfo, RunError, RunResult, RunSuccess,
 	create_default_context,
 };
 use std::ops::Not;
+
+lazy_static! {
+	pub static ref CONVERTER: StringFormulaConverter =
+		StringFormulaConverter::new(&[('*', '×'), ('/', '÷'), ('-', '−')]);
+}
+
+pub struct StringFormulaConverter {
+	replacements: HashMap<char, char>,
+	replacements_rev: HashMap<char, char>,
+}
+
+impl StringFormulaConverter {
+	/// The `chars` parameter is a list of pairs of strings, where the first string is the usable version and the second string is the pretty version
+	pub fn new(chars: &[(char, char)]) -> Self {
+		Self {
+			replacements: chars.iter().copied().map(|(a, b)| (a.to_owned(), b.to_owned())).collect(),
+			replacements_rev: chars.iter().copied().map(|(a, b)| (b.to_owned(), a.to_owned())).collect(),
+		}
+	}
+	
+	pub fn convert_to_pretty(&self, str: &str) -> String {
+		str.chars().map(|c| *self.replacements.get(&c).unwrap_or(&c)).collect()
+	}
+	
+	pub fn convert_to_usable(&self, str: &str) -> String {
+		str.chars().map(|c| *self.replacements_rev.get(&c).unwrap_or(&c)).collect()
+	}
+}
 
 pub struct CalculationPanel {
 	pub(crate) calculation_input: CalculationInput,
@@ -38,8 +68,8 @@ impl CalculationPanel {
 #[derive(Debug)]
 pub enum OutputString {
 	/// A string representing the definition of a symbol, along with an optional value
-	SymbolDefinition(String, Option<StringWithInfo>),
-	Result(StringWithInfo),
+	SymbolDefinition(String, Option<ResultStringWithInfo>),
+	Result(ResultStringWithInfo),
 }
 
 pub(crate) struct CalculationInput {
@@ -71,21 +101,6 @@ enum CursorRange {
 	Single(usize),
 	#[allow(unused)]
 	Range(usize, usize),
-}
-
-pub(super) trait MulReplacement {
-	fn replace_mul(&self) -> String;
-	fn unreplace_mul(&self) -> String;
-}
-
-impl MulReplacement for String {
-	fn replace_mul(&self) -> String {
-		self.replace("*", "×")
-	}
-
-	fn unreplace_mul(&self) -> String {
-		self.replace("×", "*")
-	}
 }
 
 pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
@@ -161,7 +176,7 @@ fn find_bracket_range(str: &str, idx: usize) -> Option<(usize, usize)> {
 }
 
 impl UiState {
-	pub fn generate_output_string(
+	pub fn generate_result_string(
 		&self, result: RunResult, backend: &mut Backend,
 	) -> Result<OutputString, String> {
 		match result {
@@ -169,10 +184,11 @@ impl UiState {
 			RunResult::Err(RunError::CalculationFailed(s)) => Err(format!("Calculation Error: {}", s)),
 			RunResult::Err(RunError::FailedToAddSymbol(s)) => Err(format!("Error adding symbol: {}", s)),
 			RunResult::Ok(RunSuccess::CalculationResult(r)) => {
-				Ok(OutputString::Result(self.format_number_result(r)))
+				Ok(OutputString::Result(self.create_result_string(r)))
 			},
 			RunResult::Ok(RunSuccess::AddedSymbol(s)) => {
-				let string = s.get_full_string(&mut create_default_context(), false).replace_mul();
+				let string =
+					CONVERTER.convert_to_pretty(&s.get_full_string(&mut create_default_context(), false));
 				let value = s
 					.symbol()
 					.formula()
@@ -183,16 +199,18 @@ impl UiState {
 							.evaluate(dbg!(s.symbol().formula().clone()))
 							.flatten()
 							.ok()
-							.map(|d| self.format_number_result(d))
+							.map(|d| self.create_result_string(d))
 					})
 					.flatten();
 				Ok(OutputString::SymbolDefinition(format!("Create new symbol: {}", string), value))
 			},
 		}
 	}
-
-	pub fn format_number_result(&self, r: DynamicResult) -> StringWithInfo {
-		StringWithInfo::new(r, self.calculation_panel.rounding_digits)
+	
+	pub fn create_result_string(&self, r: DynamicResult) -> ResultStringWithInfo {
+		let mut info = ResultStringWithInfo::new(r, self.calculation_panel.rounding_digits);
+		info.main = CONVERTER.convert_to_pretty(&info.main);
+		info
 	}
 
 	pub(crate) fn show_top_input_textedit(&mut self, ui: &mut Ui) -> TextEditOutput {
@@ -200,7 +218,7 @@ impl UiState {
 		let _cursor_pos =
 			get_cursor_range((ui.ctx(), self.calculation_panel.calculation_input.top_user_input_id));
 		self.calculation_panel.calculation_input.top_user_input =
-			self.calculation_panel.calculation_input.top_user_input.replace_mul();
+			CONVERTER.convert_to_pretty(&self.calculation_panel.calculation_input.top_user_input);
 		let response = TextEdit::singleline(&mut self.calculation_panel.calculation_input.top_user_input)
 			.id(self.calculation_panel.calculation_input.top_user_input_id)
 			.hint_text("Enter formula here ...")
@@ -210,7 +228,7 @@ impl UiState {
 			.frame(false)
 			.show(ui);
 		self.calculation_panel.calculation_input.top_user_input =
-			self.calculation_panel.calculation_input.top_user_input.unreplace_mul();
+			CONVERTER.convert_to_usable(&self.calculation_panel.calculation_input.top_user_input);
 
 		ui.separator();
 		response
@@ -223,7 +241,7 @@ impl UiState {
 		println!("Calculation result: {:?}", calculation_result);
 		let text = match calculation_result {
 			OutputString::SymbolDefinition(_, Some(value)) => &value.main,
-			OutputString::Result(StringWithInfo { main, .. }) => main,
+			OutputString::Result(ResultStringWithInfo { main, .. }) => main,
 			_ => return None,
 		};
 
@@ -267,8 +285,8 @@ impl UiState {
 			if valid { bracket_highlight_color() } else { Color32::ORANGE.gamma_multiply(0.5) },
 		);
 	}
-
-	pub fn show_result_label(&mut self, ui: &mut Ui) {
+	
+	pub fn show_main_result(&mut self, ui: &mut Ui) {
 		// todo only show an error icon and display the error message in a tooltip
 
 		let mut format = TextFormat { font_id: FontId::proportional(20.0), ..Default::default() };
@@ -283,7 +301,7 @@ impl UiState {
 			Some(Ok(result)) => {
 				let (main, info) = match result {
 					OutputString::SymbolDefinition(main, _) => (main, None),
-					OutputString::Result(StringWithInfo { main, info }) => (main, info.as_ref()),
+					OutputString::Result(ResultStringWithInfo { main, info }) => (main, info.as_ref()),
 				};
 				job.append(main, 0.0, format.clone());
 				if let Some(info) = info {

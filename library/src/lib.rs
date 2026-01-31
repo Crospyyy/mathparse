@@ -13,17 +13,17 @@ mod printing;
 mod storing;
 mod testing;
 
-use calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use astro_float::RoundingMode;
 pub use astro_float::ctx::Context as NumberContext;
 pub use benchmarking::Benchmark;
 pub use calculation::create_default_context;
+use calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 pub use evaluation::DynamicResult;
 pub use latex_conversion::convert_from_latex_if_needed;
 pub use outer_store_interation::{RunError, RunResult, RunSuccess};
 pub use outer_store_interation::{RunOptions, RunPrecision};
-pub use parsing::{get_fun_name_end_of_string, Signature};
-pub use printing::{FormattedCalculationOutput, FormattingOptions, StringWithInfo};
+pub use parsing::{Signature, get_fun_name_end_of_string};
+pub use printing::{FormattedCalculationOutput, FormattingOptions, ResultStringWithInfo};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]

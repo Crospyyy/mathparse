@@ -15,6 +15,7 @@ use library::{
 	get_fun_name_end_of_string, only_in_debug, quick_match,
 };
 use regex::Regex;
+use std::ops::Not;
 use std::process::exit;
 use std::sync::LazyLock;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -192,8 +193,8 @@ impl Window {
 		}
 
 		self.handle_ui_input();
-
-		self.ui_state.show_result_label(ui);
+		
+		self.ui_state.show_main_result(ui);
 	}
 
 	fn select_all_in_textedit(&mut self, response: &Response) {
@@ -296,12 +297,11 @@ impl Window {
 
 	fn update_calculation_result(&mut self) {
 		let input = self.get_processed_input();
-
-		self.ui_state.calculation_panel.calculation_result = if input.is_empty() {
-			None
-		} else {
-			Some(self.ui_state.generate_output_string(self.backend.dry_run(&input), &mut self.backend))
-		}
+		
+		self.ui_state.calculation_panel.calculation_result = input.is_empty().not().then(|| {
+			let run_result = self.backend.dry_run(&input);
+			self.ui_state.generate_result_string(run_result, &mut self.backend)
+		});
 	}
 
 	fn try_apply_calculation(&mut self) {
@@ -325,7 +325,7 @@ impl Window {
 				if self.ui_state.last_history_entry_matches(&input) {
 					return;
 				}
-				self.ui_state.add_calculation_to_history(input, self.ui_state.format_number_result(result));
+				self.ui_state.add_calculation_to_history(input, self.ui_state.create_result_string(result));
 			},
 		}
 	}

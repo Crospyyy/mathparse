@@ -420,27 +420,29 @@ impl DynamicResult {
 }
 
 #[derive(Debug)]
-pub struct StringWithInfo {
+pub struct ResultStringWithInfo {
 	/// The main string representation (e.g., "= 1.23" or "≈ 3.14")
 	pub main: String,
 	/// Additional info string (e.g., " (rounded)" or " (512-bit precision)")
 	pub info: Option<String>,
 }
 
-impl StringWithInfo {
-	pub fn new(r: DynamicResult, rounding_digits: usize) -> StringWithInfo {
+impl ResultStringWithInfo {
+	pub fn new(r: DynamicResult, rounding_digits: usize) -> ResultStringWithInfo {
 		let formatting_options = FormattingOptions::default().with_rounding(rounding_digits);
 		let output = r.to_string_detailed(formatting_options);
 		match output {
-			FormattedCalculationOutput::Exact { result, has_rounded } => StringWithInfo {
+			FormattedCalculationOutput::Exact { result, has_rounded } => ResultStringWithInfo {
 				main: format!("= {}", result),
 				info: has_rounded.then_some(" (rounded)".to_owned()),
 			},
-			FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => StringWithInfo {
-				main: format!("≈ {}", result),
-				info: Some(format!(" ({}-bit precision)", precision_bits)),
+			FormattedCalculationOutput::ApproximationChecked { result, precision_bits } => {
+				ResultStringWithInfo {
+					main: format!("≈ {}", result),
+					info: Some(format!(" ({}-bit precision)", precision_bits)),
+				}
 			},
-			FormattedCalculationOutput::ApproximationReachedLimit { result } => StringWithInfo {
+			FormattedCalculationOutput::ApproximationReachedLimit { result } => ResultStringWithInfo {
 				main: format!("≈ {}", result),
 				info: Some(" (reached precision limit)".to_owned()),
 			},
