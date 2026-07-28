@@ -1,7 +1,10 @@
 use crate::Window;
 use eframe::emath::Vec2;
 use egui::{Context, Event, Id, Key, PointerButton, RawInput, Ui, ViewportCommand};
-use global_shortcuts::register_global_shortcut;
+#[cfg(target_os = "linux")]
+use global_shortcuts::register_global_shortcut_linux;
+#[cfg(target_os = "windows")]
+use global_shortcuts::register_global_shortcut_windows;
 use library::{debug_print, only_in_debug};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -148,7 +151,19 @@ impl WindowState {
 		let req_focus = self.request_focus.clone();
 		let last_window_size = self.last_window_size.clone();
 		let pinned = self.pinned.clone();
-		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
+		
+		#[cfg(target_os = "windows")]
+		register_global_shortcut_windows(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
+			let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
+			if pinned.load(Ordering::Relaxed) {
+				window_size = None;
+			}
+			switch_visibility(&ctx, true, window_size);
+			ctx.send_viewport_cmd(ViewportCommand::Focus);
+			req_focus.store(true, Ordering::Relaxed);
+		});
+		#[cfg(target_os = "linux")]
+		register_global_shortcut_linux(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
 			let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
 			if pinned.load(Ordering::Relaxed) {
 				window_size = None;

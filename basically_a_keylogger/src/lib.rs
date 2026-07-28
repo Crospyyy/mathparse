@@ -1,10 +1,17 @@
-use rdev::{Event, EventType, GrabError, grab};
 use std::sync::LazyLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::thread::JoinHandle;
-
+#[cfg(target_os = "windows")]
 pub use rdev::Key;
+#[cfg(target_os = "windows")]
+use rdev::{Event, EventType, GrabError, grab};
+
+#[cfg(target_os = "linux")]
+pub use handy_keys::Key;
+#[cfg(target_os = "linux")]
+use handy_keys::{Hotkey, HotkeyManager, Modifiers as HK_Modifiers};
+
 
 static REGISTERED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 static MODIFIER_STATE: LazyLock<ModifierState> = LazyLock::new(|| ModifierState::new());
@@ -54,7 +61,9 @@ impl Modifiers {
 	pub const CTRL: Self = Self { alt: false, shift: false, ctrl: true };
 }
 
-pub fn register_global_shortcut(
+
+#[cfg(target_os = "windows")]
+pub fn register_global_shortcut_windows(
 	check_modifiers: Modifiers, trigger_key: Key, shortcut_action: impl Fn() + 'static + Send,
 ) -> Option<JoinHandle<Result<(), Option<GrabError>>>> {
 	if REGISTERED.load(Ordering::Relaxed) {
@@ -100,5 +109,22 @@ pub fn register_global_shortcut(
 			return Err(Some(error));
 		};
 		return Ok(());
+	}))
+}
+
+#[cfg(target_os = "linux")]
+pub fn register_global_shortcut_linux(
+	check_modifiers: Modifiers, trigger_key: Key, shortcut_action: impl Fn() + 'static + Send,
+) -> handy_keys::Result<JoinHandle<()>>  {
+	let manager = HotkeyManager::new()?;
+	let hotkey = Hotkey::new(HK_Modifiers::CMD | HK_Modifiers::SHIFT, Key::K)?;
+	let id = manager.register(hotkey)?;
+	
+	println!("Registered hotkey: {:?}", id);
+	
+	Ok(thread::spawn(move || {
+		while let Ok(event) = manager.recv() {
+			println!("Hotkey triggered: {:?}", event.id);
+		}
 	}))
 }
