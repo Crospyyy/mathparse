@@ -1,7 +1,7 @@
 use crate::benchmarking::Benchmark;
 use crate::calculation::create_context;
 use crate::calculation::expression_values::FunctionExpression;
-use crate::outer_store_interation::RunPrecision;
+use crate::outer_store_interaction::RunPrecision;
 use crate::storing::FormulaStore;
 use crate::{Element, Number, RoundingMode};
 use anyhow::Result;
@@ -244,8 +244,8 @@ impl FormulaStore {
 mod tests {
 	use crate::benchmarking::Benchmark;
 	use crate::calculation::create_default_context;
-	use crate::outer_store_interation::RunOptions;
-	use crate::outer_store_interation::RunPrecision;
+	use crate::outer_store_interaction::RunOptions;
+	use crate::outer_store_interaction::RunPrecision;
 	use crate::storing::FormulaStore;
 	use crate::{DynamicResult, Element, FormattingOptions, Number};
 	use astro_float::ctx::Context;

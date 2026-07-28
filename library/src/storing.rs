@@ -528,7 +528,7 @@ mod tests {
 	use super::*;
 	use crate::benchmarking::Benchmark;
 	use crate::formula_short::{fun_expr, mul, num, var};
-	use crate::outer_store_interation::RunPrecision;
+	use crate::outer_store_interaction::RunPrecision;
 	use macros::formula_matches;
 
 	#[test]

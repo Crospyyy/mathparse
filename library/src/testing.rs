@@ -50,7 +50,7 @@ macro_rules! formula {
 pub mod test {
 	use crate::Number;
 	use crate::benchmarking::Benchmark;
-	use crate::outer_store_interation::RunPrecision;
+	use crate::outer_store_interaction::RunPrecision;
 	use crate::{Element, FormulaStore};
 	use macros::{formula_matches, return_tokens};
 
