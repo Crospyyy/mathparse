@@ -1,5 +1,5 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
-use crate::{Element, ExpandedElement, Number, ParsedElement};
+use crate::{Element, Number};
 use astro_float::BigFloat;
 use macros::formula_matches;
 use num_rational::BigRational;

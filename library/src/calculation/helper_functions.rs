@@ -1,6 +1,6 @@
-use crate::calculation::helper_functions;
 use crate::only_in_debug;
-use crate::{Number, debug_print};
+use crate::{debug_print, Number};
+use crate::calculation::helper_functions;
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Error, expr};
 use num_bigint::BigInt;

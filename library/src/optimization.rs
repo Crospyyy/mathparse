@@ -1,6 +1,6 @@
 use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
-use crate::{Element, ExpandedElement, Number, ParsedElement, formula};
+use crate::{Element, Number, formula};
 use astro_float::Error;
 use macros::formula_matches;
 use num_bigint::BigInt;
@@ -44,25 +44,20 @@ impl Element {
 	#[allow(unused)]
 	fn run_on_children(&mut self, operation: &mut impl Fn(&mut Element) -> bool) -> bool {
 		match self {
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => {
+			Element::Plus(elements)
+			| Element::Multiply(elements)
+			| Element::Function { arguments: elements, .. }
+			| Element::FunctionWithExpression { arguments: elements, .. } => {
 				elements.iter_mut().map(operation).reduce(|a, b| a || b).unwrap_or(false)
 			},
-			Element::Parsed(ParsedElement::Function { arguments: elements, .. })
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
-														  arguments: elements,
-														  ..
-													  })) => elements.iter_mut().map(operation).reduce(|a, b| a || b).unwrap_or(false),
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(base, exponent))) => {
-				operation(base) || operation(exponent)
-			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(element))) => operation(element),
-			Element::Parsed(ParsedElement::Variable(_))
+			Element::Pow(base, exponent) => operation(base) || operation(exponent),
+			Element::Negate(element) => operation(element),
+			Element::Variable(_)
 			| Element::Brackets(_)
 			| Element::String(_)
-			| Element::Parsed(ParsedElement::VariableOrFunction(_))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. })) => false,
+			| Element::VariableOrFunction(_)
+			| Element::Number(_)
+			| Element::NumberWithExpression { .. } => false,
 		}
 	}
 
@@ -81,21 +76,18 @@ impl Element {
 			// Elements, which can't be optimized further
 			Element::Brackets(_)
 			| Element::String(_)
-			| Element::Parsed(ParsedElement::Variable(_))
-			| Element::Parsed(ParsedElement::VariableOrFunction(_))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_))) => {},
+			| Element::Variable(_)
+			| Element::VariableOrFunction(_)
+			| Element::NumberWithExpression { .. }
+			| Element::Number(_) => {},
 
 			// Elements, which can be optimized
-			Element::Parsed(ParsedElement::Function { arguments, .. }) => {
+			Element::Function { arguments, .. } => {
 				for a in arguments {
 					a.optimize_and_reduce();
 				}
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
-														arguments,
-														expr_value,
-													})) => {
+			Element::FunctionWithExpression { arguments, expr_value } => {
 				for a in arguments.iter_mut() {
 					a.optimize_and_reduce();
 				}
@@ -144,7 +136,7 @@ impl Element {
 					_ => {},
 				}
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements))) => {
+			Element::Plus(elements) => {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
 				};
@@ -161,7 +153,7 @@ impl Element {
 					*self = replacement
 				}
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => {
+			Element::Multiply(elements) => {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, pow({ b }, num(-1))) || formula_matches!(b, pow({ a }, num(-1)))
 				};
@@ -182,7 +174,7 @@ impl Element {
 					self.optimize_and_reduce();
 				}
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(this_base, this_exponent))) => {
+			Element::Pow(this_base, this_exponent) => {
 				this_base.optimize_and_reduce();
 				this_exponent.optimize_and_reduce();
 
@@ -274,7 +266,7 @@ impl Element {
 					self.optimize_and_reduce();
 				}
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(x))) => {
+			Element::Negate(x) => {
 				x.optimize_and_reduce();
 				if let Some(num) = formula_matches!(x.as_ref(), num(x)) {
 					*self = num.neg().into();
@@ -350,12 +342,8 @@ fn list_element_optimization(
 	}
 	for e in other_elements {
 		match (is_plus, &e) {
-			(true, Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(inner)))) => {
-				new_elements.extend(inner.iter().cloned())
-			},
-			(false, Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(inner)))) => {
-				new_elements.extend(inner.iter().cloned())
-			},
+			(true, Element::Plus(inner)) => new_elements.extend(inner.iter().cloned()),
+			(false, Element::Multiply(inner)) => new_elements.extend(inner.iter().cloned()),
 			_ => new_elements.push(e),
 		}
 	}
@@ -402,13 +390,13 @@ mod tests {
 		test!(formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c")))), var("b"));
 
 		// Plus propagiert NaN
-		let nan_el = Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::nan(None))));
+		let nan_el = Element::Number(Number::nan(None));
 		let mut f = formula!(plus(var("x"), nan_el, var("y")));
 		f.optimize_and_reduce();
 		assert!(f.is_nan());
 
 		// Multiply propagiert NaN
-		let nan_el2 = Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::nan(None))));
+		let nan_el2 = Element::Number(Number::nan(None));
 		let mut f = mul([var("x"), nan_el2.clone(), var("y")]);
 		f.optimize_and_reduce();
 		assert!(f.is_nan());

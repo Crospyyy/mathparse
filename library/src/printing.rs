@@ -2,7 +2,7 @@ use crate::calculation::create_context;
 use crate::calculation::expression_values::ExpressionFunType;
 use crate::evaluation::DynamicResult;
 use crate::parsing::signature::ParamCount;
-use crate::{Element, ExpandedElement, ExpressionNumType, Number, ParsedElement, create_default_context};
+use crate::{Element, ExpressionNumType, Number, create_default_context};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Radix};
 use colored::Colorize;
@@ -80,26 +80,22 @@ impl Formula {
 		}
 
 		match element {
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements))) => {
+			Element::Plus(elements) => {
 				let elements = elements.iter().map(|e| create_formula!(e)).collect();
 				Formula::Plus(elements)
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => {
+			Element::Multiply(elements) => {
 				let elements = elements.iter().map(|e| create_formula!(e)).collect();
 				Formula::Multiply(elements)
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(e))) => {
-				Formula::Negate(Box::new(create_formula!(e)))
-			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(num))) => {
-				Formula::Number(num.to_string_reuse_context(formatting_options, ctx))
-			},
-			Element::Parsed(ParsedElement::Variable(name)) => Formula::Variable(name.clone()),
-			Element::Parsed(ParsedElement::VariableOrFunction(name)) => Formula::Variable(name.clone()),
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(base, exponent))) => {
+			Element::Negate(e) => Formula::Negate(Box::new(create_formula!(e))),
+			Element::Number(num) => Formula::Number(num.to_string_reuse_context(formatting_options, ctx)),
+			Element::Variable(name) => Formula::Variable(name.clone()),
+			Element::VariableOrFunction(name) => Formula::Variable(name.clone()),
+			Element::Pow(base, exponent) => {
 				Formula::Pow(Box::new(create_formula!(base)), Box::new(create_formula!(exponent)))
 			},
-			Element::Parsed(ParsedElement::Function { name, arguments }) => Formula::Function {
+			Element::Function { name, arguments } => Formula::Function {
 				name: name.clone(),
 				arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
 			},
@@ -110,18 +106,13 @@ impl Formula {
 			Element::String(s) => {
 				Formula::Variable(if mark_unparsed_red { s.red().to_string() } else { s.to_string() })
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
-														arguments,
-														expr_value: debug_name,
-														..
-													})) => Formula::Function {
+			Element::FunctionWithExpression { arguments, expr_value: debug_name, .. } => Formula::Function {
 				name: format!("fun_expr:{debug_name}"),
 				arguments: arguments.iter().map(|e| create_formula!(e)).collect(),
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression {
-														expr_value: debug_name,
-														..
-													})) => Formula::Variable(format!("num_expr:{debug_name}", )),
+			Element::NumberWithExpression { expr_value: debug_name, .. } => {
+				Formula::Variable(format!("num_expr:{debug_name}", ))
+			},
 		}
 	}
 }
@@ -136,36 +127,27 @@ impl Element {
 			Element::Brackets(e) => {
 				format!("br({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(e))) => {
+			Element::Plus(e) => {
 				format!("add({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(e))) => {
+			Element::Multiply(e) => {
 				format!("mul({})", e.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", "))
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(a, b))) => {
-				format!("pow({}, {})", a.get_debug_string(), b.get_debug_string())
-			},
+			Element::Pow(a, b) => format!("pow({}, {})", a.get_debug_string(), b.get_debug_string()),
 			Element::String(s) => format!("\"{s}\""),
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(e))) => {
-				format!("neg({})", e.get_debug_string())
-			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(n))) => {
-				format!("num({})", n.get_debug_string())
-			},
-			Element::Parsed(ParsedElement::Function { name, arguments }) => {
+			Element::Negate(e) => format!("neg({})", e.get_debug_string()),
+			Element::Number(n) => format!("num({})", n.get_debug_string()),
+			Element::Function { name, arguments } => {
 				format!(
 					"fun({name}, [{}])",
 					arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
 				)
 			},
-			Element::Parsed(ParsedElement::Variable(name)) => format!("var({})", name),
-			Element::Parsed(ParsedElement::VariableOrFunction(name)) => {
+			Element::Variable(name) => format!("var({})", name),
+			Element::VariableOrFunction(name) => {
 				format!("var_or_fun({})", name)
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
-														arguments,
-														expr_value,
-													})) => {
+			Element::FunctionWithExpression { arguments, expr_value } => {
 				let param_count_str = match expr_value.get_param_count() {
 					ParamCount::Exactly(n) => format!("={n} params"),
 					ParamCount::AtLeast(n) => format!(">={n} params"),
@@ -177,10 +159,9 @@ impl Element {
 					arguments.iter().map(Self::get_debug_string).collect::<Vec<_>>().join(", ")
 				)
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression {
-														expr_value: debug_name,
-														..
-													})) => format!("num_with_expr:{}", debug_name),
+			Element::NumberWithExpression { expr_value: debug_name, .. } => {
+				format!("num_with_expr:{}", debug_name)
+			},
 		}
 	}
 }

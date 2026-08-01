@@ -16,30 +16,30 @@ macro_rules! fancy_assert_eq {
 #[macro_export]
 macro_rules! formula {
     (plus($($op:ident $( ( $($args:tt)* ) )?),*)) => {
-        Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(vec![$(formula!($op$(($($args)*))?)),*])))
+        Element::Plus(vec![$(formula!($op$(($($args)*))?)),*])
     };
     (neg($op:ident $( ( $($args:tt)* ) )?)) => {
-        Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(Box::new(formula!($op$(($($args)*))?)))))
+        Element::Negate(Box::new(formula!($op$(($($args)*))?)))
     };
 	(pow(
 		$op:ident $( ( $($args:tt)* ) )?,
 		$op2:ident $( ( $($args2:tt)* ) )?
 	)) => {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(
+		Element::Pow(
 			// linke Seite
 			Box::new(formula!($op$(($($args)*))?)),
 			// rechte Seite
 			Box::new(formula!($op2$(($($args2)*))?))
-		)))
+		)
 	};
     (mul($( $op:ident  $( ( $($args:tt)* ) )? ),*)) => {
-        Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(vec![$(formula!($op$(($($args)*))?)),*])))
+        Element::Multiply(vec![$(formula!($op$(($($args)*))?)),*])
     };
     (num($n:expr)) => {
-        Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::from($n))))
+        Element::Number(Number::from($n))
     };
     (var($s:expr)) => {
-        Element::Parsed(ParsedElement::Variable($s.to_string()))
+        Element::Variable($s.to_string())
     };
     ($e:expr) => {
         $e.clone()
@@ -51,7 +51,7 @@ pub mod test {
 	use crate::Number;
 	use crate::benchmarking::Benchmark;
 	use crate::outer_store_interation::RunPrecision;
-	use crate::{Element, ExpandedElement, FormulaStore, ParsedElement};
+	use crate::{Element, FormulaStore};
 	use macros::{formula_matches, return_tokens};
 
 	impl FormulaStore {
@@ -100,9 +100,7 @@ pub mod test {
 
 		// neg extraction
 		let f = formula!(neg(num(4)));
-		assert!(formula_matches!(f, neg(x)).is_some_and(
-			|x| x == &Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::from(4))))
-		));
+		assert!(formula_matches!(f, neg(x)).is_some_and(|x| x == &Element::Number(Number::from(4))));
 
 		// multiply ohne extraktion matcht
 		let f = formula!(mul(num(5), num(6)));

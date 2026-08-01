@@ -32,12 +32,7 @@ pub enum Element {
 	Brackets(Vec<Element>),
 	/// Unparsed string
 	String(String),
-	
-	Parsed(ParsedElement),
-}
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ParsedElement {
 	/// A function with a name and arguments
 	Function {
 		name: String,
@@ -47,12 +42,7 @@ pub enum ParsedElement {
 	Variable(String),
 	/// A variable, which could either be a number or a function
 	VariableOrFunction(String),
-	
-	Expanded(ExpandedElement),
-}
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum ExpandedElement {
 	/// A function with a stored evaluation expression
 	FunctionWithExpression { arguments: Vec<Element>, expr_value: ExpressionFunType },
 	/// A number defined by an expression
@@ -69,6 +59,53 @@ pub enum ExpandedElement {
 	Number(Number),
 }
 
+/// Parsed variants of an [`Element`]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsedElement {
+	/// A function with a name and arguments
+	Function {
+		name: String,
+		arguments: Vec<ParsedElement>,
+	},
+	/// A variable with a name
+	Variable(String),
+	/// A variable, which could either be a number or a function
+	VariableOrFunction(String),
+	/// A function with a stored evaluation expression
+	FunctionWithExpression { arguments: Vec<ParsedElement>, expr_value: ExpressionFunType },
+	/// A number defined by an expression
+	NumberWithExpression { expr_value: ExpressionNumType },
+	/// List of elements to add together
+	Plus(Vec<ParsedElement>),
+	/// List of elements to multiply together
+	Multiply(Vec<ParsedElement>),
+	/// Exponential operation (base^exponent)
+	Pow(Box<ParsedElement>, Box<ParsedElement>),
+	/// Negation of an element (e.g., -x)
+	Negate(Box<ParsedElement>),
+	/// A number
+	Number(Number),
+}
+
+/// Expanded variants of an [`Element`]
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExpandedElement {
+	/// A function with a stored evaluation expression
+	FunctionWithExpression { arguments: Vec<ExpandedElement>, expr_value: ExpressionFunType },
+	/// A number defined by an expression
+	NumberWithExpression { expr_value: ExpressionNumType },
+	/// List of elements to add together
+	Plus(Vec<ExpandedElement>),
+	/// List of elements to multiply together
+	Multiply(Vec<ExpandedElement>),
+	/// Exponential operation (base^exponent)
+	Pow(Box<ExpandedElement>, Box<ExpandedElement>),
+	/// Negation of an element (e.g., -x)
+	Negate(Box<ExpandedElement>),
+	/// A number
+	Number(Number),
+}
+
 #[derive(Clone, Debug)]
 pub enum Number {
 	Rational(BigRational),
@@ -78,46 +115,46 @@ pub enum Number {
 #[allow(unused)]
 mod formula_short {
 	use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
-	use crate::{Element, ExpandedElement, Number, ParsedElement};
+	use crate::{Element, Number};
 	use astro_float::Error;
 
 	pub fn nan(error: Option<Error>) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::nan(error))))
+		Element::Number(Number::nan(error))
 	}
 
 	pub fn num(num: impl ToString) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::from_string(num).unwrap())))
+		Element::Number(Number::from_string(num).unwrap())
 	}
 
 	pub fn var_or_fun(name: &str) -> Element {
-		Element::Parsed(ParsedElement::VariableOrFunction(name.to_string()))
+		Element::VariableOrFunction(name.to_string())
 	}
 
 	pub fn var(name: impl ToString) -> Element {
-		Element::Parsed(ParsedElement::Variable(name.to_string()))
+		Element::Variable(name.to_string())
 	}
 
 	pub fn fun(name: &str, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::Parsed(ParsedElement::Function {
+		Element::Function {
 			name: name.to_string(),
 			arguments: args.into_iter().collect(),
-		})
+		}
 	}
 
 	pub fn neg(element: Element) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(Box::new(element))))
+		Element::Negate(Box::new(element))
 	}
 
 	pub fn plus(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements.into_iter().collect())))
+		Element::Plus(elements.into_iter().collect())
 	}
 
 	pub fn mul(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements.into_iter().collect())))
+		Element::Multiply(elements.into_iter().collect())
 	}
 
 	pub fn pow(base: Element, exponent: Element) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(Box::new(base), Box::new(exponent))))
+		Element::Pow(Box::new(base), Box::new(exponent))
 	}
 
 	/// = element^-1
@@ -126,20 +163,20 @@ mod formula_short {
 	}
 
 	pub fn num_expr(value: ExpressionNumType) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { expr_value: value }))
+		Element::NumberWithExpression { expr_value: value }
 	}
 
 	pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+		Element::FunctionWithExpression {
 			arguments: args.into_iter().collect(),
 			expr_value: fun,
-		}))
+		}
 	}
 }
 
 impl From<Number> for Element {
 	fn from(value: Number) -> Self {
-		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(value)))
+		Element::Number(value)
 	}
 }
 

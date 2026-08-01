@@ -1,5 +1,5 @@
-use crate::{Element, ExpandedElement, ParsedElement};
-use anyhow::{Result, anyhow};
+use crate::Element;
+use anyhow::{anyhow, Result};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
@@ -109,46 +109,43 @@ impl Signatures {
 
 	pub(crate) fn add_all_undefined_symbols_of_formula(&mut self, element: &Element) {
 		match element {
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
-														  arguments: elements,
-														  ..
-													  })) => elements.iter().for_each(|e| self.add_all_undefined_symbols_of_formula(e)),
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(base, exponent))) => {
+			Element::Plus(elements)
+			| Element::Multiply(elements)
+			| Element::FunctionWithExpression { arguments: elements, .. } => {
+				elements.iter().for_each(|e| self.add_all_undefined_symbols_of_formula(e))
+			},
+			Element::Pow(base, exponent) => {
 				self.add_all_undefined_symbols_of_formula(base);
 				self.add_all_undefined_symbols_of_formula(exponent);
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(element))) => {
+			Element::Negate(element) => {
 				self.add_all_undefined_symbols_of_formula(element);
 			},
-			Element::Parsed(ParsedElement::Function { name, arguments }) => {
+			Element::Function { name, arguments } => {
 				arguments.iter().for_each(|a| self.add_all_undefined_symbols_of_formula(a));
 
 				let arg_signatures = arguments
 					.iter()
 					.map(|arg| match arg {
-						Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
-						| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(_)))
-						| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(_)))
-						| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(..)))
-						| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(_)))
-						| Element::Parsed(ParsedElement::Variable(_)) => Signature::Number,
-						Element::Parsed(ParsedElement::VariableOrFunction(_)) => Signature::NumberOrFunction,
+						Element::Number(_)
+						| Element::Plus(_)
+						| Element::Multiply(_)
+						| Element::Pow(..)
+						| Element::Negate(_)
+						| Element::Variable(_) => Signature::Number,
+						Element::VariableOrFunction(_) => Signature::NumberOrFunction,
 						_ => panic!("Invalid element in function arguments: {:?}", arg),
 					})
 					.collect::<Vec<_>>();
 
 				self.insert_or_replace_symbol(name, Signature::Function(arg_signatures));
 			},
-			Element::Parsed(ParsedElement::Variable(name)) => {
-				self.insert_or_replace_symbol(name, Signature::Number)
-			},
-			Element::Parsed(ParsedElement::VariableOrFunction(name)) => {
+			Element::Variable(name) => self.insert_or_replace_symbol(name, Signature::Number),
+			Element::VariableOrFunction(name) => {
 				self.insert_or_replace_symbol(name, Signature::NumberOrFunction)
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
+			Element::Number(_)
+			| Element::NumberWithExpression { .. }
 			| Element::Brackets(_)
 			| Element::String(_) => {},
 		}
@@ -237,18 +234,18 @@ impl Signatures {
 impl Element {
 	pub(crate) fn get_name(&self) -> Option<&str> {
 		match self {
-			Element::Parsed(ParsedElement::Function { name, .. })
-			| Element::Parsed(ParsedElement::Variable(name))
-			| Element::Parsed(ParsedElement::VariableOrFunction(name)) => Some(name),
+			Element::Function { name, .. } | Element::Variable(name) | Element::VariableOrFunction(name) => {
+				Some(name)
+			},
 			_ => None,
 		}
 	}
 
 	fn name_matches(&self, name: &str) -> bool {
 		match self {
-			Element::Parsed(ParsedElement::Function { name: name_cmp, .. })
-			| Element::Parsed(ParsedElement::Variable(name_cmp))
-			| Element::Parsed(ParsedElement::VariableOrFunction(name_cmp)) => name_cmp == name,
+			Element::Function { name: name_cmp, .. }
+			| Element::Variable(name_cmp)
+			| Element::VariableOrFunction(name_cmp) => name_cmp == name,
 			_ => false,
 		}
 	}
@@ -257,30 +254,27 @@ impl Element {
 	/// This is used to find all functions that take an Element with the given name as an argument.
 	fn list_all_functions_with_argument_variable(&self, name: &str, list: &mut HashSet<(String, usize)>) {
 		match self {
-			Element::Parsed(ParsedElement::Function { arguments, name: this_name }) => {
+			Element::Function { arguments, name: this_name } => {
 				for (i, _) in arguments.iter().enumerate().filter(|(_, e)| e.name_matches(name)) {
 					list.insert((this_name.clone(), i));
 				}
 				arguments.iter().for_each(|a| a.list_all_functions_with_argument_variable(name, list))
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => {
+			Element::Plus(elements) | Element::Multiply(elements) => {
 				elements.iter().for_each(|a| a.list_all_functions_with_argument_variable(name, list))
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(a, b))) => {
+			Element::Pow(a, b) => {
 				a.list_all_functions_with_argument_variable(name, list);
 				b.list_all_functions_with_argument_variable(name, list);
 			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(e))) => {
-				e.list_all_functions_with_argument_variable(name, list)
-			},
+			Element::Negate(e) => e.list_all_functions_with_argument_variable(name, list),
 			Element::Brackets(_)
 			| Element::String(_)
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression { .. }))
-			| Element::Parsed(ParsedElement::Variable(_))
-			| Element::Parsed(ParsedElement::VariableOrFunction(_)) => {},
+			| Element::Number(_)
+			| Element::NumberWithExpression { .. }
+			| Element::FunctionWithExpression { .. }
+			| Element::Variable(_)
+			| Element::VariableOrFunction(_) => {},
 		}
 	}
 
@@ -289,18 +283,12 @@ impl Element {
 		&self, name: &str, list: &mut HashSet<(String, usize)>,
 	) {
 		match self {
-			Element::Parsed(ParsedElement::Function { arguments, name: this_name }) => {
+			Element::Function { arguments, name: this_name } => {
 				if this_name == name {
 					for (i, arg_name) in arguments
 						.iter()
 						.enumerate()
-						.filter(|e| {
-							matches!(
-								e.1,
-								Element::Parsed(ParsedElement::VariableOrFunction(_))
-									| Element::Parsed(ParsedElement::Variable(_))
-							)
-						})
+						.filter(|e| matches!(e.1, Element::VariableOrFunction(_) | Element::Variable(_)))
 						.filter_map(|(i, e)| e.get_name().map(|n| (i, n)))
 					{
 						if arg_name != name {
@@ -311,25 +299,22 @@ impl Element {
 				arguments
 					.iter()
 					.for_each(|a| a.list_all_function_arguments_where_function_has_name(name, list))
-			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => elements
+			}
+			Element::Plus(elements) | Element::Multiply(elements) => elements
 				.iter()
 				.for_each(|e| e.list_all_function_arguments_where_function_has_name(name, list)),
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(a, b))) => {
+			Element::Pow(a, b) => {
 				a.list_all_function_arguments_where_function_has_name(name, list);
 				b.list_all_function_arguments_where_function_has_name(name, list);
-			},
-			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(e))) => {
-				e.list_all_function_arguments_where_function_has_name(name, list)
-			},
+			}
+			Element::Negate(e) => e.list_all_function_arguments_where_function_has_name(name, list),
 			Element::Brackets(_)
 			| Element::String(_)
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
-			| Element::Parsed(ParsedElement::Variable(_))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
-			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression { .. })) // todo I'm not sure if it is correct to ignore this
-			| Element::Parsed(ParsedElement::VariableOrFunction(_)) => {},
+			| Element::Number(_)
+			| Element::Variable(_)
+			| Element::NumberWithExpression { .. }
+			| Element::FunctionWithExpression { .. } // todo I'm not sure if it is correct to ignore this
+			| Element::VariableOrFunction(_) => {}
 		}
 	}
 }
@@ -345,17 +330,16 @@ impl SymbolDeclarationData {
 		let insert_name;
 		let function_args;
 		match formula {
-			Element::Parsed(ParsedElement::Variable(name))
-			| Element::Parsed(ParsedElement::VariableOrFunction(name)) => {
+			Element::Variable(name) | Element::VariableOrFunction(name) => {
 				function_args = None;
 				insert_name = name;
 			},
-			Element::Parsed(ParsedElement::Function { name, arguments }) => {
+			Element::Function { name, arguments } => {
 				insert_name = name;
 				let mut fn_args =
 					FunctionDeclarationArguments { names: Vec::new(), signatures: Signatures::new_empty() };
 				for arg in arguments {
-					if let Element::Parsed(ParsedElement::VariableOrFunction(name)) = arg {
+					if let Element::VariableOrFunction(name) = arg {
 						fn_args.names.push(name.clone());
 						fn_args.signatures.insert(name.clone(), Signature::NumberOrFunction);
 					} else {
