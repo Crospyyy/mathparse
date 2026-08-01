@@ -28,21 +28,31 @@ pub use storing::{FormulaStore, NamedSymbol, Symbol};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
-	// Unparsed elements
 	/// Unparsed group of elements
 	Brackets(Vec<Element>),
 	/// Unparsed string
 	String(String),
+	
+	Parsed(ParsedElement),
+}
 
-	// Unexpanded formula elements
+#[derive(Debug, Clone, PartialEq)]
+pub enum ParsedElement {
 	/// A function with a name and arguments
-	Function { name: String, arguments: Vec<Element> },
+	Function {
+		name: String,
+		arguments: Vec<Element>,
+	},
 	/// A variable with a name
 	Variable(String),
 	/// A variable, which could either be a number or a function
 	VariableOrFunction(String),
+	
+	Expanded(ExpandedElement),
+}
 
-	// Expanded formula elements
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExpandedElement {
 	/// A function with a stored evaluation expression
 	FunctionWithExpression { arguments: Vec<Element>, expr_value: ExpressionFunType },
 	/// A number defined by an expression
@@ -68,43 +78,46 @@ pub enum Number {
 #[allow(unused)]
 mod formula_short {
 	use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
-	use crate::{Element, Number};
+	use crate::{Element, ExpandedElement, Number, ParsedElement};
 	use astro_float::Error;
 
 	pub fn nan(error: Option<Error>) -> Element {
-		Element::Number(Number::nan(error))
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::nan(error))))
 	}
 
 	pub fn num(num: impl ToString) -> Element {
-		Element::Number(Number::from_string(num).unwrap())
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(Number::from_string(num).unwrap())))
 	}
 
 	pub fn var_or_fun(name: &str) -> Element {
-		Element::VariableOrFunction(name.to_string())
+		Element::Parsed(ParsedElement::VariableOrFunction(name.to_string()))
 	}
 
 	pub fn var(name: impl ToString) -> Element {
-		Element::Variable(name.to_string())
+		Element::Parsed(ParsedElement::Variable(name.to_string()))
 	}
 
 	pub fn fun(name: &str, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::Function { name: name.to_string(), arguments: args.into_iter().collect() }
+		Element::Parsed(ParsedElement::Function {
+			name: name.to_string(),
+			arguments: args.into_iter().collect(),
+		})
 	}
 
 	pub fn neg(element: Element) -> Element {
-		Element::Negate(Box::new(element))
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(Box::new(element))))
 	}
 
 	pub fn plus(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Plus(elements.into_iter().collect())
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements.into_iter().collect())))
 	}
 
 	pub fn mul(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Multiply(elements.into_iter().collect())
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements.into_iter().collect())))
 	}
 
 	pub fn pow(base: Element, exponent: Element) -> Element {
-		Element::Pow(Box::new(base), Box::new(exponent))
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(Box::new(base), Box::new(exponent))))
 	}
 
 	/// = element^-1
@@ -113,17 +126,20 @@ mod formula_short {
 	}
 
 	pub fn num_expr(value: ExpressionNumType) -> Element {
-		Element::NumberWithExpression { expr_value: value }
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { expr_value: value }))
 	}
 
 	pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::FunctionWithExpression { arguments: args.into_iter().collect(), expr_value: fun }
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+			arguments: args.into_iter().collect(),
+			expr_value: fun,
+		}))
 	}
 }
 
 impl From<Number> for Element {
 	fn from(value: Number) -> Self {
-		Element::Number(value)
+		Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(value)))
 	}
 }
 

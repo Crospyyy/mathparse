@@ -1,5 +1,5 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
-use crate::{Element, Number, NumberContext};
+use crate::{Element, ExpandedElement, Number, NumberContext, ParsedElement};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use expression_values::ValueRange;
@@ -39,7 +39,7 @@ impl Element {
 	}
 
 	pub fn is_number(&self) -> bool {
-		matches!(self, Element::Number(_))
+		matches!(self, Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_))))
 	}
 }
 

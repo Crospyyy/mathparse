@@ -3,7 +3,7 @@ use crate::calculation::create_context;
 use crate::calculation::expression_values::FunctionExpression;
 use crate::outer_store_interation::RunPrecision;
 use crate::storing::FormulaStore;
-use crate::{Element, Number, RoundingMode};
+use crate::{Element, ExpandedElement, Number, ParsedElement, RoundingMode};
 use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
@@ -54,10 +54,12 @@ impl Element {
 	fn eval(&self, ctx: &mut Context) -> Result<Number, FormulaEvaluationError> {
 		match self {
 			Element::Brackets(_) | Element::String(_) => Err(FormulaEvaluationError::UnparsedElements),
-			Element::Variable(_) | Element::Function { .. } | Element::VariableOrFunction(_) => {
-				Err(FormulaEvaluationError::UnexpandedElements)
-			},
-			Element::Plus(elements) => {
+			Element::Parsed(
+				ParsedElement::Variable(_)
+				| ParsedElement::Function { .. }
+				| ParsedElement::VariableOrFunction(_),
+			) => Err(FormulaEvaluationError::UnexpandedElements),
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements))) => {
 				let values: Vec<Number> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
 					return Ok(nan.clone());
@@ -65,7 +67,7 @@ impl Element {
 				let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
 				Ok(product)
 			},
-			Element::Multiply(elements) => {
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements))) => {
 				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
 					return Ok(nan.clone());
@@ -76,11 +78,20 @@ impl Element {
 				let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
 				Ok(product)
 			},
-			Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
-			Element::Number(n) => Ok(n.clone()),
-			Element::Pow(b, e) => Ok(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-			Element::NumberWithExpression { expr_value } => Ok(expr_value.get_function()(ctx)),
-			Element::FunctionWithExpression { arguments, expr_value } => {
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(e))) => {
+				e.eval(ctx).map(|n| n.neg())
+			},
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(n))) => Ok(n.clone()),
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(b, e))) => {
+				Ok(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx))
+			},
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression {
+														expr_value,
+													})) => Ok(expr_value.get_function()(ctx)),
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+														arguments,
+														expr_value,
+													})) => {
 				let count = expr_value.get_param_count();
 				if !count.number_would_be_valid(arguments.len()) {
 					return Err(FormulaEvaluationError::FunctionCallWithInvalidArgumentCount);
@@ -118,10 +129,8 @@ impl Element {
 			}
 			rounded = rounded.round(min_precision, RoundingMode::ToEven);
 			rounded.set_inexact(true);
-
-			if let Some(last_rounded) = &mut last_rounded
-				&& *last_rounded == rounded
-			{
+			
+			if last_rounded.is_some_and(|val| val == rounded) {
 				return Ok(DynamicResult::Checked { num: rounded, precision });
 			}
 
@@ -133,24 +142,26 @@ impl Element {
 
 	fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
 		match self {
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Number(_)
-			| Element::NumberWithExpression { .. }
-			| Element::FunctionWithExpression { .. } => {},
-			Element::Plus(e) | Element::Multiply(e) => {
-				e.iter().for_each(|el| el.get_all_unexpanded_names(names));
+			Element::Brackets(_) | Element::String(_) => {},
+			Element::Parsed(ParsedElement::Expanded(expanded)) => match expanded {
+				ExpandedElement::Number(_)
+				| ExpandedElement::NumberWithExpression { .. }
+				| ExpandedElement::FunctionWithExpression { .. } => {},
+				ExpandedElement::Plus(e) | ExpandedElement::Multiply(e) => {
+					e.iter().for_each(|el| el.get_all_unexpanded_names(names));
+				},
+				ExpandedElement::Pow(a, b) => {
+					a.get_all_unexpanded_names(names);
+					b.get_all_unexpanded_names(names);
+				},
+				ExpandedElement::Negate(x) => x.get_all_unexpanded_names(names),
 			},
-			Element::Pow(a, b) => {
-				a.get_all_unexpanded_names(names);
-				b.get_all_unexpanded_names(names);
-			},
-			Element::Negate(x) => x.get_all_unexpanded_names(names),
-			Element::Function { name, arguments } => {
+			Element::Parsed(ParsedElement::Function { name, arguments }) => {
 				names.insert(name.to_owned());
 				arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
 			},
-			Element::Variable(name) | Element::VariableOrFunction(name) => {
+			Element::Parsed(ParsedElement::Variable(name))
+			| Element::Parsed(ParsedElement::VariableOrFunction(name)) => {
 				names.insert(name.to_owned());
 			},
 		}

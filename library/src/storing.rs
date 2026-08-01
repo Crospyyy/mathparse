@@ -2,7 +2,10 @@ use crate::calculation::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{
 	OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
-use crate::{Benchmark, Element, ExpressionFunType, ExpressionNumType, Number, NumberContext, debug_print};
+use crate::{
+	Benchmark, Element, ExpandedElement, ExpressionFunType, ExpressionNumType, Number, NumberContext,
+	ParsedElement, debug_print,
+};
 use crate::{create_default_context, only_in_debug};
 use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
@@ -274,7 +277,8 @@ impl FormulaStore {
 	) -> Result<()> {
 		let parameter_names = None;
 		let signature = Signature::Number;
-		let formula = Element::NumberWithExpression { expr_value };
+		let formula =
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { expr_value }));
 		self.add_symbol_new(
 			&name.to_string(),
 			Symbol::new(signature, parameter_names, formula.clone(), formula),
@@ -290,7 +294,10 @@ impl FormulaStore {
 			ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
 			ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
 		};
-		let element = Element::FunctionWithExpression { arguments: vec![], expr_value };
+		let element = Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+			arguments: vec![],
+			expr_value,
+		}));
 		self.add_symbol_new(
 			&name.to_string(),
 			Symbol::new(signature, params, element.clone(), element),
@@ -331,7 +338,7 @@ impl Symbol {
 	pub fn formula(&self) -> &Element {
 		&self.formula
 	}
-	
+
 	/// Get the call signature string like `fun(a, b)` or `var_xy`
 	pub fn get_signature_string(&self, name: &str) -> String {
 		match self.signature {
@@ -381,7 +388,10 @@ impl NamedSymbol {
 impl InsertionElement {
 	pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element> {
 		if let Some(insert_args) = &self.parameters {
-			if let Element::FunctionWithExpression { expr_value, .. } = &self.formula
+			if let Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+															   expr_value,
+															   ..
+														   })) = &self.formula
 				&& insert_args.is_empty()
 			{
 				if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
@@ -392,10 +402,12 @@ impl InsertionElement {
 						param_values.len()
 					));
 				}
-				return Ok(Element::FunctionWithExpression {
-					arguments: param_values,
-					expr_value: expr_value.clone(),
-				});
+				return Ok(Element::Parsed(ParsedElement::Expanded(
+					ExpandedElement::FunctionWithExpression {
+						arguments: param_values,
+						expr_value: expr_value.clone(),
+					},
+				)));
 			}
 			let self_arguments = param_values;
 			if insert_args.len() != self_arguments.len() {
@@ -423,40 +435,50 @@ impl Element {
 	pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<()> {
 		match self {
 			Element::Brackets(elements)
-			| Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::Function { arguments: elements, .. }
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements)))
+			| Element::Parsed(ParsedElement::Function { arguments: elements, .. })
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+														  arguments: elements,
+														  ..
+													  })) => {
 				for e in elements {
 					e.insert_symbol(insert)?;
 				}
 			},
-			Element::Pow(a, b) => {
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(a, b))) => {
 				a.insert_symbol(insert)?;
 				b.insert_symbol(insert)?;
 			},
-			Element::Negate(x) => x.insert_symbol(insert)?,
-			Element::Number(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(x))) => {
+				x.insert_symbol(insert)?
+			},
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
+			| Element::Parsed(ParsedElement::Variable(_))
+			| Element::Parsed(ParsedElement::VariableOrFunction(_))
 			| Element::String(_) => {},
 		}
 		if self.get_name().is_some_and(|n| n == insert.name) {
 			// this is going to be the new logic
 			match (&mut *self, &insert.parameters, &insert.formula) {
 				(
-					Element::Function { name: self_name, arguments: self_arguments },
+					Element::Parsed(ParsedElement::Function { name: self_name, arguments: self_arguments }),
 					insert_params,
 					insert_formula,
 				) => match (insert_params, insert_formula) {
-					(None, Element::VariableOrFunction(new_name)) => {
+					(None, Element::Parsed(ParsedElement::VariableOrFunction(new_name))) => {
 						*self_name = new_name.clone();
 					},
 					(Some(_), _) => {
 						*self = insert.insert_param_values(self_arguments.clone())?;
 					},
-					(None, Element::FunctionWithExpression { .. }) => {
+					(
+						None,
+						Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+																	..
+																})),
+					) => {
 						*self = insert.insert_param_values(self_arguments.clone())?;
 					},
 					(..) => {
@@ -467,10 +489,10 @@ impl Element {
 						));
 					},
 				},
-				(Element::Variable(_), None, _) => {
+				(Element::Parsed(ParsedElement::Variable(_)), None, _) => {
 					*self = insert.formula.clone();
 				},
-				(Element::VariableOrFunction(..), params, _) => {
+				(Element::Parsed(ParsedElement::VariableOrFunction(..)), params, _) => {
 					if params.is_some() {
 						println!("Skipping this because there is no call yet");
 					} else {
@@ -491,31 +513,34 @@ impl Element {
 		match self {
 			Element::Brackets(_)
 			| Element::String(_)
-			| Element::Number(_)
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Function { .. } => {},
-			Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Number(_)))
+			| Element::Parsed(ParsedElement::Variable(_))
+			| Element::Parsed(ParsedElement::VariableOrFunction(_))
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::NumberWithExpression { .. }))
+			| Element::Parsed(ParsedElement::Function { .. }) => {},
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Plus(elements)))
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::Multiply(elements)))
+			| Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+														  arguments: elements,
+														  ..
+													  })) => {
 				for e in elements {
-					if let Element::VariableOrFunction(name) = e {
-						*e = Element::Variable(name.clone());
+					if let Element::Parsed(ParsedElement::VariableOrFunction(name)) = e {
+						*e = Element::Parsed(ParsedElement::Variable(name.clone()));
 					};
 				}
 			},
-			Element::Pow(a, b) => {
-				if let Element::VariableOrFunction(name) = &**a {
-					**a = Element::Variable(name.clone());
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Pow(a, b))) => {
+				if let Element::Parsed(ParsedElement::VariableOrFunction(name)) = &**a {
+					**a = Element::Parsed(ParsedElement::Variable(name.clone()));
 				}
-				if let Element::VariableOrFunction(name) = &**b {
-					**b = Element::Variable(name.clone());
+				if let Element::Parsed(ParsedElement::VariableOrFunction(name)) = &**b {
+					**b = Element::Parsed(ParsedElement::Variable(name.clone()));
 				}
 			},
-			Element::Negate(a) => {
-				if let Element::VariableOrFunction(name) = &**a {
-					**a = Element::Variable(name.clone());
+			Element::Parsed(ParsedElement::Expanded(ExpandedElement::Negate(a))) => {
+				if let Element::Parsed(ParsedElement::VariableOrFunction(name)) = &**a {
+					**a = Element::Parsed(ParsedElement::Variable(name.clone()));
 				}
 			},
 		}
@@ -613,7 +638,11 @@ mod tests {
 				formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
 			})
 			.unwrap();
-		if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+		if let Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+														   expr_value,
+														   arguments,
+													   })) = &formula
+		{
 			assert_eq!(arguments.len(), 1);
 			assert_eq!(arguments[0], mul([num(3), num(2)]));
 			assert_eq!(expr_value, &ExpressionFunType::Abs);
@@ -629,7 +658,11 @@ mod tests {
 				formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
 			})
 			.unwrap();
-		if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+		if let Element::Parsed(ParsedElement::Expanded(ExpandedElement::FunctionWithExpression {
+														   expr_value,
+														   arguments,
+													   })) = &formula
+		{
 			assert_eq!(arguments.len(), 1);
 			assert_eq!(arguments[0], num(3));
 			assert_eq!(expr_value, &ExpressionFunType::Abs);
