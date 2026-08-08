@@ -25,6 +25,7 @@ pub use outer_store_interaction::{RunOptions, RunPrecision};
 pub use parsing::{Signature, get_fun_name_end_of_string};
 pub use printing::{FormattedCalculationOutput, FormattingOptions, ResultStringWithInfo};
 pub use storing::{FormulaStore, NamedSymbol, Symbol};
+use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Element {
@@ -55,6 +56,50 @@ pub enum Element {
 	Pow(Box<Element>, Box<Element>),
 	/// Negation of an element (e.g., -x)
 	Negate(Box<Element>),
+	/// A number
+	Number(Number),
+}
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElementParsed {
+	// Unexpanded formula elements
+	/// A function with a name and arguments
+	Function { name: String, arguments: Vec<ElementParsed> },
+	/// A variable with a name
+	Variable(String),
+	/// A variable, which could either be a number or a function
+	VariableOrFunction(String),
+
+	// Expanded formula elements
+	/// A function with a stored evaluation expression
+	FunctionWithExpression { arguments: Vec<ElementParsed>, expr_value: ExpressionFunType },
+	/// A number defined by an expression
+	NumberWithExpression { expr_value: ExpressionNumType },
+	/// List of elements to add together
+	Plus(Vec<ElementParsed>),
+	/// List of elements to multiply together
+	Multiply(Vec<ElementParsed>),
+	/// Exponential operation (base^exponent)
+	Pow(Box<ElementParsed>, Box<ElementParsed>),
+	/// Negation of an element (e.g., -x)
+	Negate(Box<ElementParsed>),
+	/// A number
+	Number(Number),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ElementExpanded {
+	/// A function with a stored evaluation expression
+	FunctionWithExpression { arguments: Vec<ElementExpanded>, expr_value: ExpressionFunType },
+	/// A number defined by an expression
+	NumberWithExpression { expr_value: ExpressionNumType },
+	/// List of elements to add together
+	Plus(Vec<ElementExpanded>),
+	/// List of elements to multiply together
+	Multiply(Vec<ElementExpanded>),
+	/// Exponential operation (base^exponent)
+	Pow(Box<ElementExpanded>, Box<ElementExpanded>),
+	/// Negation of an element (e.g., -x)
+	Negate(Box<ElementExpanded>),
 	/// A number
 	Number(Number),
 }
@@ -124,6 +169,190 @@ mod formula_short {
 impl From<Number> for Element {
 	fn from(value: Number) -> Self {
 		Element::Number(value)
+	}
+}
+
+#[derive(Debug, Clone, PartialEq, Error)]
+pub enum ConversionError<'a> {
+	/// An unparsed element that requires parsing before conversion
+	#[error("cannot convert unparsed element: {0:?}")]
+	UnparsedElement(&'a Element),
+	/// An unexpanded element that requires expansion before conversion
+	#[error("cannot convert unexpanded element: {0:?}")]
+	UnexpandedElement(&'a ElementParsed),
+}
+
+impl From<ElementParsed> for Element {
+	fn from(value: ElementParsed) -> Self {
+		match value {
+			ElementParsed::Function { name, arguments } => {
+				Element::Function { name, arguments: arguments.into_iter().map(Element::from).collect() }
+			},
+			ElementParsed::Variable(name) => Element::Variable(name),
+			ElementParsed::VariableOrFunction(name) => Element::VariableOrFunction(name),
+			ElementParsed::FunctionWithExpression { arguments, expr_value } => {
+				Element::FunctionWithExpression {
+					arguments: arguments.into_iter().map(Element::from).collect(),
+					expr_value,
+				}
+			},
+			ElementParsed::NumberWithExpression { expr_value } => {
+				Element::NumberWithExpression { expr_value }
+			},
+			ElementParsed::Plus(elements) => Element::Plus(elements.into_iter().map(Element::from).collect()),
+			ElementParsed::Multiply(elements) => {
+				Element::Multiply(elements.into_iter().map(Element::from).collect())
+			},
+			ElementParsed::Pow(base, exponent) => {
+				Element::Pow(Box::new(Element::from(*base)), Box::new(Element::from(*exponent)))
+			},
+			ElementParsed::Negate(element) => Element::Negate(Box::new(Element::from(*element))),
+			ElementParsed::Number(number) => Element::Number(number),
+		}
+	}
+}
+
+impl From<ElementExpanded> for Element {
+	fn from(value: ElementExpanded) -> Self {
+		match value {
+			ElementExpanded::FunctionWithExpression { arguments, expr_value } => {
+				Element::FunctionWithExpression {
+					arguments: arguments.into_iter().map(Element::from).collect(),
+					expr_value,
+				}
+			},
+			ElementExpanded::NumberWithExpression { expr_value } => {
+				Element::NumberWithExpression { expr_value }
+			},
+			ElementExpanded::Plus(elements) => {
+				Element::Plus(elements.into_iter().map(Element::from).collect())
+			},
+			ElementExpanded::Multiply(elements) => {
+				Element::Multiply(elements.into_iter().map(Element::from).collect())
+			},
+			ElementExpanded::Pow(base, exponent) => {
+				Element::Pow(Box::new(Element::from(*base)), Box::new(Element::from(*exponent)))
+			},
+			ElementExpanded::Negate(element) => Element::Negate(Box::new(Element::from(*element))),
+			ElementExpanded::Number(number) => Element::Number(number),
+		}
+	}
+}
+
+impl From<ElementExpanded> for ElementParsed {
+	fn from(value: ElementExpanded) -> Self {
+		match value {
+			ElementExpanded::FunctionWithExpression { arguments, expr_value } => {
+				ElementParsed::FunctionWithExpression {
+					arguments: arguments.into_iter().map(ElementParsed::from).collect(),
+					expr_value,
+				}
+			},
+			ElementExpanded::NumberWithExpression { expr_value } => {
+				ElementParsed::NumberWithExpression { expr_value }
+			},
+			ElementExpanded::Plus(elements) => {
+				ElementParsed::Plus(elements.into_iter().map(ElementParsed::from).collect())
+			},
+			ElementExpanded::Multiply(elements) => {
+				ElementParsed::Multiply(elements.into_iter().map(ElementParsed::from).collect())
+			},
+			ElementExpanded::Pow(base, exponent) => ElementParsed::Pow(
+				Box::new(ElementParsed::from(*base)),
+				Box::new(ElementParsed::from(*exponent)),
+			),
+			ElementExpanded::Negate(element) => {
+				ElementParsed::Negate(Box::new(ElementParsed::from(*element)))
+			},
+			ElementExpanded::Number(number) => ElementParsed::Number(number),
+		}
+	}
+}
+
+impl<'a> TryFrom<&Element> for ElementParsed {
+	type Error = &'a Element;
+
+	fn try_from(value: &Element) -> Result<Self, Self::Error> {
+		match value {
+			Element::Brackets(_) | Element::String(_) => Err(value),
+			Element::Function { name, arguments } => Ok(ElementParsed::Function {
+				name: name.clone(),
+				arguments: arguments.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			}),
+			Element::Variable(name) => Ok(ElementParsed::Variable(name.clone())),
+			Element::VariableOrFunction(name) => Ok(ElementParsed::VariableOrFunction(name.clone())),
+			Element::FunctionWithExpression { arguments, expr_value } => {
+				Ok(ElementParsed::FunctionWithExpression {
+					arguments: arguments
+						.into_iter()
+						.map(ElementParsed::try_from)
+						.collect::<Result<_, _>>()?,
+					expr_value: expr_value.clone(),
+				})
+			},
+			Element::NumberWithExpression { expr_value } => {
+				Ok(ElementParsed::NumberWithExpression { expr_value: expr_value.clone() })
+			},
+			Element::Plus(elements) => Ok(ElementParsed::Plus(
+				elements.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			)),
+			Element::Multiply(elements) => Ok(ElementParsed::Multiply(
+				elements.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			)),
+			Element::Pow(base, exponent) => Ok(ElementParsed::Pow(
+				Box::new(ElementParsed::try_from(*base).map_err(|_| ())?),
+				Box::new(ElementParsed::try_from(*exponent).map_err(|_| ())?),
+			)),
+			Element::Negate(element) => {
+				Ok(ElementParsed::Negate(Box::new(ElementParsed::try_from(*element).map_err(|_| ())?)))
+			},
+			Element::Number(number) => Ok(ElementParsed::Number(number.clone())),
+		}
+	}
+}
+impl<'a> TryFrom<&ElementParsed> for ElementExpanded {
+	type Error = &'a ElementParsed;
+
+	fn try_from(value: &ElementParsed) -> Result<Self, Self::Error> {
+		match value {
+			ElementParsed::Function { .. }
+			| ElementParsed::Variable(..)
+			| ElementParsed::VariableOrFunction(..) => Err(value),
+			ElementParsed::FunctionWithExpression { arguments, expr_value } => {
+				Ok(ElementExpanded::FunctionWithExpression {
+					arguments: arguments
+						.into_iter()
+						.map(ElementExpanded::try_from)
+						.collect::<Result<_, _>>()?,
+					expr_value: expr_value.clone(),
+				})
+			},
+			ElementParsed::NumberWithExpression { expr_value } => {
+				Ok(ElementExpanded::NumberWithExpression { expr_value: expr_value.clone() })
+			},
+			ElementParsed::Plus(elements) => Ok(ElementExpanded::Plus(
+				elements.into_iter().map(ElementExpanded::try_from).collect::<Result<_, _>>()?,
+			)),
+			ElementParsed::Multiply(elements) => Ok(ElementExpanded::Multiply(
+				elements.into_iter().map(ElementExpanded::try_from).collect::<Result<_, _>>()?,
+			)),
+			ElementParsed::Pow(base, exponent) => Ok(ElementExpanded::Pow(
+				Box::new(ElementExpanded::try_from(*base).map_err(|_| ())?),
+				Box::new(ElementExpanded::try_from(*exponent).map_err(|_| ())?),
+			)),
+			ElementParsed::Negate(element) => {
+				Ok(ElementExpanded::Negate(Box::new(ElementExpanded::try_from(*element).map_err(|_| ())?)))
+			},
+			ElementParsed::Number(number) => Ok(ElementExpanded::Number(number.clone())),
+		}
+	}
+}
+
+impl<'a> TryFrom<&Element> for ElementExpanded {
+	type Error = ConversionError<'a>;
+
+	fn try_from(value: &Element) -> Result<Self, Self::Error> {
+		// ElementParsed::try_from(value)?.try_into()
 	}
 }
 
