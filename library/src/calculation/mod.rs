@@ -1,5 +1,5 @@
 use crate::calculation::helper_functions::float_to_exact_rational;
-use crate::{Element, ElementParsed, Number, NumberContext};
+use crate::{ElementParsed, Number, NumberContext};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Consts, Error, RoundingMode, expr};
 use expression_values::ValueRange;
@@ -31,16 +31,6 @@ pub fn create_context(bits: usize) -> NumberContext {
 		-100000,
 		100000,
 	)
-}
-
-impl Element {
-	pub(crate) fn is_nan(&self) -> bool {
-		matches!(self, Element::Number(n) if n.is_nan())
-	}
-
-	pub fn is_number(&self) -> bool {
-		matches!(self, Element::Number(_))
-	}
 }
 
 impl ElementParsed {

@@ -1,4 +1,4 @@
-use crate::{Element, ElementExpanded, ElementParsed};
+use crate::ElementParsed;
 use anyhow::{Result, anyhow};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};

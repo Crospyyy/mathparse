@@ -30,7 +30,7 @@ pub fn get_fun_name_end_of_string(name: &str, allow_first_char_digit: bool) -> S
 }
 
 #[derive(Error, Debug)]
-pub(super) enum ParseError {
+pub enum ParseError {
 	#[error("Error processing power: {0}")]
 	ProcessingPow(String),
 	#[error("Unparsed element left: {0:?}")]

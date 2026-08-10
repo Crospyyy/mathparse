@@ -1,6 +1,6 @@
 use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
-use crate::{Element, ElementParsed, Number, formula};
+use crate::{ElementParsed, Number, formula};
 use astro_float::Error;
 use macros::formula_matches;
 use num_bigint::BigInt;
@@ -18,7 +18,9 @@ macro_rules! quick_match {
 	};
 }
 
-fn remove_inverse_elements(elements: &mut Vec<Element>, inverse_check: impl Fn(&Element, &Element) -> bool) {
+fn remove_inverse_elements(
+	elements: &mut Vec<ElementParsed>, inverse_check: impl Fn(&ElementParsed, &ElementParsed) -> bool,
+) {
 	if elements.len() >= 2 {
 		let mut to_remove = vec![false; elements.len()];
 		'outer: for i in 0..elements.len() - 1 {
@@ -39,29 +41,29 @@ fn remove_inverse_elements(elements: &mut Vec<Element>, inverse_check: impl Fn(&
 	}
 }
 
-impl Element {
+impl ElementParsed {
 	// todo check whether this can be used instead of the manual approach in optimize_and_reduce
 	#[allow(unused)]
-	fn run_on_children(&mut self, operation: &mut impl Fn(&mut Element) -> bool) -> bool {
+	fn run_on_children(&mut self, operation: &mut impl Fn(&mut ElementParsed) -> bool) -> bool {
 		match self {
-			Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::Function { arguments: elements, .. }
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
+			ElementParsed::Plus(elements)
+			| ElementParsed::Multiply(elements)
+			| ElementParsed::Function { arguments: elements, .. }
+			| ElementParsed::FunctionWithExpression { arguments: elements, .. } => {
 				elements.iter_mut().map(operation).reduce(|a, b| a || b).unwrap_or(false)
 			},
-			Element::Pow(base, exponent) => operation(base) || operation(exponent),
-			Element::Negate(element) => operation(element),
-			Element::Variable(_)
-			| Element::Brackets(_)
-			| Element::String(_)
-			| Element::VariableOrFunction(_)
-			| Element::Number(_)
-			| Element::NumberWithExpression { .. } => false,
+			ElementParsed::Pow(base, exponent) => operation(base) || operation(exponent),
+			ElementParsed::Negate(element) => operation(element),
+			ElementParsed::Variable(_)
+			| ElementParsed::VariableOrFunction(_)
+			| ElementParsed::Number(_)
+			| ElementParsed::NumberWithExpression { .. } => false,
 		}
 	}
 
-	fn handle_empty_or_one_element(elements: &[Element], neutral_element: u16) -> Option<Element> {
+	fn handle_empty_or_one_element(
+		elements: &[ElementParsed], neutral_element: u16,
+	) -> Option<ElementParsed> {
 		if elements.is_empty() {
 			Some(formula!(num(neutral_element as i32)))
 		} else if elements.len() == 1 {
@@ -70,9 +72,7 @@ impl Element {
 			None
 		}
 	}
-}
 
-impl ElementParsed {
 	pub fn optimize_and_reduce(&mut self) {
 		match self {
 			// Elements, which can't be optimized further
@@ -137,7 +137,7 @@ impl ElementParsed {
 				}
 			},
 			ElementParsed::Plus(elements) => {
-				let inverse_check = |a: &Element, b: &Element| {
+				let inverse_check = |a: &ElementParsed, b: &ElementParsed| {
 					formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
 				};
 
@@ -154,7 +154,7 @@ impl ElementParsed {
 				}
 			},
 			ElementParsed::Multiply(elements) => {
-				let inverse_check = |a: &Element, b: &Element| {
+				let inverse_check = |a: &ElementParsed, b: &ElementParsed| {
 					formula_matches!(a, pow({ b }, num(-1))) || formula_matches!(b, pow({ a }, num(-1)))
 				};
 
@@ -290,12 +290,12 @@ impl ListElementOptimizationResult {
 }
 
 fn list_element_optimization(
-	elements: &mut Vec<Element>, combine_operation: fn(BigRational, BigRational) -> BigRational,
-	inverse_check: fn(&Element, &Element) -> bool, neutral_element_check: fn(&BigRational) -> bool,
-	zero_turns_rest_to_zero: bool, is_plus: bool,
+	elements: &mut Vec<ElementParsed>, combine_operation: fn(BigRational, BigRational) -> BigRational,
+	inverse_check: fn(&ElementParsed, &ElementParsed) -> bool,
+	neutral_element_check: fn(&BigRational) -> bool, zero_turns_rest_to_zero: bool, is_plus: bool,
 ) -> ListElementOptimizationResult {
 	// inner optimization
-	elements.iter_mut().for_each(Element::optimize_and_reduce);
+	elements.iter_mut().for_each(ElementParsed::optimize_and_reduce);
 
 	if let Some(nan) = elements.iter().find(|e| e.is_nan()) {
 		*elements = vec![nan.clone()];
@@ -342,8 +342,8 @@ fn list_element_optimization(
 	}
 	for e in other_elements {
 		match (is_plus, &e) {
-			(true, Element::Plus(inner)) => new_elements.extend(inner.iter().cloned()),
-			(false, Element::Multiply(inner)) => new_elements.extend(inner.iter().cloned()),
+			(true, ElementParsed::Plus(inner)) => new_elements.extend(inner.iter().cloned()),
+			(false, ElementParsed::Multiply(inner)) => new_elements.extend(inner.iter().cloned()),
 			_ => new_elements.push(e),
 		}
 	}
@@ -390,13 +390,13 @@ mod tests {
 		test!(formula!(plus(var("a"), neg(var("a")), var("b"), var("c"), neg(var("c")))), var("b"));
 
 		// Plus propagiert NaN
-		let nan_el = Element::Number(Number::nan(None));
+		let nan_el = ElementParsed::Number(Number::nan(None));
 		let mut f = formula!(plus(var("x"), nan_el, var("y")));
 		f.optimize_and_reduce();
 		assert!(f.is_nan());
 
 		// Multiply propagiert NaN
-		let nan_el2 = Element::Number(Number::nan(None));
+		let nan_el2 = ElementParsed::Number(Number::nan(None));
 		let mut f = mul([var("x"), nan_el2.clone(), var("y")]);
 		f.optimize_and_reduce();
 		assert!(f.is_nan());
