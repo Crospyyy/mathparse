@@ -491,24 +491,6 @@ impl Element {
 			false
 		}
 	}
-
-	pub(crate) fn anything_unparsed(&self) -> bool {
-		match self {
-			Element::Brackets(_) | Element::String(_) => true,
-			Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::Function { arguments: elements, .. }
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
-				elements.iter().any(Element::anything_unparsed)
-			},
-			Element::Pow(base, exponent) => base.anything_unparsed() || exponent.anything_unparsed(),
-			Element::Negate(element) => element.anything_unparsed(),
-			Element::Variable(_)
-			| Element::Number(_)
-			| Element::VariableOrFunction(_)
-			| Element::NumberWithExpression { .. } => false,
-		}
-	}
 }
 
 fn list_contains_char(input: &[Element], delimiter: char) -> bool {
