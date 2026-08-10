@@ -16,16 +16,16 @@ macro_rules! fancy_assert_eq {
 #[macro_export]
 macro_rules! formula {
     (plus($($op:ident $( ( $($args:tt)* ) )?),*)) => {
-        Element::Plus(vec![$(formula!($op$(($($args)*))?)),*])
+        ElementParsed::Plus(vec![$(formula!($op$(($($args)*))?)),*])
     };
     (neg($op:ident $( ( $($args:tt)* ) )?)) => {
-        Element::Negate(Box::new(formula!($op$(($($args)*))?)))
+        ElementParsed::Negate(Box::new(formula!($op$(($($args)*))?)))
     };
 	(pow(
 		$op:ident $( ( $($args:tt)* ) )?,
 		$op2:ident $( ( $($args2:tt)* ) )?
 	)) => {
-		Element::Pow(
+		ElementParsed::Pow(
 			// linke Seite
 			Box::new(formula!($op$(($($args)*))?)),
 			// rechte Seite
@@ -33,13 +33,13 @@ macro_rules! formula {
 		)
 	};
     (mul($( $op:ident  $( ( $($args:tt)* ) )? ),*)) => {
-        Element::Multiply(vec![$(formula!($op$(($($args)*))?)),*])
+        ElementParsed::Multiply(vec![$(formula!($op$(($($args)*))?)),*])
     };
     (num($n:expr)) => {
-        Element::Number(Number::from($n))
+        ElementParsed::Number(Number::from($n))
     };
     (var($s:expr)) => {
-        Element::Variable($s.to_string())
+        ElementParsed::Variable($s.to_string())
     };
     ($e:expr) => {
         $e.clone()
@@ -48,10 +48,9 @@ macro_rules! formula {
 
 #[cfg(test)]
 pub mod test {
-	use crate::Number;
 	use crate::benchmarking::Benchmark;
 	use crate::outer_store_interaction::RunPrecision;
-	use crate::{Element, FormulaStore};
+	use crate::{Element, ElementParsed, FormulaStore, Number};
 	use macros::{formula_matches, return_tokens};
 
 	impl FormulaStore {
@@ -100,7 +99,7 @@ pub mod test {
 
 		// neg extraction
 		let f = formula!(neg(num(4)));
-		assert!(formula_matches!(f, neg(x)).is_some_and(|x| x == &Element::Number(Number::from(4))));
+		assert!(formula_matches!(f, neg(x)).is_some_and(|x| x == &ElementParsed::Number(Number::from(4))));
 
 		// multiply ohne extraktion matcht
 		let f = formula!(mul(num(5), num(6)));
@@ -138,7 +137,7 @@ pub mod test {
 			formula!(neg(num(5))),
 		];
 		for f in formulas {
-			println!("Checking formula: {}", f.get_debug_string());
+			println!("Checking formula: {}", Element::from(f).get_debug_string());
 			assert!(formula_matches!(f, _));
 		}
 

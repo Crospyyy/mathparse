@@ -235,14 +235,14 @@ mod new {
 				ElementMatcher::WithoutInner(element) => {
 					let element_string = element.as_pattern();
 					MatchOutput::no_output(
-						quote! { matches!(#formula, Element::#element_string {..}).then_some(()) },
+						quote! { matches!(#formula, ElementParsed::#element_string {..}).then_some(()) },
 					)
 				},
 				ElementMatcher::Number(n) => {
 					let inner = n.perform_match(quote! { n });
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
-						quote! { if let Element::Number(n) = #formula { #inner_tokens } else { None } },
+						quote! { if let ElementParsed::Number(n) = #formula { #inner_tokens } else { None } },
 						inner.var_count,
 					)
 				},
@@ -250,7 +250,7 @@ mod new {
 					let inner = n.perform_match(quote! { n });
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
-						quote! { if let Element::Variable(n) = #formula { #inner_tokens } else { None } },
+						quote! { if let ElementParsed::Variable(n) = #formula { #inner_tokens } else { None } },
 						inner.var_count,
 					)
 				},
@@ -258,7 +258,7 @@ mod new {
 					let inner = n.perform_match(quote! { n.as_ref() });
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
-						quote! { if let Element::Negate(n) = #formula { #inner_tokens } else { None } },
+						quote! { if let ElementParsed::Negate(n) = #formula { #inner_tokens } else { None } },
 						inner.var_count,
 					)
 				},
@@ -266,7 +266,7 @@ mod new {
 					let inner = n.as_ref().perform_match(quote! { inputs }, true);
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
-						quote! { if let Element::Plus(inputs) = #formula { #inner_tokens } else { None } },
+						quote! { if let ElementParsed::Plus(inputs) = #formula { #inner_tokens } else { None } },
 						inner.var_count,
 					)
 				},
@@ -274,7 +274,7 @@ mod new {
 					let inner = n.as_ref().perform_match(quote! { inputs }, true);
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
-						quote! { if let Element::Multiply(inputs) = #formula { #inner_tokens } else { None } },
+						quote! { if let ElementParsed::Multiply(inputs) = #formula { #inner_tokens } else { None } },
 						inner.var_count,
 					)
 				},
@@ -283,7 +283,7 @@ mod new {
 					let inner_tokens = inner.tokens;
 					MatchOutput::with_output(
 						quote! {
-							if let Element::Pow(__b, __e) = #formula {
+							if let ElementParsed::Pow(__b, __e) = #formula {
 								let inputs = [__b.as_ref(), __e.as_ref()];
 								#inner_tokens
 							} else { None }
@@ -300,7 +300,7 @@ mod new {
 
 					MatchOutput::with_output(
 						quote! {
-						if let Element::Function { name, arguments } = #formula {
+						if let ElementParsed::Function { name, arguments } = #formula {
 							#name_var
 							#args_var
 							#outputs
