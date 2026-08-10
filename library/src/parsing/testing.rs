@@ -1,6 +1,7 @@
-use crate::Element;
 use crate::calculation::create_default_context;
 use crate::formula_short::*;
+use crate::parsing::implementation::ParseError;
+use crate::{Element, ElementParsed};
 use astro_float::ctx::Context;
 
 #[test]
@@ -40,7 +41,7 @@ fn test_parsing_on_manual_formulas() {
 	inputs.into_iter().for_each(|(i, o)| debug_formula_parsing_process(i, o));
 }
 
-fn debug_formula_parsing_process(input: &str, expected_output: Option<Element>) {
+fn debug_formula_parsing_process(input: &str, expected_output: Option<ElementParsed>) {
 	let mut ctx = create_default_context();
 	let expected_output = expected_output;
 	let cow = Element::preprocess_string(input);
@@ -102,13 +103,14 @@ fn debug_formula_parsing_process(input: &str, expected_output: Option<Element>) 
 		);
 	}
 
-	let output = if brackets.anything_unparsed() {
-		Err("Parts of the formula could not be parsed".to_owned())
+	let output: Result<ElementParsed, ParseError> = if let Err(msg) = result {
+		Err(ParseError::ProcessingPow(msg))
 	} else {
-		Ok(brackets)
+		brackets.try_into().map_err(ParseError::UnparsedElementLeft)
 	};
-	assert_eq!(output, Element::parse(input));
-	assert_eq!(output.ok(), expected_output);
+	let manual_output = output.ok();
+	assert_eq!(manual_output, Element::parse(input).ok());
+	assert_eq!(manual_output, expected_output);
 }
 
 fn debug_print_step(
@@ -125,9 +127,9 @@ fn print_heading(step: &str) {
 }
 
 mod formula_generation {
-	use crate::Element;
 	use crate::parsing::testing::debug_formula_parsing_process;
 	use crate::printing::Formula;
+	use crate::{Element, ElementParsed};
 	use rand::random_range;
 
 	impl Formula {
@@ -178,7 +180,7 @@ mod formula_generation {
 				println!("Failed to parse: {}", formula);
 				debug_formula_parsing_process(
 					&formula.to_string(),
-					Some(Element::String("Something".to_owned())),
+					Some(ElementParsed::Variable("Something".to_owned())),
 				)
 			}
 		}

@@ -3,7 +3,7 @@ use crate::calculation::create_context;
 use crate::calculation::expression_values::FunctionExpression;
 use crate::outer_store_interaction::RunPrecision;
 use crate::storing::FormulaStore;
-use crate::{Element, Number, RoundingMode};
+use crate::{Element, ElementParsed, Number, RoundingMode};
 use anyhow::Result;
 use astro_float::BigFloat;
 use astro_float::ctx::Context;
@@ -42,22 +42,19 @@ impl DynamicResult {
 
 #[derive(Error, Debug)]
 pub enum FormulaEvaluationError {
-	#[error("Contains unparsed elements")]
-	UnparsedElements,
 	#[error("Contains unexpanded variables or functions")]
 	UnexpandedElements,
 	#[error("Contains function call with invalid argument count")]
 	FunctionCallWithInvalidArgumentCount,
 }
 
-impl Element {
+impl ElementParsed {
 	fn eval(&self, ctx: &mut Context) -> Result<Number, FormulaEvaluationError> {
 		match self {
-			Element::Brackets(_) | Element::String(_) => Err(FormulaEvaluationError::UnparsedElements),
-			Element::Variable(_) | Element::Function { .. } | Element::VariableOrFunction(_) => {
-				Err(FormulaEvaluationError::UnexpandedElements)
-			},
-			Element::Plus(elements) => {
+			ElementParsed::Variable(_)
+			| ElementParsed::Function { .. }
+			| ElementParsed::VariableOrFunction(_) => Err(FormulaEvaluationError::UnexpandedElements),
+			ElementParsed::Plus(elements) => {
 				let values: Vec<Number> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
 					return Ok(nan.clone());
@@ -65,7 +62,7 @@ impl Element {
 				let product = values.iter().fold(Number::from(0), |acc, n| acc.plus(n, ctx));
 				Ok(product)
 			},
-			Element::Multiply(elements) => {
+			ElementParsed::Multiply(elements) => {
 				let values: Vec<_> = elements.iter().map(|e| e.eval(ctx)).collect::<Result<_, _>>()?;
 				if let Some(nan) = values.iter().find(|v| v.is_nan()) {
 					return Ok(nan.clone());
@@ -76,11 +73,11 @@ impl Element {
 				let product = values.iter().fold(Number::from(1), |acc, n| acc.mul(n, ctx));
 				Ok(product)
 			},
-			Element::Negate(e) => e.eval(ctx).map(|n| n.neg()),
-			Element::Number(n) => Ok(n.clone()),
-			Element::Pow(b, e) => Ok(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
-			Element::NumberWithExpression { expr_value } => Ok(expr_value.get_function()(ctx)),
-			Element::FunctionWithExpression { arguments, expr_value } => {
+			ElementParsed::Negate(e) => e.eval(ctx).map(|n| n.neg()),
+			ElementParsed::Number(n) => Ok(n.clone()),
+			ElementParsed::Pow(b, e) => Ok(b.eval(ctx)?.pow(&e.eval(ctx)?, ctx)),
+			ElementParsed::NumberWithExpression { expr_value } => Ok(expr_value.get_function()(ctx)),
+			ElementParsed::FunctionWithExpression { arguments, expr_value } => {
 				let count = expr_value.get_param_count();
 				if !count.number_would_be_valid(arguments.len()) {
 					return Err(FormulaEvaluationError::FunctionCallWithInvalidArgumentCount);
@@ -133,24 +130,22 @@ impl Element {
 
 	fn get_all_unexpanded_names(&self, names: &mut HashSet<String>) {
 		match self {
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Number(_)
-			| Element::NumberWithExpression { .. }
-			| Element::FunctionWithExpression { .. } => {},
-			Element::Plus(e) | Element::Multiply(e) => {
+			ElementParsed::Number(_)
+			| ElementParsed::NumberWithExpression { .. }
+			| ElementParsed::FunctionWithExpression { .. } => {},
+			ElementParsed::Plus(e) | ElementParsed::Multiply(e) => {
 				e.iter().for_each(|el| el.get_all_unexpanded_names(names));
 			},
-			Element::Pow(a, b) => {
+			ElementParsed::Pow(a, b) => {
 				a.get_all_unexpanded_names(names);
 				b.get_all_unexpanded_names(names);
 			},
-			Element::Negate(x) => x.get_all_unexpanded_names(names),
-			Element::Function { name, arguments } => {
+			ElementParsed::Negate(x) => x.get_all_unexpanded_names(names),
+			ElementParsed::Function { name, arguments } => {
 				names.insert(name.to_owned());
 				arguments.iter().for_each(|arg| arg.get_all_unexpanded_names(names));
 			},
-			Element::Variable(name) | Element::VariableOrFunction(name) => {
+			ElementParsed::Variable(name) | ElementParsed::VariableOrFunction(name) => {
 				names.insert(name.to_owned());
 			},
 		}
@@ -159,8 +154,8 @@ impl Element {
 
 #[derive(Error, Debug)]
 pub enum EvaluationError {
-	#[error("Could not parse formula: {0}")]
-	CouldNotParse(String),
+	#[error("Could not parse formula")]
+	CouldNotParse,
 	// todo find a better way to to error handling
 }
 
@@ -174,7 +169,8 @@ impl Display for ExpansionError {
 
 impl FormulaStore {
 	pub(crate) fn expand_and_optimize(
-		&self, formula: &mut Element, benchmark: &mut Benchmark, exclude_from_expansion: &HashSet<String>,
+		&self, formula: &mut ElementParsed, benchmark: &mut Benchmark,
+		exclude_from_expansion: &HashSet<String>,
 	) -> Result<()> {
 		benchmark.benchmark("Formula Optimization", || formula.optimize_and_reduce());
 		benchmark.benchmark("Expansion", || self.expand_formula(formula, exclude_from_expansion))?;
@@ -182,7 +178,12 @@ impl FormulaStore {
 		Ok(())
 	}
 
-	pub(crate) fn expand_formula(&self, formula: &mut Element, ignore_names: &HashSet<String>) -> Result<()> {
+	pub(crate) fn expand_formula(
+		// todo return an ElementExpanded
+		&self,
+		formula: &mut ElementParsed,
+		ignore_names: &HashSet<String>,
+	) -> Result<()> {
 		// todo look into how to do this more efficiently
 		let mut all_names = HashSet::new();
 		loop {
@@ -209,14 +210,15 @@ impl FormulaStore {
 	pub fn eval_new(
 		&self, formula_str: &str, precision: RunPrecision, benchmark: &mut Benchmark,
 	) -> Result<DynamicResult> {
-		let mut formula = benchmark
-			.benchmark("Parsing", || Element::parse(formula_str).map_err(EvaluationError::CouldNotParse))?;
+		let mut formula = benchmark.benchmark("Parsing", || {
+			Element::parse(formula_str).map_err(|_| EvaluationError::CouldNotParse)
+		})?;
 
 		self.eval_new_without_parsing(precision, benchmark, &mut formula)?
 	}
 
 	pub fn eval_new_without_parsing(
-		&self, precision: RunPrecision, benchmark: &mut Benchmark, formula: &mut Element,
+		&self, precision: RunPrecision, benchmark: &mut Benchmark, formula: &mut ElementParsed,
 	) -> Result<Result<DynamicResult>> {
 		benchmark.bench_with_inner("Expansion and Optimization", |b| {
 			self.expand_and_optimize(formula, b, &HashSet::new())

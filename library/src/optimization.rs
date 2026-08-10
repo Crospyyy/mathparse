@@ -1,6 +1,6 @@
 use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
 use crate::formula_short::{fun_expr, inv, mul, neg, num, num_expr, pow};
-use crate::{Element, Number, formula};
+use crate::{Element, ElementParsed, Number, formula};
 use astro_float::Error;
 use macros::formula_matches;
 use num_bigint::BigInt;
@@ -70,24 +70,24 @@ impl Element {
 			None
 		}
 	}
+}
 
+impl ElementParsed {
 	pub fn optimize_and_reduce(&mut self) {
 		match self {
 			// Elements, which can't be optimized further
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Number(_) => {},
+			ElementParsed::Variable(_)
+			| ElementParsed::VariableOrFunction(_)
+			| ElementParsed::NumberWithExpression { .. }
+			| ElementParsed::Number(_) => {},
 
 			// Elements, which can be optimized
-			Element::Function { arguments, .. } => {
+			ElementParsed::Function { arguments, .. } => {
 				for a in arguments {
 					a.optimize_and_reduce();
 				}
 			},
-			Element::FunctionWithExpression { arguments, expr_value } => {
+			ElementParsed::FunctionWithExpression { arguments, expr_value } => {
 				for a in arguments.iter_mut() {
 					a.optimize_and_reduce();
 				}
@@ -136,7 +136,7 @@ impl Element {
 					_ => {},
 				}
 			},
-			Element::Plus(elements) => {
+			ElementParsed::Plus(elements) => {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, neg({ b })) || formula_matches!(b, neg({ a }))
 				};
@@ -153,7 +153,7 @@ impl Element {
 					*self = replacement
 				}
 			},
-			Element::Multiply(elements) => {
+			ElementParsed::Multiply(elements) => {
 				let inverse_check = |a: &Element, b: &Element| {
 					formula_matches!(a, pow({ b }, num(-1))) || formula_matches!(b, pow({ a }, num(-1)))
 				};
@@ -174,7 +174,7 @@ impl Element {
 					self.optimize_and_reduce();
 				}
 			},
-			Element::Pow(this_base, this_exponent) => {
+			ElementParsed::Pow(this_base, this_exponent) => {
 				this_base.optimize_and_reduce();
 				this_exponent.optimize_and_reduce();
 
@@ -266,7 +266,7 @@ impl Element {
 					self.optimize_and_reduce();
 				}
 			},
-			Element::Negate(x) => {
+			ElementParsed::Negate(x) => {
 				x.optimize_and_reduce();
 				if let Some(num) = formula_matches!(x.as_ref(), num(x)) {
 					*self = num.neg().into();

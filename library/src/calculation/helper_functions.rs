@@ -1,6 +1,6 @@
-use crate::only_in_debug;
-use crate::{debug_print, Number};
 use crate::calculation::helper_functions;
+use crate::only_in_debug;
+use crate::{Number, debug_print};
 use astro_float::ctx::Context;
 use astro_float::{BigFloat, Error, expr};
 use num_bigint::BigInt;
@@ -199,7 +199,7 @@ pub(crate) fn sin_radians(r: &BigRational, ctx: &mut Context) -> Number {
 		let negator = negate_if(1, mapped.is_negative());
 		return Number::from(expr!(negator * sqrt(3) / 2, &mut *ctx));
 	}
-	
+
 	debug_print!("return sin calculation");
 	let float = helper_functions::float_from_rational(&(mapped / rational(2)), ctx);
 	let sin_input = expr!(float * pi, &mut *ctx);

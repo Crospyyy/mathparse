@@ -1,8 +1,9 @@
 use crate::benchmarking::Benchmark;
-use crate::{Element, Number};
+use crate::{Element, ElementParsed, Number};
 use regex::Regex;
 use std::mem;
 use std::sync::LazyLock;
+use thiserror::Error;
 
 static REGEX_INSERT_PLUS: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"([\w)])-([\w(-])").unwrap());
 
@@ -28,54 +29,38 @@ pub fn get_fun_name_end_of_string(name: &str, allow_first_char_digit: bool) -> S
 	}
 }
 
+#[derive(Error, Debug)]
+pub(super) enum ParseError {
+	#[error("Error processing power: {0}")]
+	ProcessingPow(String),
+	#[error("Unparsed element left: {0:?}")]
+	UnparsedElementLeft(Element),
+}
+
 impl Element {
-	pub fn parse(input: &str) -> Result<Self, String> {
+	pub fn parse(input: &str) -> Result<ElementParsed, ParseError> {
 		Self::parse_benched(input, &mut Benchmark::new("Parse formula"))
 	}
 
-	pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<Self, String> {
+	pub fn parse_benched(input: &str, benchmark: &mut Benchmark) -> Result<ElementParsed, ParseError> {
 		let b = benchmark;
 
 		let cow = b.benchmark("preprocess_string_minus", || Element::preprocess_string(input));
 		let chars = b.benchmark("convert_to_chars", || cow.chars().collect::<Vec<_>>());
 		let mut start = 0;
 		let mut formula = b.benchmark("resolve_brackets", || Element::resolve_brackets(&chars, &mut start));
-		b.benchmark("resolve_functions", || {
-			formula.resolve_functions();
-		});
-		b.benchmark("process_plus", || {
-			formula.process_plus();
-		});
-		b.benchmark("process_minus", || {
-			formula.process_minus();
-		});
-		b.benchmark("process_multiply", || {
-			formula.process_multiply();
-		});
-		b.benchmark("process_divide", || {
-			formula.process_divide();
-		});
-		b.benchmark("process_minus_2", || {
-			formula.process_minus();
-		});
-		b.benchmark("process_pow", || formula.process_pow())?;
-		b.benchmark("process_minus_3", || {
-			formula.process_minus();
-		});
-		b.benchmark("process_numbers_and_variables", || {
-			formula.process_numbers_and_variables();
-		});
-		b.benchmark("remove_unneeded_outer_brackets", || {
-			formula.remove_unneeded_outer_brackets();
-		});
-		b.benchmark("convert_to_variables_where_possible", || {
-			formula.convert_to_variables_where_possible();
-		});
-		if formula.anything_unparsed() {
-			Err("Parts of the formula could not be parsed".to_owned())
-		} else {
-			Ok(formula)
-		}
+		b.benchmark("resolve_functions", || formula.resolve_functions());
+		b.benchmark("process_plus", || formula.process_plus());
+		b.benchmark("process_minus", || formula.process_minus());
+		b.benchmark("process_multiply", || formula.process_multiply());
+		b.benchmark("process_divide", || formula.process_divide());
+		b.benchmark("process_minus_2", || formula.process_minus());
+		b.benchmark("process_pow", || formula.process_pow()).map_err(ParseError::ProcessingPow)?;
+		b.benchmark("process_minus_3", || formula.process_minus());
+		b.benchmark("process_numbers_and_variables", || formula.process_numbers_and_variables());
+		b.benchmark("remove_unneeded_outer_brackets", || formula.remove_unneeded_outer_brackets());
+		b.benchmark("convert_to_variables_where_possible", || formula.convert_to_variables_where_possible());
+		Ok(formula.try_into().map_err(ParseError::UnparsedElementLeft)?)
 	}
 
 	/// Step 0

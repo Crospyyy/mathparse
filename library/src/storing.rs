@@ -2,7 +2,10 @@ use crate::calculation::expression_values::{CustomFunction, FunctionExpression};
 use crate::parsing::signature::{
 	OptionalFunctionDeclarationArguments, ParamCount, Signature, Signatures, SymbolDeclarationData,
 };
-use crate::{Benchmark, Element, ExpressionFunType, ExpressionNumType, Number, NumberContext, debug_print};
+use crate::{
+	Benchmark, Element, ElementParsed, ExpressionFunType, ExpressionNumType, Number, NumberContext,
+	debug_print,
+};
 use crate::{create_default_context, only_in_debug};
 use anyhow::{Result, anyhow};
 use astro_float::ctx::Context;
@@ -17,9 +20,9 @@ pub struct Symbol {
 	signature: Signature,
 	params: Option<Vec<String>>,
 	/// This is the original unoptimized formula
-	formula: Element,
+	formula: ElementParsed,
 	/// This is the optimized and reduced formula, which is used for evaluation
-	optimized_formula: Element,
+	optimized_formula: ElementParsed,
 }
 
 #[derive(Debug)]
@@ -32,7 +35,7 @@ pub struct NamedSymbol {
 pub struct InsertionElement {
 	name: String,
 	parameters: Option<Vec<String>>,
-	formula: Element,
+	formula: ElementParsed,
 }
 
 // public functions
@@ -193,7 +196,7 @@ impl FormulaStore {
 // private functions
 impl FormulaStore {
 	fn resolve_formula_and_refine_call_signature(
-		symbol_name_and_args: &mut OptionalFunctionDeclarationArguments, content: &Element,
+		symbol_name_and_args: &mut OptionalFunctionDeclarationArguments, content: &ElementParsed,
 		defined_signatures: &Signatures,
 	) -> Result<()> {
 		// Initialize signatures and
@@ -236,7 +239,7 @@ impl FormulaStore {
 	}
 
 	fn resolve_new_symbol(
-		&self, mut opt_func_args: OptionalFunctionDeclarationArguments, content: Element,
+		&self, mut opt_func_args: OptionalFunctionDeclarationArguments, content: ElementParsed,
 	) -> Result<Symbol> {
 		let defined_signatures: Signatures =
 			self.symbols.iter().map(|(name, symbol)| (name.clone(), symbol.signature.clone())).collect();
@@ -253,7 +256,7 @@ impl FormulaStore {
 	}
 
 	fn add_symbol_from_sig_and_def(
-		&mut self, sig: Element, def: Element, dry_run: bool,
+		&mut self, sig: ElementParsed, def: ElementParsed, dry_run: bool,
 	) -> Result<NamedSymbol> {
 		let symbol_name_and_args = SymbolDeclarationData::from_formula(&sig)?;
 		self.check_symbol_name_availability(symbol_name_and_args.get_name())?;
@@ -274,7 +277,7 @@ impl FormulaStore {
 	) -> Result<()> {
 		let parameter_names = None;
 		let signature = Signature::Number;
-		let formula = Element::NumberWithExpression { expr_value };
+		let formula = ElementParsed::NumberWithExpression { expr_value };
 		self.add_symbol_new(
 			&name.to_string(),
 			Symbol::new(signature, parameter_names, formula.clone(), formula),
@@ -290,7 +293,7 @@ impl FormulaStore {
 			ParamCount::Exactly(n) => Signature::Function(vec![Signature::Number; n]),
 			ParamCount::AtLeast(n) => Signature::FunctionNOrMoreParams(n),
 		};
-		let element = Element::FunctionWithExpression { arguments: vec![], expr_value };
+		let element = ElementParsed::FunctionWithExpression { arguments: vec![], expr_value };
 		self.add_symbol_new(
 			&name.to_string(),
 			Symbol::new(signature, params, element.clone(), element),
@@ -301,7 +304,7 @@ impl FormulaStore {
 
 impl Symbol {
 	pub(crate) fn create_from(
-		opt_func_args: OptionalFunctionDeclarationArguments, content: Element, optimized: Element,
+		opt_func_args: OptionalFunctionDeclarationArguments, content: ElementParsed, optimized: ElementParsed,
 	) -> Self {
 		Symbol::new(
 			opt_func_args
@@ -315,7 +318,7 @@ impl Symbol {
 	}
 
 	pub(crate) fn new(
-		signature: Signature, params: Option<Vec<String>>, formula: Element, optimized: Element,
+		signature: Signature, params: Option<Vec<String>>, formula: ElementParsed, optimized: ElementParsed,
 	) -> Self {
 		Self { signature, params, formula, optimized_formula: optimized }
 	}
@@ -328,10 +331,10 @@ impl Symbol {
 		self.params.as_ref()
 	}
 
-	pub fn formula(&self) -> &Element {
+	pub fn formula(&self) -> &ElementParsed {
 		&self.formula
 	}
-	
+
 	/// Get the call signature string like `fun(a, b)` or `var_xy`
 	pub fn get_signature_string(&self, name: &str) -> String {
 		match self.signature {
@@ -351,7 +354,10 @@ impl Symbol {
 		format!(
 			"{} = {}",
 			self.get_signature_string(name),
-			if show_optimized_formula { &self.optimized_formula } else { &self.formula }.get_string(ctx)
+			Element::from(
+				if show_optimized_formula { &self.optimized_formula } else { &self.formula }.clone()
+			)
+			.get_string(ctx)
 		)
 	}
 }
@@ -379,9 +385,9 @@ impl NamedSymbol {
 }
 
 impl InsertionElement {
-	pub fn insert_param_values(&self, param_values: Vec<Element>) -> Result<Element> {
+	pub fn insert_param_values(&self, param_values: Vec<ElementParsed>) -> Result<ElementParsed> {
 		if let Some(insert_args) = &self.parameters {
-			if let Element::FunctionWithExpression { expr_value, .. } = &self.formula
+			if let ElementParsed::FunctionWithExpression { expr_value, .. } = &self.formula
 				&& insert_args.is_empty()
 			{
 				if !expr_value.get_param_count().number_would_be_valid(param_values.len()) {
@@ -392,7 +398,7 @@ impl InsertionElement {
 						param_values.len()
 					));
 				}
-				return Ok(Element::FunctionWithExpression {
+				return Ok(ElementParsed::FunctionWithExpression {
 					arguments: param_values,
 					expr_value: expr_value.clone(),
 				});
@@ -419,44 +425,42 @@ impl InsertionElement {
 	}
 }
 
-impl Element {
+impl ElementParsed {
 	pub(crate) fn insert_symbol(&mut self, insert: &InsertionElement) -> Result<()> {
 		match self {
-			Element::Brackets(elements)
-			| Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::Function { arguments: elements, .. }
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
+			ElementParsed::Plus(elements)
+			| ElementParsed::Multiply(elements)
+			| ElementParsed::Function { arguments: elements, .. }
+			| ElementParsed::FunctionWithExpression { arguments: elements, .. } => {
 				for e in elements {
 					e.insert_symbol(insert)?;
 				}
 			},
-			Element::Pow(a, b) => {
+			ElementParsed::Pow(a, b) => {
 				a.insert_symbol(insert)?;
 				b.insert_symbol(insert)?;
 			},
-			Element::Negate(x) => x.insert_symbol(insert)?,
-			Element::Number(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
-			| Element::String(_) => {},
+			ElementParsed::Negate(x) => x.insert_symbol(insert)?,
+			ElementParsed::Number(_)
+			| ElementParsed::NumberWithExpression { .. }
+			| ElementParsed::Variable(_)
+			| ElementParsed::VariableOrFunction(_) => {},
 		}
 		if self.get_name().is_some_and(|n| n == insert.name) {
 			// this is going to be the new logic
 			match (&mut *self, &insert.parameters, &insert.formula) {
 				(
-					Element::Function { name: self_name, arguments: self_arguments },
+					ElementParsed::Function { name: self_name, arguments: self_arguments },
 					insert_params,
 					insert_formula,
 				) => match (insert_params, insert_formula) {
-					(None, Element::VariableOrFunction(new_name)) => {
+					(None, ElementParsed::VariableOrFunction(new_name)) => {
 						*self_name = new_name.clone();
 					},
 					(Some(_), _) => {
 						*self = insert.insert_param_values(self_arguments.clone())?;
 					},
-					(None, Element::FunctionWithExpression { .. }) => {
+					(None, ElementParsed::FunctionWithExpression { .. }) => {
 						*self = insert.insert_param_values(self_arguments.clone())?;
 					},
 					(..) => {
@@ -467,10 +471,10 @@ impl Element {
 						));
 					},
 				},
-				(Element::Variable(_), None, _) => {
+				(ElementParsed::Variable(_), None, _) => {
 					*self = insert.formula.clone();
 				},
-				(Element::VariableOrFunction(..), params, _) => {
+				(ElementParsed::VariableOrFunction(..), params, _) => {
 					if params.is_some() {
 						println!("Skipping this because there is no call yet");
 					} else {
@@ -489,33 +493,31 @@ impl Element {
 			}
 		}
 		match self {
-			Element::Brackets(_)
-			| Element::String(_)
-			| Element::Number(_)
-			| Element::Variable(_)
-			| Element::VariableOrFunction(_)
-			| Element::NumberWithExpression { .. }
-			| Element::Function { .. } => {},
-			Element::Plus(elements)
-			| Element::Multiply(elements)
-			| Element::FunctionWithExpression { arguments: elements, .. } => {
+			ElementParsed::Number(_)
+			| ElementParsed::Variable(_)
+			| ElementParsed::VariableOrFunction(_)
+			| ElementParsed::NumberWithExpression { .. }
+			| ElementParsed::Function { .. } => {},
+			ElementParsed::Plus(elements)
+			| ElementParsed::Multiply(elements)
+			| ElementParsed::FunctionWithExpression { arguments: elements, .. } => {
 				for e in elements {
-					if let Element::VariableOrFunction(name) = e {
-						*e = Element::Variable(name.clone());
+					if let ElementParsed::VariableOrFunction(name) = e {
+						*e = ElementParsed::Variable(name.clone());
 					};
 				}
 			},
-			Element::Pow(a, b) => {
-				if let Element::VariableOrFunction(name) = &**a {
-					**a = Element::Variable(name.clone());
+			ElementParsed::Pow(a, b) => {
+				if let ElementParsed::VariableOrFunction(name) = &**a {
+					**a = ElementParsed::Variable(name.clone());
 				}
-				if let Element::VariableOrFunction(name) = &**b {
-					**b = Element::Variable(name.clone());
+				if let ElementParsed::VariableOrFunction(name) = &**b {
+					**b = ElementParsed::Variable(name.clone());
 				}
 			},
-			Element::Negate(a) => {
-				if let Element::VariableOrFunction(name) = &**a {
-					**a = Element::Variable(name.clone());
+			ElementParsed::Negate(a) => {
+				if let ElementParsed::VariableOrFunction(name) = &**a {
+					**a = ElementParsed::Variable(name.clone());
 				}
 			},
 		}
@@ -613,7 +615,7 @@ mod tests {
 				formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
 			})
 			.unwrap();
-		if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+		if let ElementParsed::FunctionWithExpression { expr_value, arguments } = &formula {
 			assert_eq!(arguments.len(), 1);
 			assert_eq!(arguments[0], mul([num(3), num(2)]));
 			assert_eq!(expr_value, &ExpressionFunType::Abs);
@@ -629,7 +631,7 @@ mod tests {
 				formula: fun_expr(ExpressionFunType::Abs, [mul([var("x"), num(2)])]),
 			})
 			.unwrap();
-		if let Element::FunctionWithExpression { expr_value, arguments } = &formula {
+		if let ElementParsed::FunctionWithExpression { expr_value, arguments } = &formula {
 			assert_eq!(arguments.len(), 1);
 			assert_eq!(arguments[0], num(3));
 			assert_eq!(expr_value, &ExpressionFunType::Abs);

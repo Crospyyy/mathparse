@@ -113,62 +113,62 @@ pub enum Number {
 #[allow(unused)]
 mod formula_short {
 	use crate::calculation::expression_values::{ExpressionFunType, ExpressionNumType};
-	use crate::{Element, Number};
+	use crate::{ElementParsed, Number};
 	use astro_float::Error;
 
-	pub fn nan(error: Option<Error>) -> Element {
-		Element::Number(Number::nan(error))
+	pub fn nan(error: Option<Error>) -> ElementParsed {
+		ElementParsed::Number(Number::nan(error))
 	}
 
-	pub fn num(num: impl ToString) -> Element {
-		Element::Number(Number::from_string(num).unwrap())
+	pub fn num(num: impl ToString) -> ElementParsed {
+		ElementParsed::Number(Number::from_string(num).unwrap())
 	}
 
-	pub fn var_or_fun(name: &str) -> Element {
-		Element::VariableOrFunction(name.to_string())
+	pub fn var_or_fun(name: &str) -> ElementParsed {
+		ElementParsed::VariableOrFunction(name.to_string())
 	}
 
-	pub fn var(name: impl ToString) -> Element {
-		Element::Variable(name.to_string())
+	pub fn var(name: impl ToString) -> ElementParsed {
+		ElementParsed::Variable(name.to_string())
 	}
 
-	pub fn fun(name: &str, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::Function { name: name.to_string(), arguments: args.into_iter().collect() }
+	pub fn fun(name: &str, args: impl IntoIterator<Item = ElementParsed>) -> ElementParsed {
+		ElementParsed::Function { name: name.to_string(), arguments: args.into_iter().collect() }
 	}
 
-	pub fn neg(element: Element) -> Element {
-		Element::Negate(Box::new(element))
+	pub fn neg(element: ElementParsed) -> ElementParsed {
+		ElementParsed::Negate(Box::new(element))
 	}
 
-	pub fn plus(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Plus(elements.into_iter().collect())
+	pub fn plus(elements: impl IntoIterator<Item = ElementParsed>) -> ElementParsed {
+		ElementParsed::Plus(elements.into_iter().collect())
 	}
 
-	pub fn mul(elements: impl IntoIterator<Item = Element>) -> Element {
-		Element::Multiply(elements.into_iter().collect())
+	pub fn mul(elements: impl IntoIterator<Item = ElementParsed>) -> ElementParsed {
+		ElementParsed::Multiply(elements.into_iter().collect())
 	}
 
-	pub fn pow(base: Element, exponent: Element) -> Element {
-		Element::Pow(Box::new(base), Box::new(exponent))
+	pub fn pow(base: ElementParsed, exponent: ElementParsed) -> ElementParsed {
+		ElementParsed::Pow(Box::new(base), Box::new(exponent))
 	}
 
 	/// = element^-1
-	pub fn inv(element: Element) -> Element {
+	pub fn inv(element: ElementParsed) -> ElementParsed {
 		pow(element, neg(num("1")))
 	}
 
-	pub fn num_expr(value: ExpressionNumType) -> Element {
-		Element::NumberWithExpression { expr_value: value }
+	pub fn num_expr(value: ExpressionNumType) -> ElementParsed {
+		ElementParsed::NumberWithExpression { expr_value: value }
 	}
 
-	pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = Element>) -> Element {
-		Element::FunctionWithExpression { arguments: args.into_iter().collect(), expr_value: fun }
+	pub fn fun_expr(fun: ExpressionFunType, args: impl IntoIterator<Item = ElementParsed>) -> ElementParsed {
+		ElementParsed::FunctionWithExpression { arguments: args.into_iter().collect(), expr_value: fun }
 	}
 }
 
-impl From<Number> for Element {
+impl From<Number> for ElementParsed {
 	fn from(value: Number) -> Self {
-		Element::Number(value)
+		ElementParsed::Number(value)
 	}
 }
 
@@ -308,6 +308,45 @@ impl<'a> TryFrom<&'a Element> for ElementParsed {
 			},
 			Element::Number(number) => Ok(ElementParsed::Number(number.clone())),
 		}
+	}
+}
+impl TryFrom<Element> for ElementParsed {
+	type Error = Element;
+
+	fn try_from(value: Element) -> Result<Self, Self::Error> {
+		Ok(match value {
+			Element::Brackets(_) | Element::String(_) => return Err(value),
+			Element::Function { name, arguments } => ElementParsed::Function {
+				name,
+				arguments: arguments.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			},
+			Element::Variable(name) => ElementParsed::Variable(name),
+			Element::VariableOrFunction(name) => ElementParsed::VariableOrFunction(name),
+			Element::FunctionWithExpression { arguments, expr_value } => {
+				ElementParsed::FunctionWithExpression {
+					arguments: arguments
+						.into_iter()
+						.map(ElementParsed::try_from)
+						.collect::<Result<_, _>>()?,
+					expr_value,
+				}
+			},
+			Element::NumberWithExpression { expr_value } => {
+				ElementParsed::NumberWithExpression { expr_value }
+			},
+			Element::Plus(elements) => ElementParsed::Plus(
+				elements.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			),
+			Element::Multiply(elements) => ElementParsed::Multiply(
+				elements.into_iter().map(ElementParsed::try_from).collect::<Result<_, _>>()?,
+			),
+			Element::Pow(base, exponent) => ElementParsed::Pow(
+				Box::new(ElementParsed::try_from(*base)?),
+				Box::new(ElementParsed::try_from(*exponent)?),
+			),
+			Element::Negate(element) => ElementParsed::Negate(Box::new(ElementParsed::try_from(*element)?)),
+			Element::Number(number) => ElementParsed::Number(number),
+		})
 	}
 }
 impl<'a> TryFrom<&'a ElementParsed> for ElementExpanded {
