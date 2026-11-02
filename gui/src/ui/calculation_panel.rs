@@ -222,7 +222,7 @@ impl UiState {
 			CONVERTER.convert_to_pretty(&self.calculation_panel.calculation_input.top_user_input);
 		let response = TextEdit::singleline(&mut self.calculation_panel.calculation_input.top_user_input)
 			.id(self.calculation_panel.calculation_input.top_user_input_id)
-			.hint_text("Enter formula here ...")
+			.hint_text(RichText::new("Enter formula here ...").font(TEXTEDIT_FONT_ID))
 			.font(FontSelection::FontId(TEXTEDIT_FONT_ID))
 			.lock_focus(true)
 			.desired_width(ui.available_width())

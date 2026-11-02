@@ -8,7 +8,8 @@ use egui::text::{CCursor, CCursorRange};
 use egui::text_edit::TextEditOutput;
 use egui::{
 	Align, Button, CentralPanel, Color32, Context, CursorIcon, Event, Id, Key, Layout, Modifiers, OpenUrl,
-	RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextWrapMode, Ui, Visuals, Widget,
+	RawInput, Response, RichText, Shadow, Style, TextBuffer, TextEdit, TextStyle, TextWrapMode, Ui, Visuals,
+	Widget,
 };
 use library::{
 	FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
@@ -84,6 +85,44 @@ impl Window {
 		let ctx = cc.egui_ctx.clone();
 
 		ctx.set_pixels_per_point(ctx.pixels_per_point() * 1.2);
+		// egui 0.33+ changed how text and widgets are drawn. Pin the values we rely on back to the
+		// 0.32 defaults so the calculator keeps its original look.
+		ctx.all_styles_mut(|style| {
+			// Hinting snaps glyphs to the pixel grid, which shrinks every text size by a different
+			// amount at this fractional ppp.
+			style.visuals.text_options.font_hinting = false;
+			for text_style in [TextStyle::Body, TextStyle::Button] {
+				if let Some(font_id) = style.text_styles.get_mut(&text_style) {
+					font_id.size = 12.5;
+				}
+			}
+			// Widget chrome: padding, corner radii, expansion and colors.
+			style.spacing.button_padding = egui::vec2(4.0, 1.0);
+			style.spacing.interact_size.y = 18.0;
+			let widgets = &mut style.visuals.widgets;
+			widgets.noninteractive.corner_radius = egui::CornerRadius::same(2);
+			widgets.inactive.corner_radius = egui::CornerRadius::same(2);
+			widgets.inactive.weak_bg_fill = Color32::from_gray(60);
+			widgets.inactive.bg_fill = Color32::from_gray(60);
+			widgets.inactive.fg_stroke.color = Color32::from_gray(180);
+			widgets.hovered.corner_radius = egui::CornerRadius::same(3);
+			widgets.hovered.expansion = 1.0;
+			widgets.hovered.weak_bg_fill = Color32::from_gray(70);
+			widgets.hovered.bg_fill = Color32::from_gray(70);
+			widgets.hovered.bg_stroke = egui::Stroke::new(1.0, Color32::from_gray(150));
+			widgets.hovered.fg_stroke = egui::Stroke::new(1.5, Color32::from_gray(240));
+			widgets.active.corner_radius = egui::CornerRadius::same(2);
+			widgets.active.expansion = 1.0;
+			widgets.active.weak_bg_fill = Color32::from_gray(55);
+			widgets.active.bg_fill = Color32::from_gray(55);
+			widgets.active.bg_stroke = egui::Stroke::new(1.0, Color32::WHITE);
+			widgets.active.fg_stroke = egui::Stroke::new(2.0, Color32::WHITE);
+			widgets.open.corner_radius = egui::CornerRadius::same(2);
+			widgets.open.weak_bg_fill = Color32::from_gray(45);
+			widgets.open.bg_fill = Color32::from_gray(27);
+			widgets.open.bg_stroke = egui::Stroke::new(1.0, Color32::from_gray(60));
+			widgets.open.fg_stroke = egui::Stroke::new(1.0, Color32::from_gray(210));
+		});
 
 		let backend = Backend::new();
 
