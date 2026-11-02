@@ -24,9 +24,9 @@ static REMOVE_OPERATIONS_BEFORE_CLOSING_BRACKETS: LazyLock<Regex> =
 	LazyLock::new(|| Regex::new(r"([+\-*^]+)(\))").unwrap());
 
 impl App for Window {
-	fn update(&mut self, ctx: &Context, _frame: &mut Frame) {
+	fn ui(&mut self, ui: &mut Ui, _frame: &mut Frame) {
 		let mut pressed_shortcut = false;
-		self.handle_window_control(ctx, &mut pressed_shortcut);
+		self.handle_window_control(ui.ctx(), &mut pressed_shortcut);
 
 		let frame = if self.window_state.is_pinned() {
 			egui::containers::Frame::central_panel(&Style::default())
@@ -44,8 +44,8 @@ impl App for Window {
 				.shadow(shadow)
 		};
 
-		CentralPanel::default().frame(frame).show(ctx, |ui| {
-			self.window_background_logic(ctx, ui);
+		CentralPanel::default().frame(frame).show(ui, |ui| {
+			self.window_background_logic(ui);
 			self.show_top_input(ui, pressed_shortcut);
 			ui.add_space(7.5);
 			self.ui_state.show_tab_selector(ui);
@@ -62,7 +62,7 @@ impl App for Window {
 						.on_hover_cursor(CursorIcon::PointingHand)
 						.clicked()
 					{
-						ctx.open_url(OpenUrl::new_tab("https://github.com/Crospyyy"));
+						ui.ctx().open_url(OpenUrl::new_tab("https://github.com/Crospyyy"));
 					}
 				});
 			}
@@ -193,7 +193,7 @@ impl Window {
 		}
 
 		self.handle_ui_input();
-		
+
 		self.ui_state.show_main_result(ui);
 	}
 
@@ -233,7 +233,7 @@ impl Window {
 			return;
 		};
 		let string = get_fun_name_end_of_string(
-			self.ui_state.calculation_panel.calculation_input.top_user_input.char_range(0..cursor_pos),
+			self.ui_state.calculation_panel.calculation_input.top_user_input.char_range(0.into()..cursor_pos),
 			true,
 		);
 		if string.is_empty() || string.chars().nth(0).is_some_and(|c| !c.is_ascii_digit()) {
@@ -244,18 +244,23 @@ impl Window {
 		};
 		let pos_before = cursor_pos - string.len();
 		let insert_pos = pos_before + first_char_pos;
-		self.ui_state.calculation_panel.calculation_input.top_user_input.insert(insert_pos, '*');
+		self.ui_state.calculation_panel.calculation_input.top_user_input.insert(insert_pos.into(), '*');
 		let mut add_move_cursor_right = 1;
 
-		if pos_before > 0 {
+		if pos_before > 0.into() {
 			let mut first_num_char = pos_before;
 			loop {
-				if first_num_char == 0 {
+				if first_num_char == 0.into() {
 					break;
 				}
 				let new_first = first_num_char - 1;
 				if matches!(
-					self.ui_state.calculation_panel.calculation_input.top_user_input.chars().nth(new_first),
+					self.ui_state
+						.calculation_panel
+						.calculation_input
+						.top_user_input
+						.chars()
+						.nth(new_first.into()),
 					Some('0'..='9' | '.')
 				) {
 					first_num_char = new_first;
@@ -263,18 +268,26 @@ impl Window {
 					break;
 				}
 			}
-			if first_num_char != 0
+			if first_num_char != 0.into()
 				&& matches!(
 					self.ui_state
 						.calculation_panel
 						.calculation_input
 						.top_user_input
 						.chars()
-						.nth(first_num_char - 1),
+						.nth(first_num_char.0 - 1),
 					Some('^' | '/')
 				) {
-				self.ui_state.calculation_panel.calculation_input.top_user_input.insert(cursor_pos + 1, ')');
-				self.ui_state.calculation_panel.calculation_input.top_user_input.insert(first_num_char, '(');
+				self.ui_state
+					.calculation_panel
+					.calculation_input
+					.top_user_input
+					.insert((cursor_pos + 1).into(), ')');
+				self.ui_state
+					.calculation_panel
+					.calculation_input
+					.top_user_input
+					.insert(first_num_char.into(), '(');
 				add_move_cursor_right += 1;
 			}
 		}
@@ -297,7 +310,7 @@ impl Window {
 
 	fn update_calculation_result(&mut self) {
 		let input = self.get_processed_input();
-		
+
 		self.ui_state.calculation_panel.calculation_result = input.is_empty().not().then(|| {
 			let run_result = self.backend.dry_run(&input);
 			self.ui_state.generate_result_string(run_result, &mut self.backend)
@@ -333,7 +346,8 @@ impl Window {
 	pub fn get_autocompletion_result<'a>(
 		input_string: &str, cursor_pos: usize, formula_store: &'a FormulaStore,
 	) -> Option<AutocompletionResult<'a>> {
-		let input_symbol_name = get_fun_name_end_of_string(input_string.char_range(0..cursor_pos), false);
+		let input_symbol_name =
+			get_fun_name_end_of_string(input_string.char_range(0.into()..cursor_pos.into()), false);
 		if input_symbol_name.is_empty() {
 			return None;
 		}
@@ -354,20 +368,21 @@ impl Window {
 		})
 	}
 
-	pub fn show_background_context_menu(&mut self, ctx: &Context, ui: &mut Ui) {
-		let mut extended_button = |str: &str| Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui);
-
-		if extended_button(if self.window_state.is_pinned() {
-			"⏷ Unpin the window"
-		} else {
-			"📌 Pin the window"
-		})
-		.clicked()
-		{
-			self.switch_window_pinning(ctx);
+	pub fn show_background_context_menu(&mut self, ui: &mut Ui) {
+		fn extended_button(ui: &mut Ui, str: &str) -> Response {
+			Button::new(str).wrap_mode(TextWrapMode::Extend).ui(ui)
 		}
 
-		if extended_button("❌ Quit").clicked() {
+		if extended_button(
+			ui,
+			if self.window_state.is_pinned() { "⏷ Unpin the window" } else { "📌 Pin the window" },
+		)
+		.clicked()
+		{
+			self.switch_window_pinning(ui.ctx());
+		}
+
+		if extended_button(ui, "❌ Quit").clicked() {
 			exit(0);
 		}
 	}
@@ -413,20 +428,21 @@ impl Window {
 		};
 		if let Some(cursor_pos) = cursors.single().map(|c| c.index) {
 			let move_cursor = typed_brackets.len();
-			if cursor_pos == self.ui_state.calculation_panel.calculation_input.top_user_input.len() {
+			if cursor_pos == self.ui_state.calculation_panel.calculation_input.top_user_input.len().into() {
 				typed_brackets += ")";
 			}
 			self.ui_state
 				.calculation_panel
 				.calculation_input
 				.top_user_input
-				.insert_str(cursor_pos, &typed_brackets);
+				.insert_str(cursor_pos.into(), &typed_brackets);
 			state.cursor.set_char_range(Some(CCursorRange::one(CCursor::new(cursor_pos + move_cursor))));
 		} else {
 			let [min, max] = cursors.sorted_cursors().map(|c| c.index);
-			let string_before = &self.ui_state.calculation_panel.calculation_input.top_user_input[..min];
-			let string_middle = &self.ui_state.calculation_panel.calculation_input.top_user_input[min..max];
-			let string_after = &self.ui_state.calculation_panel.calculation_input.top_user_input[max..];
+			let string_before = &self.ui_state.calculation_panel.calculation_input.top_user_input[..min.0];
+			let string_middle =
+				&self.ui_state.calculation_panel.calculation_input.top_user_input[min.0..max.0];
+			let string_after = &self.ui_state.calculation_panel.calculation_input.top_user_input[max.0..];
 			self.ui_state.calculation_panel.calculation_input.top_user_input =
 				format!("{}({}){}", string_before, string_middle, string_after);
 			state.cursor.set_char_range(Some(CCursorRange::two(
@@ -476,7 +492,7 @@ pub fn set_cursor_pos(response: &Response, cursor_pos: usize) {
 pub fn get_cursor_pos<'a>(response: impl Into<CursorPosSource<'a>>) -> Option<usize> {
 	let source = response.into();
 	let state = TextEdit::load_state(source.ctx(), source.id())?;
-	state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index)
+	state.cursor.char_range().and_then(|c| c.single()).map(|c| c.index.0)
 }
 
 pub struct CursorPosSource<'a>(&'a Context, Id);
@@ -499,7 +515,7 @@ impl<'a> From<&'a Response> for CursorPosSource<'a> {
 
 impl<'a> From<&'a TextEditOutput> for CursorPosSource<'a> {
 	fn from(value: &'a TextEditOutput) -> Self {
-		Self::from(&value.response)
+		Self::from(&value.response.response)
 	}
 }
 

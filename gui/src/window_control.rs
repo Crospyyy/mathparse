@@ -58,7 +58,7 @@ impl Window {
 		}
 
 		// match alt + space
-		if raw_input.modifiers.alt // todo find a way to prevent the windows window menu from opening
+		if ctx.input(|ip|ip.modifiers.alt) // todo find a way to prevent the windows window menu from opening
 			&& raw_input
 			.events
 			.iter()
@@ -109,13 +109,13 @@ impl Window {
 		}
 	}
 
-	pub fn window_background_logic(&mut self, ctx: &Context, ui: &mut Ui) {
-		let resp = ui.interact(ui.max_rect(), Id::new("window-drag-bg"), egui::Sense::click_and_drag());
+	pub fn window_background_logic(&mut self, ui: &mut Ui) {
+		let resp = ui.interact(ui.max_rect(), Id::unique("window-drag-bg"), egui::Sense::click_and_drag());
 		if resp.dragged_by(PointerButton::Primary) {
 			ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
 		} else {
 			resp.context_menu(|ui| {
-				self.show_background_context_menu(ctx, ui);
+				self.show_background_context_menu(ui);
 			});
 		}
 	}

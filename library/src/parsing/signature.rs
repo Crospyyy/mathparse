@@ -1,5 +1,5 @@
 use crate::Element;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::cmp::PartialEq;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
@@ -163,8 +163,8 @@ impl Signatures {
 		opt_fun_args: &mut OptionalFunctionDeclarationArguments, undefined_signatures: &mut Signatures,
 		formula: &Element, already_defined: &Signatures,
 	) -> Result<()> {
-		let parameter_names =
-			opt_fun_args.as_ref().map(|v| v.names.iter().cloned().collect()).unwrap_or(HashSet::new());
+		let parameter_names: HashSet<_> =
+			opt_fun_args.as_ref().map(|v| v.names.iter().cloned().collect()).unwrap_or_default();
 
 		let all_undefined_names = undefined_signatures.keys().cloned().collect::<HashSet<_>>();
 		for name in all_undefined_names {
