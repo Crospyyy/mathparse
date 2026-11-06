@@ -2,8 +2,6 @@ use crate::logic::{Backend, UiInteraction};
 use crate::ui::UiState;
 use crate::ui::bottom_panel::{HistoryEntry, HistoryEntryContent, Page};
 use crate::window_control::{WindowState, switch_visibility};
-#[cfg(target_os = "linux")]
-use crate::x11_activation::ActivateWindow;
 use crate::{Window, logic};
 use eframe::{App, CreationContext, Frame};
 use egui::text::{CCursor, CCursorRange};
@@ -93,19 +91,7 @@ impl Window {
 		ui_state.update_all_symbol_strings(backend.formula_store());
 
 		let window_state = WindowState::new();
-		#[cfg(target_os = "linux")]
-		let activation = ActivateWindow::from_cc(cc);
-		#[cfg(target_os = "linux")]
-		if let Some(activation) = activation
-			&& !cfg!(debug_assertions)
-			&& let Err(err) = activation.skip_taskbar()
-		{
-			eprintln!("[window] skipping taskbar failed: {err:#}");
-		}
-		#[cfg(target_os = "linux")]
-		window_state.start_shortcut_listener(&cc.egui_ctx, activation);
-		#[cfg(not(target_os = "linux"))]
-		window_state.start_shortcut_listener(&cc.egui_ctx);
+		window_state.start_shortcut_listener(cc);
 
 		let window = Self { backend, ui_state, window_state };
 

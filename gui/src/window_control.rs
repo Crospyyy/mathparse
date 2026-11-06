@@ -1,6 +1,7 @@
 use crate::Window;
 #[cfg(target_os = "linux")]
 use crate::x11_activation::ActivateWindow;
+use eframe::CreationContext;
 use eframe::emath::Vec2;
 use egui::{
 	Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand, WindowLevel,
@@ -157,10 +158,17 @@ impl WindowState {
 		self.pinned.store(pinned, Ordering::Relaxed);
 	}
 
-	pub(crate) fn start_shortcut_listener(
-		&self, ctx: &Context, #[cfg(target_os = "linux")] activation: Option<ActivateWindow>,
-	) {
-		let ctx = ctx.clone();
+	pub(crate) fn start_shortcut_listener(&self, cc: &CreationContext<'_>) {
+		let ctx = cc.egui_ctx.clone();
+		#[cfg(target_os = "linux")]
+		let activation = ActivateWindow::from_cc(cc);
+		#[cfg(target_os = "linux")]
+		if let Some(activation) = activation
+			&& !cfg!(debug_assertions)
+			&& let Err(err) = activation.skip_taskbar()
+		{
+			eprintln!("[window] skipping taskbar failed: {err:#}");
+		}
 		let req_focus = self.request_focus.clone();
 		let last_window_size = self.last_window_size.clone();
 		let pinned = self.pinned.clone();
@@ -170,7 +178,6 @@ impl WindowState {
 				window_size = None;
 			}
 			switch_visibility(&ctx, true, window_size);
-			ctx.send_viewport_cmd(ViewportCommand::Focus);
 			// Sent now, while the commands above are only queued: the WM
 			// unminimizes and focuses us before they are applied.
 			#[cfg(target_os = "linux")]
@@ -182,7 +189,7 @@ impl WindowState {
 			req_focus.store(true, Ordering::Relaxed);
 		};
 		#[cfg(windows)]
-		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, var_name);
+		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, callback);
 		#[cfg(target_os = "linux")]
 		non_async_global_shortcuts(callback);
 	}
