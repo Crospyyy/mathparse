@@ -2,7 +2,9 @@ use crate::Window;
 #[cfg(target_os = "linux")]
 use crate::x11_activation::ActivateWindow;
 use eframe::emath::Vec2;
-use egui::{Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand};
+use egui::{
+	Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand, WindowLevel,
+};
 #[cfg(windows)]
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
@@ -101,6 +103,11 @@ impl Window {
 
 	pub fn switch_window_pinning(&mut self, ctx: &Context) {
 		let new_pinned = !self.window_state.is_pinned();
+		ctx.send_viewport_cmd(ViewportCommand::WindowLevel(if new_pinned {
+			WindowLevel::AlwaysOnTop
+		} else {
+			WindowLevel::Normal
+		}));
 		ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
 		self.window_state.set_pinned(new_pinned);
 		ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));

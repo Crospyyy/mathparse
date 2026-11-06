@@ -22,8 +22,7 @@ pub fn main() {
 	let viewport = ViewportBuilder::default()
 		.with_decorations(false)
 		.with_transparent(true)
-		.with_taskbar(cfg!(debug_assertions))
-		.with_always_on_top();
+		.with_taskbar(cfg!(debug_assertions));
 
 	eframe::run_native(
 		"Quick Mafs",

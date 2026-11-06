@@ -94,7 +94,16 @@ impl Window {
 
 		let window_state = WindowState::new();
 		#[cfg(target_os = "linux")]
-		window_state.start_shortcut_listener(&cc.egui_ctx, ActivateWindow::from_cc(cc));
+		let activation = ActivateWindow::from_cc(cc);
+		#[cfg(target_os = "linux")]
+		if let Some(activation) = activation
+			&& !cfg!(debug_assertions)
+			&& let Err(err) = activation.skip_taskbar()
+		{
+			eprintln!("[window] skipping taskbar failed: {err:#}");
+		}
+		#[cfg(target_os = "linux")]
+		window_state.start_shortcut_listener(&cc.egui_ctx, activation);
 		#[cfg(not(target_os = "linux"))]
 		window_state.start_shortcut_listener(&cc.egui_ctx);
 

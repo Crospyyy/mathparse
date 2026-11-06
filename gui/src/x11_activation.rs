@@ -3,16 +3,21 @@
 //! `ViewportCommand::Focus` does nothing while the window is minimized (winit only
 //! sends `_NET_ACTIVE_WINDOW` for a visible window) and `Minimized(false)` sends it
 //! with `CurrentTime`, which KWin replaces with our own stale user time and refuses.
+//! `ViewportBuilder::with_taskbar` is Windows-only, so the taskbar entry is removed here too.
 
 use anyhow::{Context as _, Result};
 use eframe::CreationContext;
 use winit::raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
 use x11rb::connect;
 use x11rb::connection::Connection as _;
-use x11rb::protocol::xproto::{Atom, ClientMessageEvent, ConnectionExt as _, EventMask, Window};
+use x11rb::protocol::xproto::{
+	Atom, AtomEnum, ClientMessageEvent, ConnectionExt as _, EventMask, PropMode, Window,
+};
+use x11rb::rust_connection::RustConnection;
+use x11rb::wrapper::ConnectionExt as _;
 
 /// EWMH source indication 2 ("pager"). KWin maps it to `NET::FromTool` and calls
-/// `activateWindow(window, force=true)`; Mutter maps `CurrentTime` to "now".
+/// `activateWindow(force=true)`; Mutter maps `CurrentTime` to "now".
 /// Only ever sent in response to the user's shortcut.
 const SOURCE_PAGER: u32 = 2;
 
@@ -29,29 +34,48 @@ impl ActivateWindow {
 		}
 	}
 
+	/// Remove the taskbar entry. `ViewportBuilder::with_taskbar` does nothing on X11.
+	///
+	/// Must run before the window is mapped (eframe maps it after the first frame), so
+	/// the window manager reads the state when it starts managing the window.
+	pub(crate) fn skip_taskbar(self) -> Result<()> {
+		let (conn, _root) = connect_to_wm()?;
+		let state = intern_atom(&conn, b"_NET_WM_STATE")?;
+		let skip_taskbar = intern_atom(&conn, b"_NET_WM_STATE_SKIP_TASKBAR")?;
+		conn.change_property32(PropMode::REPLACE, self.0, state, AtomEnum::ATOM, &[skip_taskbar])?
+			.check()
+			.context("set _NET_WM_STATE")?;
+		conn.flush().context("flush _NET_WM_STATE")
+	}
+
 	/// Raise, unminimize and focus. Call only from the user's shortcut.
 	pub(crate) fn activate(self) -> Result<()> {
-		let (conn, screen) = connect(None).context("connect to X11")?;
-		let root = conn.setup().roots[screen].root;
-		let atom = conn
-			.intern_atom(false, b"_NET_ACTIVE_WINDOW")?
-			.reply()
-			.context("intern _NET_ACTIVE_WINDOW")?
-			.atom;
-
-		conn.send_event(
-			false,
-			root,
-			EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY,
-			activation_event(self.0, atom),
-		)?
-		.check()
-		.context("send _NET_ACTIVE_WINDOW")?;
-		conn.flush().context("flush activation")
+		let (conn, root) = connect_to_wm()?;
+		let atom = intern_atom(&conn, b"_NET_ACTIVE_WINDOW")?;
+		send_to_wm(&conn, root, activation_event(self.0, atom))
 	}
 }
 
-// ── Message ──
+// ── X11 connection ──
+
+fn connect_to_wm() -> Result<(RustConnection, Window)> {
+	let (conn, screen) = connect(None).context("connect to X11")?;
+	let root = conn.setup().roots[screen].root;
+	Ok((conn, root))
+}
+
+fn intern_atom(conn: &RustConnection, name: &[u8]) -> Result<Atom> {
+	Ok(conn.intern_atom(false, name)?.reply()?.atom)
+}
+
+fn send_to_wm(conn: &RustConnection, root: Window, event: ClientMessageEvent) -> Result<()> {
+	conn.send_event(false, root, EventMask::SUBSTRUCTURE_REDIRECT | EventMask::SUBSTRUCTURE_NOTIFY, event)?
+		.check()
+		.context("send message to window manager")?;
+	conn.flush().context("flush message")
+}
+
+// ── Messages ──
 
 /// `data = [source, timestamp, ...]`; timestamp 0 is `CurrentTime`.
 fn activation_event(window: Window, atom: Atom) -> ClientMessageEvent {
