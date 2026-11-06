@@ -1,6 +1,6 @@
 use crate::Window;
 use eframe::emath::Vec2;
-use egui::{Context, Event, Id, Key, PointerButton, RawInput, Ui, ViewportCommand};
+use egui::{Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand};
 #[cfg(windows)]
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
@@ -111,8 +111,10 @@ impl Window {
 
 	pub fn window_background_logic(&mut self, ui: &mut Ui) {
 		let resp = ui.interact(ui.max_rect(), Id::unique("window-drag-bg"), egui::Sense::click_and_drag());
-		if resp.dragged_by(PointerButton::Primary) {
+		if resp.drag_started_by(PointerButton::Primary) {
 			ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
+			ui.input_mut(|i| i.pointer = PointerState::default());
+			ui.ctx().stop_dragging();
 		} else {
 			resp.context_menu(|ui| {
 				self.show_background_context_menu(ui);
