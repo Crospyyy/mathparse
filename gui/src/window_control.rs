@@ -1,4 +1,6 @@
 use crate::Window;
+#[cfg(target_os = "linux")]
+use crate::x11_activation::ActivateWindow;
 use eframe::emath::Vec2;
 use egui::{Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand};
 #[cfg(windows)]
@@ -148,7 +150,9 @@ impl WindowState {
 		self.pinned.store(pinned, Ordering::Relaxed);
 	}
 
-	pub(crate) fn start_shortcut_listener(&self, ctx: &Context) {
+	pub(crate) fn start_shortcut_listener(
+		&self, ctx: &Context, #[cfg(target_os = "linux")] activation: Option<ActivateWindow>,
+	) {
 		let ctx = ctx.clone();
 		let req_focus = self.request_focus.clone();
 		let last_window_size = self.last_window_size.clone();
@@ -160,6 +164,14 @@ impl WindowState {
 			}
 			switch_visibility(&ctx, true, window_size);
 			ctx.send_viewport_cmd(ViewportCommand::Focus);
+			// Sent now, while the commands above are only queued: the WM
+			// unminimizes and focuses us before they are applied.
+			#[cfg(target_os = "linux")]
+			if let Some(activation) = activation
+				&& let Err(err) = activation.activate()
+			{
+				eprintln!("[window_control] activation failed: {err:#}");
+			}
 			req_focus.store(true, Ordering::Relaxed);
 		};
 		#[cfg(windows)]

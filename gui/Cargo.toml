@@ -17,3 +17,5 @@ global_shortcuts = { path = "../basically_a_keylogger" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 linux_shortcuts = { path = "../linux_shortcuts" }
+winit = { version = "0.30", default-features = false, features = ["x11", "rwh_06"] }
+x11rb = "0.13"
