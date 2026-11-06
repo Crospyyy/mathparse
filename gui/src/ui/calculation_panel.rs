@@ -330,7 +330,7 @@ impl UiState {
 				}
 			},
 			|ui| {
-				let mut button = MenuButton::new(RichText::new("⛭").size(15.0));
+				let mut button = MenuButton::new(RichText::new("⛭").font(TEXTEDIT_FONT_ID));
 				button.button = button.button.frame(false).min_size(Vec2::new(25.0, 25.0));
 				button
 					.config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside))
