@@ -178,8 +178,8 @@ impl WindowState {
 				window_size = None;
 			}
 			switch_visibility(&ctx, true, window_size);
-			// Sent now, while the commands above are only queued: the WM
-			// unminimizes and focuses us before they are applied.
+			// Sent directly from the shortcut thread instead of relying on the
+			// queued viewport commands, which do not reliably restore a minimized window.
 			#[cfg(target_os = "linux")]
 			if let Some(activation) = activation
 				&& let Err(err) = activation.activate()

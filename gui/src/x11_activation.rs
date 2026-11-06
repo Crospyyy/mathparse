@@ -1,8 +1,9 @@
 //! Unminimize + focus our window through the window manager.
 //!
 //! `ViewportCommand::Focus` does nothing while the window is minimized (winit only
-//! sends `_NET_ACTIVE_WINDOW` for a visible window) and `Minimized(false)` sends it
-//! with `CurrentTime`, which KWin replaces with our own stale user time and refuses.
+//! sends `_NET_ACTIVE_WINDOW` for a visible, non-minimized window) and `Minimized(false)`
+//! sends it with `CurrentTime`, which KWin replaces with our own stale user time and
+//! normally refuses.
 //! `ViewportBuilder::with_taskbar` is Windows-only, so the taskbar entry is removed here too.
 
 use anyhow::{Context as _, Result};
