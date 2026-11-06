@@ -9,6 +9,7 @@ mod controller;
 mod logic;
 mod ui;
 mod window_control;
+mod debugging;
 
 pub fn main() {
 	use eframe::NativeOptions;
