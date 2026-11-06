@@ -34,7 +34,8 @@ impl ActivateWindow {
 		}
 	}
 
-	/// Remove the taskbar entry. `ViewportBuilder::with_taskbar` does nothing on X11.
+	/// Remove the taskbar and Alt+Tab entries. `ViewportBuilder::with_taskbar` does
+	/// nothing on X11.
 	///
 	/// Must run before the window is mapped (eframe maps it after the first frame), so
 	/// the window manager reads the state when it starts managing the window.
@@ -42,9 +43,17 @@ impl ActivateWindow {
 		let (conn, _root) = connect_to_wm()?;
 		let state = intern_atom(&conn, b"_NET_WM_STATE")?;
 		let skip_taskbar = intern_atom(&conn, b"_NET_WM_STATE_SKIP_TASKBAR")?;
-		conn.change_property32(PropMode::REPLACE, self.0, state, AtomEnum::ATOM, &[skip_taskbar])?
-			.check()
-			.context("set _NET_WM_STATE")?;
+		// KWin's task switcher only honours the KDE atom; GNOME filters on SKIP_TASKBAR.
+		let skip_switcher = intern_atom(&conn, b"_KDE_NET_WM_STATE_SKIP_SWITCHER")?;
+		conn.change_property32(
+			PropMode::REPLACE,
+			self.0,
+			state,
+			AtomEnum::ATOM,
+			&[skip_taskbar, skip_switcher],
+		)?
+		.check()
+		.context("set _NET_WM_STATE")?;
 		conn.flush().context("flush _NET_WM_STATE")
 	}
 
