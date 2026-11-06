@@ -37,9 +37,10 @@ pub fn main() {
 	.expect("panic message");
 }
 
-/// winit prefers Wayland whenever `WAYLAND_DISPLAY` is set, but skip-taskbar,
-/// keep-above, centering and `_NET_ACTIVE_WINDOW` only exist on X11.
-/// `None` when no X server (XWayland) is reachable, keeping Wayland-only systems usable.
+/// winit picks Wayland whenever a non-empty `WAYLAND_DISPLAY` or `WAYLAND_SOCKET` is set,
+/// but skip-taskbar, keep-above, centering and `_NET_ACTIVE_WINDOW` only work on X11.
+/// `None` when no X server (XWayland) is reachable; the app then runs on Wayland,
+/// where the shortcut cannot unminimize or focus the window.
 #[cfg(target_os = "linux")]
 fn x11_event_loop_builder() -> Option<EventLoopBuilderHook> {
 	if connect(None).is_err() {
