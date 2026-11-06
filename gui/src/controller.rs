@@ -91,7 +91,7 @@ impl Window {
 		ui_state.update_all_symbol_strings(backend.formula_store());
 
 		let window_state = WindowState::new();
-		window_state.start_shortcut_listener(&cc.egui_ctx);
+		window_state.start_shortcut_listener(cc);
 
 		let window = Self { backend, ui_state, window_state };
 

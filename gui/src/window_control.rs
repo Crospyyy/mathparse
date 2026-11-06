@@ -1,6 +1,11 @@
 use crate::Window;
+#[cfg(target_os = "linux")]
+use crate::x11_activation::ActivateWindow;
+use eframe::CreationContext;
 use eframe::emath::Vec2;
-use egui::{Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand};
+use egui::{
+	Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand, WindowLevel,
+};
 #[cfg(windows)]
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
@@ -99,6 +104,11 @@ impl Window {
 
 	pub fn switch_window_pinning(&mut self, ctx: &Context) {
 		let new_pinned = !self.window_state.is_pinned();
+		ctx.send_viewport_cmd(ViewportCommand::WindowLevel(if new_pinned {
+			WindowLevel::AlwaysOnTop
+		} else {
+			WindowLevel::Normal
+		}));
 		ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
 		self.window_state.set_pinned(new_pinned);
 		ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
@@ -148,8 +158,17 @@ impl WindowState {
 		self.pinned.store(pinned, Ordering::Relaxed);
 	}
 
-	pub(crate) fn start_shortcut_listener(&self, ctx: &Context) {
-		let ctx = ctx.clone();
+	pub(crate) fn start_shortcut_listener(&self, cc: &CreationContext<'_>) {
+		let ctx = cc.egui_ctx.clone();
+		#[cfg(target_os = "linux")]
+		let activation = ActivateWindow::from_cc(cc);
+		#[cfg(target_os = "linux")]
+		if let Some(activation) = activation
+			&& !cfg!(debug_assertions)
+			&& let Err(err) = activation.skip_taskbar()
+		{
+			eprintln!("[window] skipping taskbar failed: {err:#}");
+		}
 		let req_focus = self.request_focus.clone();
 		let last_window_size = self.last_window_size.clone();
 		let pinned = self.pinned.clone();
@@ -159,11 +178,18 @@ impl WindowState {
 				window_size = None;
 			}
 			switch_visibility(&ctx, true, window_size);
-			ctx.send_viewport_cmd(ViewportCommand::Focus);
+			// Sent directly from the shortcut thread instead of relying on the
+			// queued viewport commands, which do not reliably restore a minimized window.
+			#[cfg(target_os = "linux")]
+			if let Some(activation) = activation
+				&& let Err(err) = activation.activate()
+			{
+				eprintln!("[window_control] activation failed: {err:#}");
+			}
 			req_focus.store(true, Ordering::Relaxed);
 		};
 		#[cfg(windows)]
-		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, var_name);
+		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, callback);
 		#[cfg(target_os = "linux")]
 		non_async_global_shortcuts(callback);
 	}
