@@ -144,7 +144,7 @@ impl UiState {
 			CONVERTER.convert_to_pretty(&symbol.get_full_string(&mut create_default_context(), false));
 		self.bottom_panel.history.push(HistoryEntry::new(SymbolDefinition(symbol_string, value)));
 	}
-	
+
 	pub fn add_calculation_to_history(&mut self, input: String, result: ResultStringWithInfo) {
 		let input1 = CONVERTER.convert_to_pretty(&input.clone());
 		self.bottom_panel.history.push(HistoryEntry::new(Calculation(input1, result)))

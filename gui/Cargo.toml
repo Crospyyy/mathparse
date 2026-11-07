@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 library = { path = "../library" }
-egui = "0.37.0"
+egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
 eframe = "0.37.0"
 regex = "1.11.2"
 chrono = "0.4.42"

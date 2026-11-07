@@ -108,7 +108,7 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 	output.galley.rect.right_top() + output.galley_pos.to_vec2()
 }
 
-const TEXTEDIT_FONT_ID: FontId = FontId::proportional(22.0);
+const TEXTEDIT_FONT_ID: FontId = FontId::proportional(24.0);
 
 #[inline]
 fn bracket_highlight_color() -> Color32 {
@@ -330,8 +330,8 @@ impl UiState {
 				}
 			},
 			|ui| {
-				let mut button = MenuButton::new(RichText::new("⛭").font(TEXTEDIT_FONT_ID));
-				button.button = button.button.frame(false).min_size(Vec2::new(25.0, 25.0));
+				let mut button = MenuButton::new(RichText::new("⛭").size(TEXTEDIT_FONT_ID.size * 0.6));
+				button.button = button.button.frame(false).min_size(Vec2::splat(25.0));
 				button
 					.config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside))
 					.ui(ui, |ui| {
