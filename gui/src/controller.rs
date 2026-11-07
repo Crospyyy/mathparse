@@ -10,6 +10,8 @@ use egui::{
 	Align, Button, CentralPanel, Context, CursorIcon, Event, Id, Key, Layout, Modifiers, OpenUrl, RawInput,
 	Response, RichText, Style, TextBuffer, TextEdit, TextWrapMode, Ui, Visuals, Widget,
 };
+#[cfg(target_os = "linux")]
+use egui::{Color32, Shadow};
 use library::{
 	FormulaStore, RunResult, RunSuccess, Signature, Symbol, convert_from_latex_if_needed, debug_print,
 	get_fun_name_end_of_string, only_in_debug, quick_match,
@@ -28,6 +30,23 @@ impl App for Window {
 		let mut pressed_shortcut = false;
 		self.handle_window_control(ui.ctx(), &mut pressed_shortcut);
 
+		#[cfg(target_os = "linux")]
+		let frame = if self.window_state.is_pinned() {
+			egui::containers::Frame::central_panel(&Style::default())
+		} else {
+			let shadow = Shadow {
+				color: Color32::BLACK.gamma_multiply(0.1),
+				blur: 14,
+				spread: 7,
+				..Default::default()
+			};
+			egui::containers::Frame::window(&Style::default())
+				.corner_radius(10.0)
+				.inner_margin(10.0)
+				.outer_margin(15.0)
+				.shadow(shadow)
+		};
+		#[cfg(not(target_os = "linux"))]
 		let frame = egui::containers::Frame::central_panel(&Style::default()).inner_margin(11);
 
 		CentralPanel::default().frame(frame).show(ui, |ui| {

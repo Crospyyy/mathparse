@@ -48,6 +48,9 @@ pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool 
 }
 
 impl Window {
+	#[cfg(target_os = "linux")]
+	pub(crate) const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(528.3, 386.7);
+	#[cfg(not(target_os = "linux"))]
 	pub(crate) const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(500.3, 358.7);
 
 	pub(crate) fn raw_input_hook_inner(&mut self, ctx: &Context, raw_input: &mut RawInput) {
@@ -111,6 +114,8 @@ impl Window {
 		}));
 		ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
 		self.window_state.set_pinned(new_pinned);
+		#[cfg(target_os = "linux")]
+		ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
 		if !new_pinned {
 			switch_visibility(ctx, false, self.get_last_window_size());
 		} else {

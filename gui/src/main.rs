@@ -19,7 +19,10 @@ mod x11_activation;
 
 pub fn main() {
 	use eframe::NativeOptions;
-	let viewport = ViewportBuilder::default().with_decorations(false).with_taskbar(cfg!(debug_assertions));
+	let viewport = ViewportBuilder::default()
+		.with_decorations(false)
+		.with_transparent(cfg!(target_os = "linux"))
+		.with_taskbar(cfg!(debug_assertions));
 
 	eframe::run_native(
 		"Quick Mafs",
