@@ -1,5 +1,5 @@
 [package]
-name = "gui"
+name = "quickmafs"
 version = "0.1.0"
 edition = "2024"
 
@@ -17,5 +17,17 @@ global_shortcuts = { path = "../basically_a_keylogger" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 linux_shortcuts = { path = "../linux_shortcuts" }
-winit = { version = "0.30", default-features = false, features = ["x11", "rwh_06"] }
+winit = { version = "0.30", default-features = false, features = [
+    "x11",
+    "rwh_06",
+] }
 x11rb = "0.13"
+
+[package.metadata.generate-rpm]
+description = "An intuitive and quick calculator."
+license = "MIT"
+assets = [
+    { source = "target/release/quickmafs", dest = "/usr/bin/io.github.Crospyyy.mathparse", mode = "755" },
+    { source = "../res/io.github.Crospyyy.mathparse.desktop", dest = "/usr/share/applications/io.github.Crospyyy.mathparse.desktop" },
+    { source = "../res/calculator.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.Crospyyy.mathparse.png" },
+]
