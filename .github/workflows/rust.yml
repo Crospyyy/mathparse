@@ -2,28 +2,20 @@ name: Rust
 
 on:
   push:
-    branches: ["**"]
   pull_request:
-    branches: ["**"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  #  build:
-  #    runs-on: ubuntu-latest
-  #
-  #    steps:
-  #      - uses: actions/checkout@v4
-  #      - name: Build
-  #        run: cargo build --verbose
-
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 3
 
     steps:
       - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Run library tests
         working-directory: ./library
         run: cargo test --verbose --package library
