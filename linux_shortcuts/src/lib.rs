@@ -1,8 +1,15 @@
-use std::thread::{self, JoinHandle};
+use std::{
+	str::FromStr,
+	thread::{self, JoinHandle},
+};
 
-use ashpd::desktop::{
-	CreateSessionOptions,
-	global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut},
+use ashpd::{
+	AppID,
+	desktop::{
+		CreateSessionOptions,
+		global_shortcuts::{BindShortcutsOptions, GlobalShortcuts, NewShortcut},
+	},
+	register_host_app,
 };
 use futures::{StreamExt, executor::block_on};
 
@@ -11,6 +18,10 @@ pub fn non_async_global_shortcuts(shortcut_action: impl Fn() + 'static + Send) -
 }
 
 async fn global_shortcuts(shortcut_action: impl Fn() + 'static + Send) {
+	let app_id = AppID::from_str("io.github.Crospyyy.mathparse").expect("app id is a valid constant");
+	if let Err(err) = register_host_app(app_id).await {
+		eprintln!("host app registration failed: {err}");
+	}
 	let shortcuts = GlobalShortcuts::new().await.unwrap();
 	let session = shortcuts.create_session(CreateSessionOptions::default()).await.unwrap();
 	let idk = shortcuts
