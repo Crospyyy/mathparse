@@ -62,6 +62,8 @@ impl Window {
 				.any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
 			if is_focussed && pressed_escape {
 				switch_visibility(ctx, false, self.get_last_window_size());
+				// No frame runs while minimized, so a stale `true` would hide the next restore.
+				self.window_state.last_frame_had_focus = false;
 			}
 		}
 
@@ -93,13 +95,20 @@ impl Window {
 		drop(guard);
 
 		// handle focus request
-		if self.window_state.request_focus.load(Ordering::Relaxed) {
+		let restored_by_shortcut = self.window_state.request_focus.load(Ordering::Relaxed);
+		if restored_by_shortcut {
 			self.window_state.request_focus.store(false, Ordering::Relaxed);
 			self.request_top_input_focus(ctx);
 			*pressed_shortcut = true;
 		}
 		let has_focus = ctx.input(|ip| ip.raw.focused);
-		if !self.window_state.is_pinned() && self.window_state.last_frame_had_focus && !has_focus {
+		// The OS reports focus a frame after the window is restored; hiding on that frame
+		// immediately minimizes it again. `last_frame_had_focus` is stale while minimized.
+		if !restored_by_shortcut
+			&& !self.window_state.is_pinned()
+			&& self.window_state.last_frame_had_focus
+			&& !has_focus
+		{
 			switch_visibility(ctx, false, self.get_last_window_size());
 		}
 		self.window_state.last_frame_had_focus = has_focus;
@@ -118,6 +127,7 @@ impl Window {
 		ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
 		if !new_pinned {
 			switch_visibility(ctx, false, self.get_last_window_size());
+			self.window_state.last_frame_had_focus = false;
 		} else {
 			ctx.send_viewport_cmd(ViewportCommand::InnerSize(Window::DEFAULT_WINDOW_SIZE));
 		}
@@ -181,6 +191,8 @@ impl WindowState {
 			if pinned.load(Ordering::Relaxed) {
 				window_size = None;
 			}
+			// Arm the flag before requesting the repaint, so the restore frame cannot miss it.
+			req_focus.store(true, Ordering::Relaxed);
 			switch_visibility(&ctx, true, window_size);
 			// Sent directly from the shortcut thread instead of relying on the
 			// queued viewport commands, which do not reliably restore a minimized window.
@@ -190,7 +202,6 @@ impl WindowState {
 			{
 				eprintln!("[window_control] activation failed: {err:#}");
 			}
-			req_focus.store(true, Ordering::Relaxed);
 		};
 		#[cfg(windows)]
 		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, callback);
