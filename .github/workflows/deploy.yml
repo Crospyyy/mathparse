@@ -1,9 +1,13 @@
 name: Package Project
 
 on:
+    pull_request:
+        branches:
+            - main
     push:
         branches:
-            - feature/pipeline
+            - main
+    workflow_dispatch:
 
 jobs:
     package:
