@@ -1,8 +1,16 @@
 use crate::Window;
+#[cfg(target_os = "linux")]
+use crate::x11_activation::ActivateWindow;
+use eframe::CreationContext;
 use eframe::emath::Vec2;
-use egui::{Context, Event, Id, Key, PointerButton, RawInput, Ui, ViewportCommand};
+use egui::{
+	Context, Event, Id, Key, PointerButton, PointerState, RawInput, Ui, ViewportCommand, WindowLevel,
+};
+#[cfg(windows)]
 use global_shortcuts::register_global_shortcut;
 use library::{debug_print, only_in_debug};
+#[cfg(target_os = "linux")]
+use linux_shortcuts::non_async_global_shortcuts;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -40,7 +48,10 @@ pub fn try_center_window(ctx: &Context, last_window_size: Option<Vec2>) -> bool 
 }
 
 impl Window {
+	#[cfg(target_os = "linux")]
 	pub(crate) const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(528.3, 386.7);
+	#[cfg(not(target_os = "linux"))]
+	pub(crate) const DEFAULT_WINDOW_SIZE: Vec2 = Vec2::new(500.3, 358.7);
 
 	pub(crate) fn raw_input_hook_inner(&mut self, ctx: &Context, raw_input: &mut RawInput) {
 		if !self.window_state.is_pinned() {
@@ -51,11 +62,13 @@ impl Window {
 				.any(|e| matches!(e, Event::Key { key: Key::Escape, pressed: true, repeat: false, .. }));
 			if is_focussed && pressed_escape {
 				switch_visibility(ctx, false, self.get_last_window_size());
+				// No frame runs while minimized, so a stale `true` would hide the next restore.
+				self.window_state.last_frame_had_focus = false;
 			}
 		}
 
 		// match alt + space
-		if raw_input.modifiers.alt // todo find a way to prevent the windows window menu from opening
+		if ctx.input(|ip|ip.modifiers.alt) // todo find a way to prevent the windows window menu from opening
 			&& raw_input
 			.events
 			.iter()
@@ -82,13 +95,20 @@ impl Window {
 		drop(guard);
 
 		// handle focus request
-		if self.window_state.request_focus.load(Ordering::Relaxed) {
+		let restored_by_shortcut = self.window_state.request_focus.load(Ordering::Relaxed);
+		if restored_by_shortcut {
 			self.window_state.request_focus.store(false, Ordering::Relaxed);
 			self.request_top_input_focus(ctx);
 			*pressed_shortcut = true;
 		}
 		let has_focus = ctx.input(|ip| ip.raw.focused);
-		if !self.window_state.is_pinned() && self.window_state.last_frame_had_focus && !has_focus {
+		// The OS reports focus a frame after the window is restored; hiding on that frame
+		// immediately minimizes it again. `last_frame_had_focus` is stale while minimized.
+		if !restored_by_shortcut
+			&& !self.window_state.is_pinned()
+			&& self.window_state.last_frame_had_focus
+			&& !has_focus
+		{
 			switch_visibility(ctx, false, self.get_last_window_size());
 		}
 		self.window_state.last_frame_had_focus = has_focus;
@@ -96,23 +116,32 @@ impl Window {
 
 	pub fn switch_window_pinning(&mut self, ctx: &Context) {
 		let new_pinned = !self.window_state.is_pinned();
+		ctx.send_viewport_cmd(ViewportCommand::WindowLevel(if new_pinned {
+			WindowLevel::AlwaysOnTop
+		} else {
+			WindowLevel::Normal
+		}));
 		ctx.send_viewport_cmd(ViewportCommand::Decorations(new_pinned));
 		self.window_state.set_pinned(new_pinned);
+		#[cfg(target_os = "linux")]
 		ctx.send_viewport_cmd(ViewportCommand::Transparent(!new_pinned));
 		if !new_pinned {
 			switch_visibility(ctx, false, self.get_last_window_size());
+			self.window_state.last_frame_had_focus = false;
 		} else {
 			ctx.send_viewport_cmd(ViewportCommand::InnerSize(Window::DEFAULT_WINDOW_SIZE));
 		}
 	}
 
-	pub fn window_background_logic(&mut self, ctx: &Context, ui: &mut Ui) {
-		let resp = ui.interact(ui.max_rect(), Id::new("window-drag-bg"), egui::Sense::click_and_drag());
-		if resp.dragged_by(PointerButton::Primary) {
+	pub fn window_background_logic(&mut self, ui: &mut Ui) {
+		let resp = ui.interact(ui.max_rect(), Id::unique("window-drag-bg"), egui::Sense::click_and_drag());
+		if resp.drag_started_by(PointerButton::Primary) {
 			ui.ctx().send_viewport_cmd(ViewportCommand::StartDrag);
+			ui.input_mut(|i| i.pointer = PointerState::default());
+			ui.ctx().stop_dragging();
 		} else {
 			resp.context_menu(|ui| {
-				self.show_background_context_menu(ctx, ui);
+				self.show_background_context_menu(ui);
 			});
 		}
 	}
@@ -143,19 +172,40 @@ impl WindowState {
 		self.pinned.store(pinned, Ordering::Relaxed);
 	}
 
-	pub(crate) fn start_shortcut_listener(&self, ctx: &Context) {
-		let ctx = ctx.clone();
+	pub(crate) fn start_shortcut_listener(&self, cc: &CreationContext<'_>) {
+		let ctx = cc.egui_ctx.clone();
+		#[cfg(target_os = "linux")]
+		let activation = ActivateWindow::from_cc(cc);
+		#[cfg(target_os = "linux")]
+		if let Some(activation) = activation
+			&& !cfg!(debug_assertions)
+			&& let Err(err) = activation.skip_taskbar()
+		{
+			eprintln!("[window] skipping taskbar failed: {err:#}");
+		}
 		let req_focus = self.request_focus.clone();
 		let last_window_size = self.last_window_size.clone();
 		let pinned = self.pinned.clone();
-		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, move || {
+		let callback = move || {
 			let mut window_size = last_window_size.clone().lock().unwrap().as_ref().copied();
 			if pinned.load(Ordering::Relaxed) {
 				window_size = None;
 			}
-			switch_visibility(&ctx, true, window_size);
-			ctx.send_viewport_cmd(ViewportCommand::Focus);
+			// Arm the flag before requesting the repaint, so the restore frame cannot miss it.
 			req_focus.store(true, Ordering::Relaxed);
-		});
+			switch_visibility(&ctx, true, window_size);
+			// Sent directly from the shortcut thread instead of relying on the
+			// queued viewport commands, which do not reliably restore a minimized window.
+			#[cfg(target_os = "linux")]
+			if let Some(activation) = activation
+				&& let Err(err) = activation.activate()
+			{
+				eprintln!("[window_control] activation failed: {err:#}");
+			}
+		};
+		#[cfg(windows)]
+		register_global_shortcut(global_shortcuts::Modifiers::ALT, global_shortcuts::Key::Space, callback);
+		#[cfg(target_os = "linux")]
+		non_async_global_shortcuts(callback);
 	}
 }

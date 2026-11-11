@@ -1,0 +1,13 @@
+[package]
+name = "linux_shortcuts"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ashpd = { version = "0.13.13", default-features = false, features = [
+    "async-io",
+    "input_capture",
+    "global_shortcuts",
+    "settings",
+] }
+futures = "0.3.34"

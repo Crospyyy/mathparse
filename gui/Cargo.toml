@@ -1,14 +1,35 @@
 [package]
-name = "gui"
+name = "quickmafs"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 library = { path = "../library" }
-egui = "0.32.3"
-eframe = "0.32.3"
+egui = { version = "0.37.0", features = ["monochrome_emoji_fonts"] }
+eframe = "0.37.0"
 regex = "1.11.2"
-global_shortcuts = { path = "../basically_a_keylogger" }
 chrono = "0.4.42"
 anyhow = "1.0.100"
-lazy_static = "1.5.0"
+lazy_static = "1.5.1"
+
+[target.'cfg(windows)'.dependencies]
+global_shortcuts = { path = "../basically_a_keylogger" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux_shortcuts = { path = "../linux_shortcuts" }
+winit = { version = "0.30", default-features = false, features = [
+    "x11",
+    "rwh_06",
+] }
+x11rb = "0.13"
+
+[package.metadata.generate-rpm]
+description = "An intuitive and quick calculator."
+license = "MIT"
+assets = [
+    { source = "../target/release/quickmafs", dest = "/usr/bin/io.github.Crospyyy.mathparse", mode = "755" },
+    { source = "../res/io.github.Crospyyy.mathparse.desktop", dest = "/usr/share/applications/io.github.Crospyyy.mathparse.desktop" },
+    { source = "../res/calculator.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.Crospyyy.mathparse.png" },
+    { source = "../THIRD_PARTY_NOTICES.md", dest = "/usr/share/licenses/io.github.Crospyyy.mathparse/THIRD_PARTY_NOTICES.md", mode = "644" },
+    { source = "../LICENSE", dest = "/usr/share/licenses/io.github.Crospyyy.mathparse/LICENSE", mode = "644" },
+]

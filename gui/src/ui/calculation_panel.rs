@@ -6,7 +6,7 @@ use eframe::emath::{Align2, Pos2, Rect, Vec2};
 use eframe::epaint::text::cursor::CCursor;
 use eframe::epaint::text::{LayoutJob, TextFormat, TextWrapping};
 use eframe::epaint::{Color32, FontId};
-use egui::ahash::HashMap;
+use egui::containers::Frame;
 use egui::containers::menu::{MenuButton, MenuConfig};
 use egui::text::CCursorRange;
 use egui::text_edit::TextEditOutput;
@@ -19,6 +19,7 @@ use library::{
 	DynamicResult, FormattingOptions, FormulaStore, ResultStringWithInfo, RunError, RunResult, RunSuccess,
 	create_default_context,
 };
+use std::collections::HashMap;
 use std::ops::Not;
 
 lazy_static! {
@@ -39,11 +40,11 @@ impl StringFormulaConverter {
 			replacements_rev: chars.iter().copied().map(|(a, b)| (b.to_owned(), a.to_owned())).collect(),
 		}
 	}
-	
+
 	pub fn convert_to_pretty(&self, str: &str) -> String {
 		str.chars().map(|c| *self.replacements.get(&c).unwrap_or(&c)).collect()
 	}
-	
+
 	pub fn convert_to_usable(&self, str: &str) -> String {
 		str.chars().map(|c| *self.replacements_rev.get(&c).unwrap_or(&c)).collect()
 	}
@@ -83,7 +84,7 @@ impl CalculationInput {
 	pub fn new() -> Self {
 		Self {
 			top_user_input: "".to_owned(),
-			top_user_input_id: "Formula Input".into(),
+			top_user_input_id: Id::unique("Formula Input"),
 			top_input_cache: InputCache { last_input: "".to_owned(), last_cursor_range: None },
 		}
 	}
@@ -107,7 +108,7 @@ pub fn last_caret_pos_from_output(output: &TextEditOutput) -> Pos2 {
 	output.galley.rect.right_top() + output.galley_pos.to_vec2()
 }
 
-const TEXTEDIT_FONT_ID: FontId = FontId::proportional(22.0);
+const TEXTEDIT_FONT_ID: FontId = FontId::proportional(24.0);
 
 #[inline]
 fn bracket_highlight_color() -> Color32 {
@@ -117,8 +118,8 @@ fn bracket_highlight_color() -> Color32 {
 /// Determine all the parts that are in the same brackets as the cursor
 fn find_bracket_area(str: &str, cursor_range: CCursorRange) -> Option<(usize, usize)> {
 	let [min, max] = cursor_range.sorted_cursors().map(|c| c.index);
-	let outest_idx = if min == max { min } else { determine_outest_cursor_pos(str, min, max) };
-	find_bracket_range(str, outest_idx)
+	let outest_idx = if min == max { min } else { determine_outest_cursor_pos(str, min.0, max.0).into() };
+	find_bracket_range(str, outest_idx.0)
 }
 
 /// Determine the position between the two cursor indices where the scope is the broadest
@@ -206,7 +207,7 @@ impl UiState {
 			},
 		}
 	}
-	
+
 	pub fn create_result_string(&self, r: DynamicResult) -> ResultStringWithInfo {
 		let mut info = ResultStringWithInfo::new(r, self.calculation_panel.rounding_digits);
 		info.main = CONVERTER.convert_to_pretty(&info.main);
@@ -221,11 +222,11 @@ impl UiState {
 			CONVERTER.convert_to_pretty(&self.calculation_panel.calculation_input.top_user_input);
 		let response = TextEdit::singleline(&mut self.calculation_panel.calculation_input.top_user_input)
 			.id(self.calculation_panel.calculation_input.top_user_input_id)
-			.hint_text("Enter formula here ...")
+			.hint_text(RichText::new("Enter formula here ...").font(TEXTEDIT_FONT_ID))
 			.font(FontSelection::FontId(TEXTEDIT_FONT_ID))
 			.lock_focus(true)
 			.desired_width(ui.available_width())
-			.frame(false)
+			.frame(Frame::NONE.invisible())
 			.show(ui);
 		self.calculation_panel.calculation_input.top_user_input =
 			CONVERTER.convert_to_usable(&self.calculation_panel.calculation_input.top_user_input);
@@ -256,7 +257,7 @@ impl UiState {
 	}
 
 	pub fn show_brackets_highlighting(&self, ui: &mut Ui, output: &TextEditOutput) -> Option<()> {
-		let cursor_range = get_cursor_range(&output.response)?;
+		let cursor_range = get_cursor_range(&output.response.response)?;
 		let (min, max) =
 			find_bracket_area(&self.calculation_panel.calculation_input.top_user_input, cursor_range)?;
 		let left = output.galley.pos_from_cursor(CCursor::new(min));
@@ -285,7 +286,7 @@ impl UiState {
 			if valid { bracket_highlight_color() } else { Color32::ORANGE.gamma_multiply(0.5) },
 		);
 	}
-	
+
 	pub fn show_main_result(&mut self, ui: &mut Ui) {
 		// todo only show an error icon and display the error message in a tooltip
 
@@ -329,8 +330,8 @@ impl UiState {
 				}
 			},
 			|ui| {
-				let mut button = MenuButton::new(RichText::new("⛭").size(15.0));
-				button.button = button.button.frame(false).min_size(Vec2::new(25.0, 25.0));
+				let mut button = MenuButton::new(RichText::new("⛭").size(TEXTEDIT_FONT_ID.size * 0.6));
+				button.button = button.button.frame(false).min_size(Vec2::splat(25.0));
 				button
 					.config(MenuConfig::default().close_behavior(PopupCloseBehavior::CloseOnClickOutside))
 					.ui(ui, |ui| {

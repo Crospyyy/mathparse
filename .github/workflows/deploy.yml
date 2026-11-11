@@ -1,0 +1,27 @@
+name: Package Project
+
+on:
+    pull_request:
+        branches:
+            - main
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+jobs:
+    package:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v7
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+            - uses: taiki-e/cache-cargo-install-action@v3
+              with:
+                  tool: cargo-generate-rpm@0.21.1
+            - run: ./package-as-rpm.sh
+            - uses: actions/upload-artifact@v7
+              with:
+                  path: target/generate-rpm/*.rpm
+                  archive: false
+                  if-no-files-found: error
