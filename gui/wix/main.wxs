@@ -60,7 +60,7 @@
 
     <Product
         Id='*'
-        Name='quickmafs'
+        Name='Quickmafs'
         UpgradeCode='008CE4C5-8320-4386-BE93-5BDE0E23BA19'
         Manufacturer='Crospyyy'
         Language='1033'
@@ -82,7 +82,7 @@
             DowngradeErrorMessage='A newer version of [ProductName] is already installed. Setup will now exit.'/>
 
         <Media Id='1' Cabinet='media1.cab' EmbedCab='yes' DiskPrompt='CD-ROM #1'/>
-        <Property Id='DiskPrompt' Value='quickmafs Installation'/>
+        <Property Id='DiskPrompt' Value='Quickmafs Installation'/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='$(var.PlatformProgramFilesFolder)' Name='PFiles'>
@@ -130,6 +130,20 @@
                     </Directory>
                 </Directory>
             </Directory>
+            <Directory Id='ProgramMenuFolder' Name='Programs'>
+                <Directory Id='ApplicationProgramsFolder' Name='Quickmafs'>
+                    <Component Id='ApplicationShortcut' Guid='*'>
+                        <Shortcut
+                            Id='quickmafsStartMenuShortcut'
+                            Name='Quickmafs'
+                            Description='An intuitive and quick calculator.'
+                            Target='[Bin]quickmafs.exe'
+                            WorkingDirectory='APPLICATIONFOLDER'/>
+                        <RemoveFolder Id='RemoveApplicationProgramsFolder' On='uninstall'/>
+                        <RegistryValue Root='HKCU' Key='Software\Crospyyy\Quickmafs' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
+                    </Component>
+                </Directory>
+            </Directory>
         </Directory>
 
         <Feature
@@ -149,6 +163,7 @@
             <!--<ComponentRef Id='License'/>-->
 
             <ComponentRef Id='binary0'/>
+            <ComponentRef Id='ApplicationShortcut'/>
 
             <Feature
                 Id='Environment'
