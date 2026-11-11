@@ -30,4 +30,6 @@ assets = [
     { source = "../target/release/quickmafs", dest = "/usr/bin/io.github.Crospyyy.mathparse", mode = "755" },
     { source = "../res/io.github.Crospyyy.mathparse.desktop", dest = "/usr/share/applications/io.github.Crospyyy.mathparse.desktop" },
     { source = "../res/calculator.png", dest = "/usr/share/icons/hicolor/256x256/apps/io.github.Crospyyy.mathparse.png" },
+    { source = "../THIRD_PARTY_NOTICES.md", dest = "/usr/share/licenses/io.github.Crospyyy.mathparse/THIRD_PARTY_NOTICES.md", mode = "644" },
+    { source = "../LICENSE", dest = "/usr/share/licenses/io.github.Crospyyy.mathparse/LICENSE", mode = "644" },
 ]

@@ -128,6 +128,22 @@
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
+                    <Component Id='ThirdPartyNotices' Guid='*'>
+                        <File
+                            Id='thirdPartyNoticesFile'
+                            Name='THIRD_PARTY_NOTICES.md'
+                            DiskId='1'
+                            Source='THIRD_PARTY_NOTICES.md'
+                            KeyPath='yes'/>
+                    </Component>
+                    <Component Id='LicenseFile' Guid='*'>
+                        <File
+                            Id='licenseFile'
+                            Name='LICENSE'
+                            DiskId='1'
+                            Source='LICENSE'
+                            KeyPath='yes'/>
+                    </Component>
                 </Directory>
             </Directory>
             <Directory Id='ProgramMenuFolder' Name='Programs'>
@@ -165,6 +181,8 @@
 
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='ApplicationShortcut'/>
+            <ComponentRef Id='ThirdPartyNotices'/>
+            <ComponentRef Id='LicenseFile'/>
 
             <Feature
                 Id='Environment'
@@ -202,29 +220,15 @@
 
         <UI>
             <UIRef Id='WixUI_FeatureTree'/>
-            
-            <!--
-              Enabling the EULA dialog in the installer is a three step process:
-
-                1. Comment out or remove the two `Publish` tags that follow the
-                   `WixVariable` tag.
-                2. Uncomment the `<WixVariable Id='WixUILicenseRtf' Value='Path\to\Eula.rft'>` tag further down
-                3. Replace the `Value` attribute of the `WixVariable` tag with
-                   the path to a RTF file that will be used as the EULA and
-                   displayed in the license agreement dialog.
-            -->
-            <Publish Dialog='WelcomeDlg' Control='Next' Event='NewDialog' Value='CustomizeDlg' Order='99'>1</Publish>
-            <Publish Dialog='CustomizeDlg' Control='Back' Event='NewDialog' Value='WelcomeDlg' Order='99'>1</Publish>
 
         </UI>
 
         
         <!--
-          Enabling the EULA dialog in the installer requires uncommenting
-          the following `WixUILicenseRTF` tag and changing the `Value`
-          attribute.
+          License agreement shown in the installer; contains the MIT license
+          and the third-party notices. RTF path is relative to the repo root.
         -->
-        <!-- <WixVariable Id='WixUILicenseRtf' Value='Relative\Path\to\Eula.rtf'/> -->
+        <WixVariable Id='WixUILicenseRtf' Value='gui\wix\LICENSE.rtf'/>
 
         
         <!--
