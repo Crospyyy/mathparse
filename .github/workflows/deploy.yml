@@ -34,7 +34,7 @@ jobs:
             - uses: taiki-e/cache-cargo-install-action@v3
               with:
                   tool: cargo-wix@0.3.9
-            - run: package-as-msi.ps1
+            - run: .\package-as-msi.ps1
             - uses: actions/upload-artifact@v7
               with:
                   path: target/wix/*.msi
