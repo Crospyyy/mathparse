@@ -25,3 +25,18 @@ jobs:
                   path: target/generate-rpm/*.rpm
                   archive: false
                   if-no-files-found: error
+    package_win:
+        runs-on: windows-latest
+        steps:
+            - uses: actions/checkout@v7
+            - uses: dtolnay/rust-toolchain@stable
+            - uses: Swatinem/rust-cache@v2
+            - uses: taiki-e/cache-cargo-install-action@v3
+              with:
+                  tool: cargo-wix@0.3.9
+            - run: package-as-msi.ps1
+            - uses: actions/upload-artifact@v7
+              with:
+                  path: target/wix/*.msi
+                  archive: false
+                  if-no-files-found: error
