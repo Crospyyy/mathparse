@@ -128,14 +128,6 @@
                                 KeyPath='yes'/>
                         </Component>
                     </Directory>
-                    <Component Id='ThirdPartyNotices' Guid='*'>
-                        <File
-                            Id='thirdPartyNoticesFile'
-                            Name='THIRD_PARTY_NOTICES.md'
-                            DiskId='1'
-                            Source='THIRD_PARTY_NOTICES.md'
-                            KeyPath='yes'/>
-                    </Component>
                     <Component Id='LicenseFile' Guid='*'>
                         <File
                             Id='licenseFile'
@@ -181,7 +173,6 @@
 
             <ComponentRef Id='binary0'/>
             <ComponentRef Id='ApplicationShortcut'/>
-            <ComponentRef Id='ThirdPartyNotices'/>
             <ComponentRef Id='LicenseFile'/>
 
             <Feature
@@ -225,7 +216,7 @@
 
         
         <!--
-          License agreement shown in the installer; contains the MIT license
+          License agreement shown in the installer; contains the GPL-3.0 license
           and the third-party notices. RTF path is relative to the repo root.
         -->
         <WixVariable Id='WixUILicenseRtf' Value='gui\wix\LICENSE.rtf'/>

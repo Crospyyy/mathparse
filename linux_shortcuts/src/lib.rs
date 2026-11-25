@@ -18,7 +18,7 @@ pub fn non_async_global_shortcuts(shortcut_action: impl Fn() + 'static + Send) -
 }
 
 async fn global_shortcuts(shortcut_action: impl Fn() + 'static + Send) {
-	let app_id = AppID::from_str("io.github.Crospyyy.mathparse").expect("app id is a valid constant");
+	let app_id = AppID::from_str("io.github.crospyyy.mathparse").expect("app id is a valid constant");
 	if let Err(err) = register_host_app(app_id).await {
 		eprintln!("host app registration failed: {err}");
 	}
