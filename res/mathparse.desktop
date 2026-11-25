@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Name=Quickmafs
+Icon=io.github.crospyyy.mathparse
+Exec=/usr/bin/io.github.crospyyy.mathparse
+Categories=Utility;Calculator;

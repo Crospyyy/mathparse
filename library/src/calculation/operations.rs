@@ -54,7 +54,7 @@ impl Number {
 			Self::from(inexact_if_needed!(float.floor(), float))
 		}
 	}
-	
+
 	pub fn fac(&self, _ctx: &mut Context) -> Self {
 		if let Some(r) = self.get_exact_rational()
 			&& r.is_integer()

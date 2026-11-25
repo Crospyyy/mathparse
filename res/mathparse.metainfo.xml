@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>io.github.crospyyy.mathparse</id>
+    <!-- catalog-only metadata; lets Discover map a locally installed RPM back to this component -->
+    <pkgname>quickmafs</pkgname>
+
+    <name>Quickmafs</name>
+    <summary>An intuitive and quick calculator</summary>
+
+    <metadata_license>MIT</metadata_license>
+    <project_license>GPL-3.0-or-later</project_license>
+
+    <description>
+        <p>
+            An intuitive and quick calculator.
+        </p>
+    </description>
+
+    <url type="homepage">https://github.com/Crospyyy/mathparse</url>
+    <content_rating type="oars-1.0"/>
+    <developer id="io.github.crospyyy">
+        <name>Crospyyy</name>
+    </developer>
+    <launchable type="desktop-id">io.github.crospyyy.mathparse.desktop</launchable>
+</component>
