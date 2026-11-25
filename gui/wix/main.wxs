@@ -149,7 +149,7 @@
                             Icon='ProductICO'
                             WorkingDirectory='APPLICATIONFOLDER'/>
                         <RemoveFolder Id='RemoveApplicationProgramsFolder' On='uninstall'/>
-                        <RegistryValue Root='HKCU' Key='Software\Crospyyy\Quickmafs' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
+                        <RegistryValue Root='HKLM' Key='Software\Crospyyy\Quickmafs' Name='installed' Type='integer' Value='1' KeyPath='yes'/>
                     </Component>
                 </Directory>
             </Directory>
@@ -216,8 +216,8 @@
 
         
         <!--
-          License agreement shown in the installer; contains the GPL-3.0 license
-          and the third-party notices. RTF path is relative to the repo root.
+          License agreement shown in the installer; contains the GPL-3.0 license.
+          RTF path is relative to the repo root.
         -->
         <WixVariable Id='WixUILicenseRtf' Value='gui\wix\LICENSE.rtf'/>
 

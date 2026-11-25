@@ -2,7 +2,7 @@
 <component type="desktop-application">
     <id>io.github.crospyyy.mathparse</id>
     <!-- catalog-only metadata; lets Discover map a locally installed RPM back to this component -->
-    <pkgname>Quickmafs</pkgname>
+    <pkgname>quickmafs</pkgname>
 
     <name>Quickmafs</name>
     <summary>An intuitive and quick calculator</summary>

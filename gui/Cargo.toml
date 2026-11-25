@@ -24,7 +24,7 @@ winit = { version = "0.30", default-features = false, features = [
 x11rb = "0.13"
 
 [package.metadata.generate-rpm]
-name = "Quickmafs"
+name = "quickmafs"
 description = "An intuitive and quick calculator."
 license = "GPL-3.0-or-later"
 assets = [
@@ -32,5 +32,5 @@ assets = [
     { source = "../res/mathparse.desktop", dest = "/usr/share/applications/io.github.crospyyy.mathparse.desktop", mode = "644" },
     { source = "../res/mathparse.metainfo.xml", dest = "/usr/share/metainfo/io.github.crospyyy.mathparse.metainfo.xml", mode = "644" },
     { source = "../res/quickmafs.png", dest = "/usr/share/icons/hicolor/16x16/apps/io.github.crospyyy.mathparse.png", mode = "644" },
-    { source = "../LICENSE", dest = "/usr/share/licenses/io.github.crospyyy.mathparse/LICENSE", mode = "644" },
+    { source = "../LICENSE", dest = "/usr/share/licenses/quickmafs/LICENSE", mode = "644" },
 ]
